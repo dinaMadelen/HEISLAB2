@@ -63,7 +63,8 @@ fn main() -> std::io::Result<()> {
 
     let mut queue_vec: Vec<u8> = Vec::new();
     let mut position_in_queue_vec: usize = 0; 
-    queue_vec.push(3);
+    let mut 
+    queue_vec.push(0);
 
 
     if elevator.floor_sensor().is_none() {
@@ -78,7 +79,6 @@ fn main() -> std::io::Result<()> {
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
                 queue_vec.push(call_button.floor);
-                position_in_queue_vec += 1;
                 
             },
 
@@ -86,7 +86,10 @@ fn main() -> std::io::Result<()> {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
-
+                if(&floor == &queue_vec[position_in_queue_vec]){
+                    position_in_queue_vec += 1;
+                    go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
+                }
             },
 
             /*Burde nok modifiseres*/

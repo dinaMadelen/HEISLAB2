@@ -1,0 +1,11 @@
+ip: 
+    10.100.23.16
+
+login:
+    ssh student@10.100.23.16
+
+copy dirs/files:
+    local -> remote:
+        scp -r <localDir> student@10.100.23.16:/home/student/v25Gruppe71
+    remote -> local:
+        scp -r student@10.100.23.16:/home/student/v25Gruppe71/<remoteFile>  <localDir>

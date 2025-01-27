@@ -24,10 +24,6 @@ fn go_correct_dir_based_on_floor(elev: &(elev::Elevator), current_floor: &u8, ta
 }
 
 
-fn modify_queue(queue_vec: &Vec<u8>){
-    
-}
-
 fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
     let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
@@ -63,8 +59,7 @@ fn main() -> std::io::Result<()> {
 
     let mut queue_vec: Vec<u8> = Vec::new();
     let mut position_in_queue_vec: usize = 0; 
-    let mut 
-    queue_vec.push(0);
+    queue_vec.push(1);
 
 
     if elevator.floor_sensor().is_none() {
@@ -79,7 +74,7 @@ fn main() -> std::io::Result<()> {
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
                 queue_vec.push(call_button.floor);
-                
+
             },
 
             recv(floor_sensor_rx) -> a => {

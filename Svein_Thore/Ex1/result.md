@@ -1,0 +1,3 @@
+3. The program swaps between running each thread. then it combines the two threads and prints the value of 'i'. the value of i is continously incremented when running thread 1 and continously decremented while running thread 2. if thread 1 has read the variable before the program swaps but still has not written the new value, then all changes to 'i' will be overwritten when the program swaps back say e.g('-'=read, '>'=write) 5-(swaps thread)>4->3->2(swaps thread)->6->7->8-(swaps thread)>7->6->5->9(swaps thread)->10->11(swaps thread)->10. 
+
+4. The Mutex is better for this situation as only the thread that locked the mutex can unlock it. the semaphore is better suited for a resource where more than one thread should have acess at one time

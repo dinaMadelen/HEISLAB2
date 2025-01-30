@@ -6,7 +6,7 @@ source ~/dlang/dmd-2.109.1/activate
 
 dmd -w -g src/sim_server.d src/timer_event.d -ofSimElevatorServer
 
-./SimElevatorServer --port 12345
+./SimElevatorServer --port 15657
 
 
 This simulator is a drop-in alternative to the elevator hardware server that interfaces to the hardware at the lab. Communication to the simulator is over TCP, with the same protocol as the hardware server.

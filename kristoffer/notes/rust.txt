@@ -1,0 +1,104 @@
+---------------------
+Rust, Notes - TTK4145
+---------------------
+Vars
+    - Immut by default
+    - Runtime
+Const
+    - Immut
+    - Compile time
+    - Must have type
+
+Underscore
+    Means throw away
+
+Types
+    - Almost always inferred
+
+Functions
+    -Arrow indicates return type
+
+Brackets
+    - Block
+        - Evaluates to tail
+            - No semicolon at tail
+    - Declares scope 
+    - Can be generic
+
+Dots
+    - Access fields of val
+        - Attributes
+    - Call method on val
+
+Colon
+    - Namespaces
+    - Hiearchical
+    - crate::file::function
+    - Can be used like dot
+
+Structs
+    - Lightweight new Types
+    - Encapsulates system state
+    - Can declare methods on struct/types
+    - Can be generic
+    - Field is not optional unless specified
+
+Match
+    - Case
+    - Has arms
+    - Arms must be exhausted
+    - Underscore catch all
+
+Vectors
+    - Generic
+    - Dynamic array
+    - Can use keyword
+
+Macro
+    - Expands to regular code
+    - Bang at end
+
+Enums
+    - Define possible types
+    - A enum is a type of types
+        - Enum = type
+        - The definition of the enum lists possible types
+        - e.g int type can be i8, i16, i32, or i64
+            - int Would be an enum
+        - Does not need to hold values
+        - Can be entirely symbolic
+            e.g PowerState
+                - Can be on
+                - Can be off
+    Useful enums
+        Option
+            - Some(T)
+            - None
+        Result
+            - Ok(T)
+            - Err(err)
+
+
+Error handling
+    - Unwrap
+    - Expect
+    - Use match
+    - if let
+    - Bubble up
+    - Result
+        - A enum
+            - Can be Ok
+            - Can be Err
+            - Use match to handle 
+    - ? operator
+        - Automatically handles "Result"    
+
+Iterators
+    - Compputed lazily
+    - Range
+    - Can be used in for loop
+
+Rust
+    - Modelling state as structs
+    - Use functions to move between states
+    - Compiler is cool and good

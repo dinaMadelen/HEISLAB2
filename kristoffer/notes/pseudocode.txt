@@ -1,0 +1,90 @@
+--------------------------------
+Elevator operations - Pseudocode
+--------------------------------
+-----------
+Definitions
+-----------
+queue[etasjer] = 0 || 1 
+
+
+-----------
+queue:
+    list[etasjer] = 0 || 1
+
+    // anta start på 0
+    traverse()
+        if dir == up
+            for i in list[min : max]
+                list[i] = 0
+                i++
+        if dir == down
+            for i in list[max : min]
+                list[i] = 0
+                i--
+
+    traverse()
+        while list != empty
+            if floor == queue.min
+        if direction == up
+            for floor in list[min : max]
+                remove_cab_call(floor)
+        if direction == down
+            for floor in list[max : min]
+                remove_cab_call(floor)
+
+    add_cab_call(floor)
+        set list[floor] to 1
+
+    remove_cab_call(floor)
+        set list[floor] to 0
+    
+
+
+Hall call()
+    master.send_requests(certain_elevators)
+
+-------
+Moduler
+-------
+Elevator
+    Status
+        Variables:
+            is_master
+            id
+            status
+        Functions:
+            send_status(dest)
+            request_status(dest)
+    
+    Call handling:
+        Variables:
+            floor_list_w_stops[] = [0, 0, 1, 0]
+            pending_calls[] = []
+
+            
+
+
+    Physical:
+        Variables:
+            current_floor
+            direction
+            door_is_open
+
+    Networking:
+        Variables:
+
+
+
+Call-handling:
+    Master:
+
+    Slave:
+        traverse_floors()
+        check_floor_for_call()
+        
+        Cab-calls:
+            add_cab_call()
+            remove_call()
+        
+        Hall-calls:
+            calculate_call_cost()

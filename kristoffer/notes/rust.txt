@@ -17,6 +17,7 @@ Types
 
 Functions
     -Arrow indicates return type
+    - Can be generic
 
 Brackets
     - Block

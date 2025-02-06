@@ -1,0 +1,7 @@
+[package]
+name = "elevator-project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+custom-elevator-lib = { path = "../custom-elevator-lib" }

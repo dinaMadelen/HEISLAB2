@@ -1,9 +1,0 @@
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/exercises/exercise3/target/debug/deps/libdriver_rust-23c519fa4d95ba6e.rmeta: /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/lib.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/elev.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/poll.rs
-
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/exercises/exercise3/target/debug/deps/libdriver_rust-23c519fa4d95ba6e.rlib: /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/lib.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/elev.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/poll.rs
-
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/exercises/exercise3/target/debug/deps/driver_rust-23c519fa4d95ba6e.d: /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/lib.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/elev.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/poll.rs
-
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/lib.rs:
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/elev.rs:
-/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/utils/drivers/driver-rust/src/elevio/poll.rs:

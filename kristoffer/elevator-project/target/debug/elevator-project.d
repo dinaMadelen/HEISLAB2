@@ -1,0 +1,1 @@
+/home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/elevator-project/target/debug/elevator-project: /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/custom-elevator-lib/src/lib.rs /home/hackerman/lokal-stud/sanntid-TTK4145/project/HEISLAB2/kristoffer/elevator-project/src/main.rs

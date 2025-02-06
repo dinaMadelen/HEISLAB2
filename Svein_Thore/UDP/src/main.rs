@@ -8,23 +8,23 @@ udp_msg                Contains message data and overhead
 -----------------------------------------------Functions in this file
 serilize               udp_msg -> Vec<u8>
 deserialize            Vec<u8> -> udp_msg
-x-  calc_checksum          Calculate checksum to a u8
-x-  comp_checksum          Compare a recived udp_msg checksum with the calculated checksum
+x- calc_checksum          Calculate checksum to a u8
+x- comp_checksum          Compare a recived udp_msg checksum with the calculated checksum
 udp_send               Ensured message integrity
 udp_recive             returns udp_msg struct
 udp_broadcast          Not ensured message integrity
 
 ------------------------------------------------Message IDs
 
-0:  Master Wordview (Master Broadcasts)
-1:  Ack (Data contains massage ID of the message it is responding to)
-2:  Nak (Data contains massage ID of the message it is responding to)
+0:  Master Wordview (Master Broadcasts worldview hash)
+1:  Ack (Data variable contains massage ID of the message it is responding to)
+2:  Nak (Data variable contains massage ID of the message it is responding to)
 3:  New Master (Master Broadcasts)
 4:  New Online (Slave Broadcast)
 5:  Request Queue (Data contains ID of queue that)
 6:  Response to Queue (Master sends queue)
-7:  Error: Exisiting worldview does not match (Slave sends)
-8:  Response to  Error: Worldview (Master responds with corrected queue)
+7:  Error: Exisiting worldview hash does not match Slave's worldview hash (Slave sends)
+8:  Response to  Error: Worldview hash (Master responds with queues)
 9:  Error: Can't service queue (Master/Slave)
 10: Error: 
 
@@ -53,7 +53,7 @@ let socket_clone = socket.try_clone().expect("Failed to clone the socket");
 
 use std::net::{UdpSocket, SocketAddr};  // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
 use std::sync::{Arc, Mutex};            // https://doc.rust-lang.org/std/sync/struct.Mutex.html
-use serde::{Serialize, Deserialize};    // https://serde.rs/impl-serialize.html
+use serde::{Serialize, Deserialize};    // https://serde.rs/impl-serialize.html & https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode;                            // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Sha256, Digest};             // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 
@@ -64,7 +64,7 @@ struct udp_header{
     sender_id: u8,      // ID of the sender of the message.
     message_id: u8,     // ID for what kind of message it is, e.g. Button press, or Update queue.
     sequence_numb: u32, // Number of message in order.
-    checksum: Vec<u8>,       // Hash of data to check message integrity.
+    checksum: Vec<u8>,  // Hash of data to check message integrity.
 }
 
 //UDP Message Struct
@@ -80,6 +80,7 @@ fn serialize(msg: &udp_msg) -> Vec<u8> {
 
     let serialized_msg = bincode::serialize(msg).expect("Failed to serialize message");
     return serialized_msg;
+
 }
 
 // Combine bytes into udp_msg 
@@ -87,19 +88,19 @@ fn deserialize(buffer: &[u8]) -> Option<udp_msg> {
 
     let deserialized_msg = bincode::deserialize(buffer).ok(); 
     return deserialized_msg;
-
 }
-
 
 // Calculate Checksum. 
-fn calc_checksum(data: &Vec<u8>) -> Vec<u8>{
-    todo!("TODO: Not yet implemented, Calculate checksum using sha2 lib?, check link in imports"); 
-}
+fn calc_checksum(data: &Vec<u8>) -> Str{
 
+    let mut hasher sha256::new();
+    hasher.update(data);
+    let hash hasher.finalize();
+    return hash; 
+}
 
 // Compare checksums, Not sure if i need this or not
 fn comp_checksum(udp_msg: &udp_msg)-> bool{
-    todo!("calc_checksum must be implemented for this function to work");
 
     if (calc_checksum(&msg.data) == &msg.header.checksum){
         return true;
@@ -108,8 +109,6 @@ fn comp_checksum(udp_msg: &udp_msg)-> bool{
         return false;
     }
 }
-
-
 
 //Recive UDP message
 fn udp_recive(socket: &UdpSocket) -> Option<udp_msg>{
@@ -139,7 +138,7 @@ fn udp_ack(target_address){
         Ok(_) => {
             println!("Sendt ACK");
         }
-        Err(e) => {e
+        Err(e) => {
             println!("Error sending ACK: {}", e);
         }
     }
@@ -164,7 +163,7 @@ fn udp_send(socket: &UdpSocket,target_adress: &str,msg: &udp_msg){
     let data = serialize(msg);
     match socket.send_to(&data,target){
         Ok(_) => {
-            println!("Message sent to: {},target");
+            println!("Message sent to: {}",target";
         }
         Err(e) => {
             eprintln!("{}",e);
@@ -192,11 +191,11 @@ fn udp_broadcast(data){
 
 // Sending UDP, with retry
 fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) -> bool {
+
     let data = serialize(msg);
     let mut retries = 3;
 
     while retries > 0 {
-
 
         let data = serialize(msg);
         match socket.send_to(&data,target_addr){
@@ -207,7 +206,6 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) 
                 eprintln!("{}",e);
             }
         }
-
 
         match socket.send_to(&data, target_addr) {
             Ok(_) => {
@@ -238,6 +236,7 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) 
 
 // Reciving UDP, with retry
 fn udp_receive_ensure(socket: &UdpSocket) -> Option<ReliableUdpMsg> {
+
     let mut buffer = [0; 1024];
 
     match socket.recv_from(&mut buffer) {
@@ -246,13 +245,14 @@ fn udp_receive_ensure(socket: &UdpSocket) -> Option<ReliableUdpMsg> {
                 if calc_checksum(&msg.data) == msg.header.checksum {
                     udp_ack(sender_addr); // Send ACK
                     return Some(msg);
-                } else {
+                } 
+                else{
                     udp_nak(sender_addr); // Send NAK
                 }
             }
         }
         Err(e) => {
-            eprintln!("Receive error: {}", e)
+            eprintln!("Receive error: {}", e);
         }
     }
     return None;

@@ -1,18 +1,24 @@
 //UDP Functions for sending and reciving data over UDP
 
 /*----------------------Left to IMPLEMENT:
+
 Sequence number for correct order, Threading ,Mutex
 
-------------------------Structs in this file
-udp_msg                Contains message data and overhead
------------------------------------------------Functions in this file
-serilize               udp_msg -> Vec<u8>
-deserialize            Vec<u8> -> udp_msg
-x- calc_checksum          Calculate checksum to a u8
-x- comp_checksum          Compare a recived udp_msg checksum with the calculated checksum
+------------------------Structs in this file:
+
+UdpMsg                Contains message data and overhead
+UdpHeader             Contains overhead
+
+-----------------------------------------------Functions in this file:
+serilize               UdpMsg -> Vec<u8>
+deserialize            Vec<u8> -> UdpMsg
+calc_checksum          Calculate checksum to a u8
+comp_checksum          Compare a recived UdpMsg checksum with the calculated checksum
 udp_send               Ensured message integrity
-udp_recive             returns udp_msg struct
+udp_recive             returns UdpMsg struct
 udp_broadcast          Not ensured message integrity
+udp_recive_ensure      same as recive but verfiies that the message is correct
+udp_send_ensure        same as send, but requrires ACK
 
 ------------------------------------------------Message IDs
 
@@ -31,7 +37,7 @@ udp_broadcast          Not ensured message integrity
 ----------------------------------------------- !!!OBS!!! ADD TO Cargo.toml: 
 
 [dependencies]
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 bincode = "1"
 ----------------------------------------------- Example code
 //Example Assigning mutex
@@ -50,76 +56,72 @@ let socket_clone = socket.try_clone().expect("Failed to clone the socket");
 */
 
 //----------------------------------------------Imports
-
 use std::net::{UdpSocket, SocketAddr};  // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
-use std::sync::{Arc, Mutex};            // https://doc.rust-lang.org/std/sync/struct.Mutex.html
-use serde::{Serialize, Deserialize};    // https://serde.rs/impl-serialize.html & https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
+//use std::sync::{Arc, Mutex};            // https://doc.rust-lang.org/std/sync/struct.Mutex.html
+use serde::{Serialize, Deserialize};    // https://serde.rs/impl-serialize.html  
+                                        // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode;                            // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Sha256, Digest};             // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 
 //----------------------------------------------Struct
 
+#[derive(Debug, Serialize, Deserialize)]
 //UDP Header
-struct udp_header{
+struct UdpHeader{
     sender_id: u8,      // ID of the sender of the message.
     message_id: u8,     // ID for what kind of message it is, e.g. Button press, or Update queue.
-    sequence_numb: u32, // Number of message in order.
+    sequence_number: u32, // Number of message in order.
     checksum: Vec<u8>,  // Hash of data to check message integrity.
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 //UDP Message Struct
-struct udp_msg{
-    header: udp_header, // Header struct containing information about the message itself
+struct UdpMsg{
+    header: UdpHeader, // Header struct containing information about the message itself
     data: Vec<u8>,      // Data so be sent.
 }
 
 //----------------------------------------------Functions
 
-// Split udp_msg into bytes
-fn serialize(msg: &udp_msg) -> Vec<u8> {
+// Split UdpMsg into bytes
+fn serialize(msg: &UdpMsg) -> Vec<u8> {
 
     let serialized_msg = bincode::serialize(msg).expect("Failed to serialize message");
     return serialized_msg;
 
 }
 
-// Combine bytes into udp_msg 
-fn deserialize(buffer: &[u8]) -> Option<udp_msg> {
+// Combine bytes into UdpMsg 
+fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 
     let deserialized_msg = bincode::deserialize(buffer).ok(); 
     return deserialized_msg;
 }
 
 // Calculate Checksum. 
-fn calc_checksum(data: &Vec<u8>) -> Str{
+fn calc_checksum(data: &Vec<u8>) -> Vec<u8>{
 
-    let mut hasher sha256::new();
+    let mut hasher = Sha256::new();
     hasher.update(data);
-    let hash hasher.finalize();
-    return hash; 
+    let hash = hasher.finalize();
+    return hash.to_vec(); 
 }
 
 // Compare checksums, Not sure if i need this or not
-fn comp_checksum(udp_msg: &udp_msg)-> bool{
+fn comp_checksum(msg: &UdpMsg)-> bool{
 
-    if (calc_checksum(&msg.data) == &msg.header.checksum){
-        return true;
+    return calc_checksum(&msg.data) == msg.header.checksum;
     }
-    else{
-        return false;
-    }
-}
 
 //Recive UDP message
-fn udp_recive(socket: &UdpSocket) -> Option<udp_msg>{
+fn udp_recive(socket: &UdpSocket) -> Option<UdpMsg>{
 
     let mut buffer = [0;1024];
     //let _lock = res_mutex_recv.lock().unwrap();
     //Recive message
     match socket.recv_from(&mut buffer){
  
-        Ok(_) => {
-            let msg = buffer[0];
+        Ok((size,sender)) => {
             println!("Message size {}, from {}",size,sender);
             return Some(deserialize(&buffer[..size])?);
         }
@@ -132,54 +134,61 @@ fn udp_recive(socket: &UdpSocket) -> Option<udp_msg>{
 }
 
 //ACK
-fn udp_ack(target_address){
+fn udp_ack(socket: &UdpSocket,target_address: SocketAddr)-> bool{
 
-    match socket.send_to(0x06 , target_address) {
+    match socket.send_to(&[0x06] , target_address) {
         Ok(_) => {
             println!("Sendt ACK");
+            return true;
         }
         Err(e) => {
             println!("Error sending ACK: {}", e);
+            return false;
         }
     }
 }
 
 //NAK
-fn udp_nak(target_address){
+fn udp_nak(socket: &UdpSocket,target_address: SocketAddr)-> bool{
 
-    match socket.send_to(0x15 , target_address) {
+    match socket.send_to(&[0x15] , target_address) {
         Ok(_) => {
             println!("Sendt NAK");
+            return true;
         }
         Err(e) => {
             eprintln!("Error sending NAK: {}", e);
+            return false;
         }
     }
 }    
 
 //Sending UDP message
-fn udp_send(socket: &UdpSocket,target_adress: &str,msg: &udp_msg){
+fn udp_send(socket: &UdpSocket,target_adress: SocketAddr,msg: &UdpMsg)->bool{
 
     let data = serialize(msg);
-    match socket.send_to(&data,target){
+    match socket.send_to(&data,target_adress){
         Ok(_) => {
-            println!("Message sent to: {}",target";
+            println!("Message sent to: {}",target_adress);
+            return true;
         }
         Err(e) => {
-            eprintln!("{}",e);
+            eprintln!("Error sending message: {}",e);
+            return false;
         }
     }
 }
 
 //Broadcast
-fn udp_broadcast(data){
+fn udp_broadcast(msg:&UdpMsg){
 
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket, broadcast");
     socket.set_broadcast(true).expect("failed to activate broadcast");
 
-    let msg = serialize(data);
+    let msg = serialize(msg);
+    let target_address = "255.255.255.255;20000";
 
-    match socket.send_to(&msg,"255.255.255.255;20000") {
+    match socket.send_to(&msg,target_address) {
         Ok(_) => {
             println!("Broadcast successful");
         }
@@ -190,20 +199,19 @@ fn udp_broadcast(data){
 }
 
 // Sending UDP, with retry
-fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) -> bool {
+fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg) -> bool {
 
     let data = serialize(msg);
-    let mut retries = 3;
+    let mut retries = 5;
 
     while retries > 0 {
 
-        let data = serialize(msg);
         match socket.send_to(&data,target_addr){
             Ok(_) => {
                 println!("Message sent to: {}",target_addr);
             }
             Err(e) => {
-                eprintln!("{}",e);
+                eprintln!("Error sending message: {}",e);
             }
         }
 
@@ -226,7 +234,7 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) 
                     return true;
                 }
             }
-            .. => retries -= 1,  // Anything other than an empty or accepted message
+            _=> retries -= 1,  // Anything other than an empty or accepted message
         }
     }
 
@@ -234,8 +242,8 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &ReliableUdpMsg) 
     return false; 
 }
 
-// Reciving UDP, with retry
-fn udp_receive_ensure(socket: &UdpSocket) -> Option<ReliableUdpMsg> {
+// Reciving UDP, with ensure
+fn udp_receive_ensure(socket: &UdpSocket) -> Option<UdpMsg> {
 
     let mut buffer = [0; 1024];
 
@@ -243,17 +251,21 @@ fn udp_receive_ensure(socket: &UdpSocket) -> Option<ReliableUdpMsg> {
         Ok((size, sender_addr)) => {
             if let Some(msg) = deserialize(&buffer[..size]) {
                 if calc_checksum(&msg.data) == msg.header.checksum {
-                    udp_ack(sender_addr); // Send ACK
+                    udp_ack(socket,sender_addr); // Send ACK
                     return Some(msg);
                 } 
                 else{
-                    udp_nak(sender_addr); // Send NAK
+                    udp_nak(socket,sender_addr); // Send NAK
                 }
             }
         }
         Err(e) => {
-            eprintln!("Receive error: {}", e);
+            eprintln!("error reciving{}",e);
         }
     }
     return None;
+}
+
+fn main(){
+       println!("------------------------------OK! det funker, eller kompilerer ihverfall :P");
 }

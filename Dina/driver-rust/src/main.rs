@@ -6,9 +6,13 @@ use crossbeam_channel as cbc;
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 
+// Possible states for the elevator
 
+
+    
 /*Funksjon som velger motorretning basert på etg: Skalerbar*/
-fn go_correct_dir_based_on_floor(elev: &(elev::Elevator), current_floor: &u8, target_floor: &u8){
+/*
+fn go_correct_dir_based_on_floor(elev: &elev::Elevator, current_floor: &u8, target_floor: &u8){
     let elevator = elev.clone();
 
     let direction =
@@ -22,6 +26,44 @@ fn go_correct_dir_based_on_floor(elev: &(elev::Elevator), current_floor: &u8, ta
 
     elevator.motor_direction(direction);
 }
+*/
+/*fn door_open_sequence(elev: &elev::Elevator){
+    elev.door_light(true);
+
+    let poll_period = Duration::from_millis(25);
+
+    let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+    {
+        let elevator = elev.clone();
+        spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
+    }
+
+    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
+    {
+        let elevator = elev.clone();
+        spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
+    }
+
+    for i in 1 .. 1000{
+        cbc::select! {
+            //tror denne kan bli
+            recv(call_button_rx) -> a => {
+                let call_button = a.unwrap();
+                println!("{:#?}", call_button);
+                elev.call_button_light(call_button.floor, call_button.call, true);
+                //queue_vec.push(call_button.floor);
+
+            },
+            recv(obstruction_rx) -> a => {
+                let obstr = a.unwrap();
+                println!("Obstruction: {:#?}", obstr);
+            },
+        }
+
+    }
+    elev.door_light(false);
+    
+} */
 
 
 fn main() -> std::io::Result<()> {
@@ -59,7 +101,8 @@ fn main() -> std::io::Result<()> {
 
     let mut queue_vec: Vec<u8> = Vec::new();
     let mut position_in_queue_vec: usize = 0; 
-    queue_vec.push(1);
+    let mut last_floor: u8 = 16;
+    queue_vec.push(3);
 
 
     if elevator.floor_sensor().is_none() {
@@ -73,17 +116,22 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
-                queue_vec.push(call_button.floor);
-
+                elevator.add_to_queue(call_button);
+                if last_floor != 16{
+                    go_correct_dir_based_on_floor(&elevator, &last_floor, &queue_vec[position_in_queue_vec]);
+                }
+                
             },
 
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
+                last_floor = floor;
                 println!("Floor: {:#?}", floor);
                 go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
-                if(&floor == &queue_vec[position_in_queue_vec]){
+                if &floor == &queue_vec[position_in_queue_vec]{
                     position_in_queue_vec += 1;
-                    go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
+                    
+                    //go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
                 }
             },
 

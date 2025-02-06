@@ -82,17 +82,14 @@ Enums
 
 Error handling
     - Unwrap
-    - Expect
-    - Use match
-    - if let
-    - Bubble up
+        - Immedatly panics
+    - ? operator
+        - Immedatly returns Err to parent func
     - Result
         - A enum
             - Can be Ok
             - Can be Err
             - Use match to handle 
-    - ? operator
-        - Automatically handles "Result"    
 
 Iterators
     - Compputed lazily

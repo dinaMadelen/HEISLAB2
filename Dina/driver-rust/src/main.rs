@@ -68,7 +68,7 @@ fn go_correct_dir_based_on_floor(elev: &elev::Elevator, current_floor: &u8, targ
 
 fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
-    let elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
+    let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
 
     let poll_period = Duration::from_millis(25);
@@ -99,14 +99,9 @@ fn main() -> std::io::Result<()> {
 
     let mut dirn = e::DIRN_DOWN;
 
-    let mut queue_vec: Vec<u8> = Vec::new();
-    let mut position_in_queue_vec: usize = 0; 
-    let mut last_floor: u8 = 16;
-    queue_vec.push(3);
-
 
     if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
+        &elevator.motor_direction(dirn);
     }
 
     loop {
@@ -116,23 +111,17 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
-                elevator.add_to_queue(call_button);
-                if last_floor != 16{
-                    go_correct_dir_based_on_floor(&elevator, &last_floor, &queue_vec[position_in_queue_vec]);
-                }
+                elevator.add_to_queue(call_button.floor);
+                elevator.go_next_floor();
                 
             },
 
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
-                last_floor = floor;
                 println!("Floor: {:#?}", floor);
-                go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
-                if &floor == &queue_vec[position_in_queue_vec]{
-                    position_in_queue_vec += 1;
-                    
-                    //go_correct_dir_based_on_floor(&elevator, &floor, &queue_vec[position_in_queue_vec]);
-                }
+                
+                elevator.go_next_floor();
+                
             },
 
             /*Burde nok modifiseres*/

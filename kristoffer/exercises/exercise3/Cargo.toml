@@ -1,8 +1,0 @@
-[package]
-name = "exercise3"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-driver-rust = { path = "../../utils/drivers/driver-rust" }
-crossbeam-channel="*"

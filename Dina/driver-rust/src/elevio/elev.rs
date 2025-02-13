@@ -10,10 +10,10 @@ use std::sync::*;
 pub struct Elevator {
     socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub ID:i8,
-    pub current_floor:i8,
+    pub ID:u8,
+    pub current_floor:u8,
     pub going_up:bool,
-    pub queue:Vec<i8>,
+    pub queue:Vec<u8>,
     pub status:Status,
     pub direction:i8
 }
@@ -24,6 +24,18 @@ pub enum Status{
     Moving,
     Maintenance,
     Error
+}
+
+impl Status{
+    pub fn as_str(&self) -> &str{
+        match self{
+            Status::Idle => "Idle",
+            Status::Moving => "Moving",
+            Status::Maintenance => "Maintenance",
+            Status::Error => "Error"
+        }
+        
+    }
 }
 
 pub const HALL_UP: u8 = 0;
@@ -114,7 +126,7 @@ impl Elevator {
         buf[1] != 0
     }
 
-    pub fn add_to_queue(&mut self, floor: i8) {
+    pub fn add_to_queue(&mut self, floor: u8) {
         if !self.queue.contains(&floor) {
             self.queue.push(floor);
             self.sort_queue();
@@ -159,8 +171,10 @@ impl Elevator {
                 self.print_status();
             }
         }
-    pub fn sort_queue(&mut self) -> Vec<i8> {
-        let (mut non_negative, mut negative): (Vec<i8>, Vec<i8>) = self.queue
+    }
+    pub fn sort_queue(&self) -> Vec<u8> {
+        let mut sorted_queue = self.queue.clone();
+        let (mut non_negative, mut negative): (Vec<u8>, Vec<u8>) = sorted_queue
             .into_iter()
             .partition(|&x| x >= 0);
     
@@ -170,9 +184,9 @@ impl Elevator {
         // Non-negative numbers first, negative numbers last
         non_negative.extend(negative);
 
-        let (mut infront, mut behind): (Vec<i8>, Vec<i8>) = non_negative
+        let (mut infront, mut behind): (Vec<u8>, Vec<u8>) = non_negative
         .into_iter()
-        .partition(|&x| x <= self.floor);
+        .partition(|&x| x <= self.current_floor);
 
         infront.extend(behind);
         return infront;
@@ -181,27 +195,28 @@ impl Elevator {
 
     // Moves to next floor, if empty queue, set status to idle.
     pub fn go_next_floor(&mut self) {
+
         if let Some(next_floor) = self.queue.first() {
             if *next_floor > self.current_floor {
-                self.direction = Some(1 as i8);
+                self.motor_direction(DIRN_UP);
                 self.current_floor += 1;
                 self.set_status(Status::Moving);
             } else if *next_floor < self.current_floor {
-                self.direction = Some(-1 as i8);
+                self.motor_direction(DIRN_DOWN);
                 self.current_floor -= 1;
                 self.set_status(Status::Moving);
             } else {
-                self.direction = None;
+                self.motor_direction(DIRN_STOP);
             }
         } else {
             self.set_status(Status::Idle);
         }
     }
 
-    fn print_status(&mut self){
-        println!("status: {}",self.status);
+    fn print_status(&self){
+        write!("status:{}", self.status.as_str());
     }
-    }
+    
 }
 
 

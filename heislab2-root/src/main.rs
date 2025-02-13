@@ -1,10 +1,12 @@
+// sett kompilator flagg
 #![allow(dead_code, unused_imports)]
-//------------------
-// Sett opp moduler
-//------------------
-// importer moduler
+
+//------------------------
+// Initiell konfigurering
+//------------------------
+// Importer moduler og crates
 mod modules;
-// lag modul alias
+// sett opp modul alias
 use modules::udp as udp;
 
 fn main() {

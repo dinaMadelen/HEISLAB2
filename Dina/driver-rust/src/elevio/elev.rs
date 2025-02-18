@@ -4,6 +4,9 @@ use std::fmt;
 use std::io::*;
 use std::net::TcpStream;
 use std::sync::*;
+use std::time::Duration;
+use std::thread;
+use std::convert::TryInto;
 
 
 #[derive(Clone, Debug)]
@@ -18,7 +21,7 @@ pub struct Elevator {
     pub direction:i8
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Status{
     Idle,
     Moving,
@@ -52,7 +55,7 @@ impl Elevator {
             socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
             num_floors,
             ID: 0,
-            current_floor: 0,
+            current_floor: 1,
             going_up: true,
             queue: Vec::new(),
             status: Status::Idle,
@@ -146,29 +149,73 @@ impl Elevator {
                 self.queue.clear();
             }
 
-            // Floors are read as i8, + is going up, - is going down.
+            // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
             Status::Moving => {
-                let first_item_in_queue = self.queue.first().unwrap();
-                if *first_item_in_queue < self.current_floor {
-                    self.direction = -1;
-                    self.current_floor = *first_item_in_queue;
-                    self.queue.remove(0);
-                } else{
-                    self.direction = 1;
-                    self.current_floor = *first_item_in_queue;
-                    self.queue.remove(0);
+                //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
+                match self.status{
+                    Status::Idle => {
+                        self.status = Status::Moving;
+                    }
+                    Status::Error =>{
+                        //self.status = Status::Idle;
+                    }
+                    Status::Maintenance => {
+                        self.status = Status::Moving;
+                    }
+                    Status::Moving => {
+                        let first_item_in_queue = self.queue.first().unwrap();
+                        if *first_item_in_queue < self.current_floor {
+                            self.direction = -1;
+                            
+                        } else if *first_item_in_queue > self.current_floor{
+                            self.direction = 1;
+                        }
+                    }
+
                 }
+                //IMPLEMENT LIGHT FUNCTIONALITY HERE
+
             }
 
             Status::Idle => {
                 self.status = Status::Idle;
+
+                //SKRUR AV LYSET FOR DER DEN ER
+                if self.direction == -1{
+                    self.call_button_light(self.current_floor, HALL_UP , false);
+                }else{
+                    self.call_button_light(self.current_floor, HALL_DOWN , false);
+                };
+                self.call_button_light(self.current_floor, CAB , false);
+
+                //SIER DEN IKKE BEVEGER SEG LENGER
                 self.direction = 0;
             }
 
             Status::Error => {
-                self.status = Status::Error;
-                self.queue.clear();
-                self.print_status();
+                match self.status{
+                    Status::Error =>{
+                        self.status = Status::Idle;
+                    }
+                    Status::Moving=>{
+                        self.motor_direction(DIRN_STOP);
+                        self.status = Status::Error;
+                        self.queue.clear();
+                        self.print_status();
+                        
+                    }
+                    Status::Idle=>{
+                        self.status = Status::Error;
+                        self.queue.clear();
+                        self.print_status();
+                    }
+                    Status::Maintenance => {
+                        self.status = Status::Error;
+                        self.queue.clear();
+                        self.print_status();
+                    }
+                }
+                
             }
         }
     }
@@ -195,26 +242,46 @@ impl Elevator {
 
     // Moves to next floor, if empty queue, set status to idle.
     pub fn go_next_floor(&mut self) {
-
-        if let Some(next_floor) = self.queue.first() {
-            if *next_floor > self.current_floor {
-                self.motor_direction(DIRN_UP);
-                self.current_floor += 1;
-                self.set_status(Status::Moving);
-            } else if *next_floor < self.current_floor {
-                self.motor_direction(DIRN_DOWN);
-                self.current_floor -= 1;
-                self.set_status(Status::Moving);
+        if self.status != Status::Error{
+            if let Some(next_floor) = self.queue.first() {
+                if *next_floor > self.current_floor {
+                    self.motor_direction(DIRN_UP);
+                    self.set_status(Status::Moving);
+                    //self.current_floor += 1;
+                    
+                } else if *next_floor < self.current_floor {
+                    self.set_status(Status::Moving);
+                    self.motor_direction(DIRN_DOWN);
+                    //self.current_floor -= 1;
+                    
+                } else if *next_floor == self.current_floor{
+                    self.set_status(Status::Idle);
+                    self.motor_direction(DIRN_STOP);
+                    self.queue.remove(0);
+                    
+                    self.door_open_sequence();
+                }
             } else {
+                self.set_status(Status::Idle);
                 self.motor_direction(DIRN_STOP);
             }
-        } else {
-            self.set_status(Status::Idle);
         }
     }
 
     fn print_status(&self){
-        write!("status:{}", self.status.as_str());
+        println!("status:{}", self.status.as_str());
+    }
+    
+    //MIDLERTIDIG FUNKSJON
+    pub fn door_open_sequence(&mut self) {
+        //MIDLERTIDIG FUNKSJON
+        let handle = thread::spawn(|| {
+            thread::sleep(Duration::from_secs(2)); // Sleep for 2 seconds
+            println!("Thread woke up!");
+        });
+    
+        handle.join().unwrap(); // Wait for the thread to finish
+        self.go_next_floor();
     }
     
 }

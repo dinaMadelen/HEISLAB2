@@ -5,6 +5,7 @@ use crossbeam_channel as cbc;
 
 use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
+use elev::Status;
 
 // Possible states for the elevator
 
@@ -112,14 +113,17 @@ fn main() -> std::io::Result<()> {
                 println!("{:#?}", call_button);
                 elevator.call_button_light(call_button.floor, call_button.call, true);
                 elevator.add_to_queue(call_button.floor);
-                elevator.go_next_floor();
+                if &elevator.status == &(Status::Idle){
+                    elevator.go_next_floor();
+                }
+
                 
             },
 
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
+                elevator.current_floor = floor;
                 println!("Floor: {:#?}", floor);
-                
                 elevator.go_next_floor();
                 
             },
@@ -128,16 +132,20 @@ fn main() -> std::io::Result<()> {
             recv(stop_button_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
+                elevator.set_status(Status::Error);
                 for f in 0..elev_num_floors {
                     for c in 0..3 {
                         elevator.call_button_light(f, c, false);
                     }
                 }
+                
+
             },
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { e::DIRN_STOP } else { dirn });
+                
             },
         }
     }

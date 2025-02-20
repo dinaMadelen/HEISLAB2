@@ -1,0 +1,19 @@
+==========================
+Foreslått prosjektstruktur
+==========================
+
+ProjectRoot/
+├── Cargo.toml
+├── Cargo.lock
+├── src/
+│    ├── main.rs
+│    ├── lib.rs 
+│    ├── modules/
+│       ├── mod 1
+│       ├── mod 2
+│       └── mod n
+├── tests/
+├── examples/
+└── target/
+
+          

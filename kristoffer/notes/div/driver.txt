@@ -1,0 +1,19 @@
+-----------------
+driver-rust Notes
+-----------------
+-------
+elev.rs
+-------
+    ---------
+    Functions
+    ---------
+    init()
+        In:
+            addr
+            num_floors
+        Out:
+            Result
+        Pseudo:
+            
+        Desc:
+

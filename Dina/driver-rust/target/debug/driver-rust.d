@@ -1,1 +1,0 @@
-/Users/dina-madelen/NTNU/Sanntid/HEISLAB2/Dina/driver-rust/target/debug/driver-rust: /Users/dina-madelen/NTNU/Sanntid/HEISLAB2/Dina/driver-rust/src/elevio/elev.rs /Users/dina-madelen/NTNU/Sanntid/HEISLAB2/Dina/driver-rust/src/elevio/poll.rs /Users/dina-madelen/NTNU/Sanntid/HEISLAB2/Dina/driver-rust/src/lib.rs /Users/dina-madelen/NTNU/Sanntid/HEISLAB2/Dina/driver-rust/src/main.rs

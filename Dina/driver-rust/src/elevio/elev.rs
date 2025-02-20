@@ -13,7 +13,7 @@ use std::convert::TryInto;
 pub struct Elevator {
     socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub ID:u8,
+    pub ID: u8,
     pub current_floor:u8,
     pub queue:Vec<u8>,
     pub status:Status,
@@ -25,7 +25,8 @@ pub enum Status{
     Idle,
     Moving,
     DoorOpen,
-    Error
+    Error,
+    Stop
 }
 
 impl Status{
@@ -34,7 +35,8 @@ impl Status{
             Status::Idle => "Idle",
             Status::Moving => "Moving",
             Status::DoorOpen => "DoorOpen",
-            Status::Error => "Error"
+            Status::Error => "Error",
+            Status::Stop => "Stop"
         }
         
     }
@@ -147,7 +149,7 @@ impl Elevator {
                 //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
                 match self.status{
                 
-                    Status::Moving | Status::Idle=> {
+                    Status::Moving | Status::Idle => {
                         self.status = Status::Moving;
                         let first_item_in_queue = self.queue.first().unwrap();
                         if *first_item_in_queue < self.current_floor {
@@ -157,14 +159,8 @@ impl Elevator {
                             self.direction = 1;
                         }
                     }
-                    Status::DoorOpen=>{
-                        //NEI
-                        self.status = Status::Moving;
-                    }
-                    Status::Error =>{
-                        //NEI
-                        //self.status = Status::Idle;
-                        
+                    _ =>{
+                        //Do Something? 
                     }
 
                 }
@@ -173,7 +169,15 @@ impl Elevator {
             }
 
             Status::DoorOpen=> {
-                self.status = Status::DoorOpen;
+                match self.status{
+                    Status::DoorOpen => {
+                        self.status = Status::Idle;
+                    }  
+                    _ => {
+                        self.status = Status::DoorOpen;
+                    }
+                }
+                
             }
 
             Status::Idle => {
@@ -191,25 +195,35 @@ impl Elevator {
                 self.direction = 0;
             }
 
+            Status::Stop => {
+                Status::Stop =>{
+                    self.status = Status::Idle;
+                }
+                _ =>{
+                    // KILL ELEVATOR !
+                    for f in 0..elev_num_floors {
+                        for c in 0..3 {
+                            elevator.call_button_light(f, c, false);
+                        }
+                    }
+
+                    self.motor_direction(DIRN_STOP);
+                    self.status = Status::Error;
+                    self.queue.clear();
+                    self.print_status();
+                }
+            }
+
             Status::Error => {
                 match self.status{
                     Status::Error =>{
                         self.status = Status::Idle;
                     }
-                    Status::Moving=>{
-                        self.motor_direction(DIRN_STOP);
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
-                        
-                    }
-                    Status::Idle=>{
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
-                    }
+                    _ =>{
 
-                    Status::DoorOpen=>{ //DENNE MÅ ENDRES PÅ!
+                        // KILL ELEVATOR !
+
+                        self.motor_direction(DIRN_STOP);
                         self.status = Status::Error;
                         self.queue.clear();
                         self.print_status();
@@ -240,9 +254,9 @@ impl Elevator {
     }
 
 
-    // Moves to next floor, if empty queue, set status to idle. If error, does nothing
+    // Moves to next floor, if empty queue, set status to idle. If !(moving  idle), do nothing
     pub fn go_next_floor(&mut self) {
-        if !((self.status == Status::Error) | (self.status == Status::DoorOpen)){
+        if ((self.status == Status::Moving) | (self.status == Status::Idle)){
             if let Some(next_floor) = self.queue.first() {
                 if *next_floor > self.current_floor {
                     self.set_status(Status::Moving);
@@ -260,6 +274,8 @@ impl Elevator {
                     self.queue.remove(0);
                     
                     self.door_open_sequence();
+
+            
                 }
             } else {
                 self.set_status(Status::Idle);
@@ -276,17 +292,21 @@ impl Elevator {
     
     //MIDLERTIDIG FUNKSJON
     pub fn door_open_sequence(&mut self) {
-        //MIDLERTIDIG FUNKSJON
+        self.set_status(Status::DoorOpen);
+
         let handle = thread::spawn(|| {
             thread::sleep(Duration::from_secs(2)); // Sleep for 2 seconds
+            self.set_status(Status::DoorOpen);
             println!("Thread woke up!");
         });
     
         handle.join().unwrap(); // Wait for the thread to finish
+
+
         self.go_next_floor();
     }
-    
 }
+
 
 
 impl fmt::Display for Elevator {

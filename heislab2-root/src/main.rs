@@ -7,8 +7,6 @@
 // Importer moduler og crates
 mod modules;
 // sett opp modul alias
-use modules::udp as udp;
+use modules::udp;
 
-fn main() {
-
-}
+fn main() {}

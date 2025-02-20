@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(warnings)]
 //UDP Functions for sending and reciving data over UDP
 
 /*----------------------Left to IMPLEMENT:
@@ -11,7 +11,7 @@ UdpMsg                Contains message data and overhead
 UdpHeader             Contains overhead
 
 -----------------------------------------------Functions in this file:
-serilize               UdpMsg -> Vec<u8>
+serialize               UdpMsg -> Vec<u8>
 deserialize            Vec<u8> -> UdpMsg
 calc_checksum          Calculate checksum to a u8
 comp_checksum          Compare a recived UdpMsg checksum with the calculated checksum
@@ -32,51 +32,173 @@ udp_send_ensure        same as send, but requrires ACK
 6:  Response to Queue (Master sends queue)
 7:  Error: Exisiting worldview hash does not match Slave's worldview hash (Slave sends)
 8:  Response to  Error: Worldview hash (Master responds with queues)
-9:  Error: Can't service queue (Master/Slave)
-10: Error:
+9:  Error: Can't service queue/ Going Offline (Master/Slave)
+10: Error: Any
 
 ----------------------------------------------- !!!OBS!!! ADD TO Cargo.toml:
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
------------------------------------------------ Example code
-//Example Assigning mutex
-let res_mutex = Arc::new(Mutex::new(0));            //Create a mutex
-let res_mutex_recv = Arc::clone(&res_mutex);        //Clone a mutex from res_mutex
-let res_mutex_send = Arc::clone(&res_mutex);        //Clone another mutex from res_mutex
-
-//Exampel for adress  (IPv4:PORT)
-let target_address = "127.0.0.1:20000";
-let recive_address = "127.0.0.1:20001";
-
-//Example for socket (clone socket for multiple threads)
-let socket = UdpSocket::bind("127.0.0.1:20001").expect("couldn't bind to address"); // Listening to
-let socket_clone = socket.try_clone().expect("Failed to clone the socket");
+sha2 = { version = "0.11.0-pre.4" }
 
 */
 
+/* ---------------------------------------------------------Temporary for testing */
+// Possible states for the elevator
+// enum Status {
+//     Idle,
+//     Moving,
+//     Maintenance,
+//     Error,
+// }
+
+// // Elevator
+// struct Elevator {
+//     id: i8,
+//     current_floor: i8,
+//     going_up: bool,
+//     queue: Vec<i8>,
+//     status: Status,
+// }
+
+// // Functions for elevator struct
+// impl Elevator {
+//     // Add a floor to the queuem then sorts the queue.
+//     fn add_to_queue(&mut self, floor: i8) {
+//         if !self.queue.contains(&floor) {
+//             self.queue.push(floor);
+//             self.queue = self.sort_queue();
+//         } else {
+//             self.send_status();
+//         }
+//     }
+
+//     // Sets current status (Enum Status) for elevator,
+//     fn set_status(&mut self, status: Status) {
+//         match status {
+//             Status::Maintenance => {
+//                 self.status = Status::Maintenance;
+//                 self.queue.clear();
+//             }
+
+//             // Floors are read as i8, direction true is going up, false is going down.
+//             Status::Moving => {
+//                 if self.queue.is_empty() {
+//                 } else {
+//                     if *self.queue.first().unwrap_or(&127) < self.current_floor {
+//                         // Get floor in queue or floor out of bounds if empty
+//                         self.going_up = false;
+//                         self.current_floor = *self.queue.first().unwrap_or(&127);
+//                         self.queue.remove(0);
+//                     } else {
+//                         self.going_up = true;
+//                         self.current_floor = *self.queue.first().unwrap_or(&127);
+//                         self.queue.remove(0);
+//                     }
+//                 }
+//             }
+
+//             Status::Idle => {
+//                 self.status = Status::Idle;
+//                 self.going_up = true; //Going up is default, maybe just leave in current state or add Enum for none?
+//             }
+
+//             Status::Error => {
+//                 self.status = Status::Error;
+//                 self.queue.clear();
+//                 self.send_status();
+//             }
+//         }
+//     }
+
+//     fn sort_queue(&self) -> Vec<i8> {
+//         let (mut non_negative, mut negative): (Vec<i8>, Vec<i8>) =
+//             <Vec<i8> as Clone>::clone(&self.queue)
+//                 .into_iter()
+//                 .partition(|&x| x >= 0);
+
+//         non_negative.sort();
+//         negative.sort();
+
+//         // Non-negative numbers first, negative numbers last
+//         non_negative.extend(negative);
+
+//         let (mut infront, mut behind): (Vec<i8>, Vec<i8>) = non_negative
+//             .into_iter()
+//             .partition(|&x| x <= self.current_floor); //split at current floor
+
+//         infront.extend(behind); // add passed floors at back of queue (add back in oposite direciton?)
+//         return infront;
+//     }
+
+//     // Moves to next floor, if empty queue, set status to idle.
+//     fn go_next_floor(&mut self) {
+//         if let Some(next_floor) = self.queue.first() {
+//             if *next_floor > self.current_floor {
+//                 self.going_up = true;
+//                 self.current_floor += 1;
+//                 self.set_status(Status::Moving);
+//             } else if *next_floor < self.current_floor {
+//                 self.going_up = false;
+//                 self.current_floor -= 1;
+//                 self.set_status(Status::Moving);
+//             } else {
+//                 self.going_up = true; //Default direction is up
+//             }
+//         } else {
+//             self.set_status(Status::Idle);
+//         }
+//     }
+
+//     fn send_status(&self) {
+//         todo!("Implement send status function");
+//     }
+// }
+
+//----------------------------END TEMP--------------------------------------------------------------
+
 //----------------------------------------------Imports
 use std::net::{SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
-                                       //use std::sync::{Arc, Mutex};            // https://doc.rust-lang.org/std/sync/struct.Mutex.html
-use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html
+                                       //use std::sync::{Arc, Mutex};          // https://doc.rust-lang.org/std/sync/struct.Mutex.html
+use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode; // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
+use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
+use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
 
-//----------------------------------------------Struct
-
-#[derive(Debug, Serialize, Deserialize)]
-//UDP Header
-struct UdpHeader {
-    sender_id: u8,        // ID of the sender of the message.
-    message_id: u8,       // ID for what kind of message it is, e.g. Button press, or Update queue.
-    sequence_number: u32, // Number of message in order.
-    checksum: Vec<u8>,    // Hash of data to check message integrity.
+use crate::modules::elevator;
+//----------------------------------------------Enum
+#[derive(Debug, Serialize, Deserialize, Clone)]
+enum message_type {
+    Wordview,
+    Ack,
+    Nak,
+    New_Order,
+    New_Master,
+    New_Online,
+    Request_Queue,
+    Respond_Queue,
+    Error_Worldview,
+    Respond_Er_Worldview,
+    Error_Offline,
+    Request_Resend,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-//UDP Message Struct
+//----------------------------------------------Structs
+
+#[derive(Debug, Serialize, Deserialize, Clone)] // this is needed to serialize message
+                                                //UDP Header
+struct UdpHeader {
+    sender_id: u8,            // ID of the sender of the message.
+    message_id: message_type, // ID for what kind of message it is, e.g. Button press, or Update queue.
+    sequence_number: u32,     // Number of message in order.
+    checksum: Vec<u8>,        // Hash of data to check message integrity.
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)] // this is needed to serialize message
+                                                //UDP Message Struct
 struct UdpMsg {
     header: UdpHeader, // Header struct containing information about the message itself
     data: Vec<u8>,     // Data so be sent.
@@ -84,13 +206,28 @@ struct UdpMsg {
 
 //----------------------------------------------Functions
 
+fn make_Udp_msg(elevator: elevator::Elevator, message_type: message_type, message: Vec<u8>) -> UdpMsg {
+    let hash = calc_checksum(&message);
+    let mut overhead = UdpHeader {
+        sender_id: elevator.ID,
+        message_id: message_type,
+        sequence_number: 0,
+        checksum: hash,
+    };
+    let msg = UdpMsg {
+        header: overhead,
+        data: message,
+    };
+    return msg;
+}
+
 // Split UdpMsg into bytes
 fn serialize(msg: &UdpMsg) -> Vec<u8> {
     let serialized_msg = bincode::serialize(msg).expect("Failed to serialize message");
     return serialized_msg;
 }
 
-// Combine bytes into UdpMsg
+// Combine bytes in message buffer into UdpMsg
 fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
     let deserialized_msg = bincode::deserialize(buffer).ok();
     return deserialized_msg;
@@ -104,13 +241,17 @@ fn calc_checksum(data: &Vec<u8>) -> Vec<u8> {
     return hash.to_vec();
 }
 
-// Compare checksums, Not sure if i need this or not
+// Compare checksums, Not sure if we need this or not
 fn comp_checksum(msg: &UdpMsg) -> bool {
     return calc_checksum(&msg.data) == msg.header.checksum;
 }
 
 //Recive UDP message
-fn udp_recive(socket: &UdpSocket) -> Option<UdpMsg> {
+fn udp_recive(socket: &UdpSocket, max_wait: u8) -> Option<UdpMsg> {
+    socket
+        .set_read_timeout(Some(Duration::new(max_wait.into(), 0)))
+        .expect(&format!("Failed to set read timeout of {}s", max_wait));
+
     let mut buffer = [0; 1024];
     //let _lock = res_mutex_recv.lock().unwrap();
     //Recive message
@@ -191,9 +332,9 @@ fn udp_broadcast(msg: &UdpMsg) {
 }
 
 // Sending UDP, with retry
-fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg) -> bool {
+fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg, max_retry: u8) -> bool {
     let data = serialize(msg);
-    let mut retries = 5;
+    let mut retries = max_retry;
 
     while retries > 0 {
         match socket.send_to(&data, target_addr) {
@@ -221,9 +362,9 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg) -> bool 
             Ok((_, rec_addr)) if rec_addr.to_string() == target_addr => {
                 // Any empty or accepted message
                 if buffer[0] == 0x06 {
-                    // ACK received
+                    // ACK received, ASCII for ACK
                     println!("ACK received for {}", msg.header.sequence_number);
-                    return true;
+                    return true; // Message sucessfully sent and recived
                 }
             }
             _ => retries -= 1, // Anything other than an empty or accepted message
@@ -234,8 +375,11 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg) -> bool 
     return false;
 }
 
-// Reciving UDP, with ensure
-fn udp_receive_ensure(socket: &UdpSocket) -> Option<UdpMsg> {
+// Reciving UDP, with ACK
+fn udp_receive_ensure(socket: &UdpSocket, max_wait: u8) -> Option<UdpMsg> {
+    socket
+        .set_read_timeout(Some(Duration::new(max_wait.into(), 0)))
+        .expect("Failed to set read timeout");
     let mut buffer = [0; 1024];
 
     match socket.recv_from(&mut buffer) {
@@ -254,4 +398,87 @@ fn udp_receive_ensure(socket: &UdpSocket) -> Option<UdpMsg> {
         }
     }
     return None;
+}
+
+//------------------------------Tests-----------------------
+
+#[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
+mod tests {
+    use super::*;
+    use std::net::UdpSocket;
+
+    #[test]
+    fn test_serialize_deserialize() {
+        let msg = UdpMsg {
+            header: UdpHeader {
+                sender_id: 1,
+                message_id: message_type::Ack,
+                sequence_number: 0,
+                checksum: vec![0x12, 0x34],
+            },
+            data: vec![1, 2, 3, 4],
+        };
+
+        let serialized = serialize(&msg);
+        let deserialized = deserialize(&serialized).expect("Deserialization failed");
+
+        assert_eq!(msg.header.sender_id, deserialized.header.sender_id);
+        assert_eq!(
+            msg.header.sequence_number,
+            deserialized.header.sequence_number
+        );
+        assert_eq!(msg.data, deserialized.data);
+    }
+
+    #[test]
+    fn test_calc_checksum() {
+        let data = vec![1, 2, 3, 4];
+        let checksum = calc_checksum(&data);
+        assert!(!checksum.is_empty());
+    }
+
+    #[test]
+    fn test_comp_checksum() {
+        let data = vec![1, 2, 3, 4];
+        let checksum = calc_checksum(&data);
+        let msg = UdpMsg {
+            header: UdpHeader {
+                sender_id: 1,
+                message_id: message_type::Ack,
+                sequence_number: 0,
+                checksum,
+            },
+            data,
+        };
+        assert!(comp_checksum(&msg));
+    }
+
+    #[test]
+    fn test_udp_send_recv() {
+        // sleep(Duration::from_millis(1000));
+        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
+        let local_addr = socket.local_addr().expect("Failed to get socket address");
+
+        let msg = UdpMsg {
+            header: UdpHeader {
+                sender_id: 1,
+                message_id: message_type::Ack,
+                sequence_number: 0,
+                checksum: vec![0x12, 0x34],
+            },
+            data: vec![1, 2, 3, 4],
+        };
+
+        let send_socket = socket.try_clone().expect("Failed to clone socket");
+        let recv_socket = socket;
+
+        let msg_clone = msg.clone();
+        std::thread::spawn(move || {
+            //delay?
+            udp_send(&send_socket, local_addr, &msg_clone);
+        });
+
+        let received_msg = udp_recive(&recv_socket, 5).expect("Failed to receive message");
+        assert_eq!(msg.data, received_msg.data);
+    }
 }

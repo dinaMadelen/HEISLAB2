@@ -196,22 +196,24 @@ impl Elevator {
             }
 
             Status::Stop => {
-                Status::Stop =>{
-                    self.status = Status::Idle;
-                }
-                _ =>{
-                    // KILL ELEVATOR !
-                    for f in 0..elev_num_floors {
-                        for c in 0..3 {
-                            elevator.call_button_light(f, c, false);
-                        }
+                match self.status{
+                    Status::Stop => {
+                        self.status = Status::Idle;
                     }
+                    _ => {
+                        // KILL ELEVATOR !
+                        for f in 0..(self.num_floors) {
+                            for c in 0..3 {
+                                self.call_button_light(f, c, false);
+                            }
+                        }
 
-                    self.motor_direction(DIRN_STOP);
-                    self.status = Status::Error;
-                    self.queue.clear();
-                    self.print_status();
-                }
+                        self.motor_direction(DIRN_STOP);
+                        self.status = Status::Error;
+                        self.queue.clear();
+                        self.print_status();
+                    }
+                } 
             }
 
             Status::Error => {
@@ -296,13 +298,13 @@ impl Elevator {
 
         let handle = thread::spawn(|| {
             thread::sleep(Duration::from_secs(2)); // Sleep for 2 seconds
-            self.set_status(Status::DoorOpen);
+            
             println!("Thread woke up!");
         });
     
         handle.join().unwrap(); // Wait for the thread to finish
 
-
+        self.set_status(Status::DoorOpen);
         self.go_next_floor();
     }
 }

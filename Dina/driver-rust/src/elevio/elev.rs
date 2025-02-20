@@ -15,7 +15,6 @@ pub struct Elevator {
     pub num_floors: u8,
     pub ID:u8,
     pub current_floor:u8,
-    pub going_up:bool,
     pub queue:Vec<u8>,
     pub status:Status,
     pub direction:i8
@@ -25,7 +24,7 @@ pub struct Elevator {
 pub enum Status{
     Idle,
     Moving,
-    Maintenance,
+    DoorOpen,
     Error
 }
 
@@ -34,7 +33,7 @@ impl Status{
         match self{
             Status::Idle => "Idle",
             Status::Moving => "Moving",
-            Status::Maintenance => "Maintenance",
+            Status::DoorOpen => "DoorOpen",
             Status::Error => "Error"
         }
         
@@ -56,7 +55,6 @@ impl Elevator {
             num_floors,
             ID: 0,
             current_floor: 1,
-            going_up: true,
             queue: Vec::new(),
             status: Status::Idle,
             direction: 0,
@@ -144,25 +142,13 @@ impl Elevator {
     pub fn set_status(&mut self, status: Status){
         match status{
 
-            Status::Maintenance => {
-                self.status = Status::Maintenance;
-                self.queue.clear();
-            }
-
             // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
             Status::Moving => {
                 //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
                 match self.status{
-                    Status::Idle => {
+                
+                    Status::Moving | Status::Idle=> {
                         self.status = Status::Moving;
-                    }
-                    Status::Error =>{
-                        //self.status = Status::Idle;
-                    }
-                    Status::Maintenance => {
-                        self.status = Status::Moving;
-                    }
-                    Status::Moving => {
                         let first_item_in_queue = self.queue.first().unwrap();
                         if *first_item_in_queue < self.current_floor {
                             self.direction = -1;
@@ -171,10 +157,23 @@ impl Elevator {
                             self.direction = 1;
                         }
                     }
+                    Status::DoorOpen=>{
+                        //NEI
+                        self.status = Status::Moving;
+                    }
+                    Status::Error =>{
+                        //NEI
+                        //self.status = Status::Idle;
+                        
+                    }
 
                 }
                 //IMPLEMENT LIGHT FUNCTIONALITY HERE
 
+            }
+
+            Status::DoorOpen=> {
+                self.status = Status::DoorOpen;
             }
 
             Status::Idle => {
@@ -209,7 +208,8 @@ impl Elevator {
                         self.queue.clear();
                         self.print_status();
                     }
-                    Status::Maintenance => {
+
+                    Status::DoorOpen=>{ //DENNE MÅ ENDRES PÅ!
                         self.status = Status::Error;
                         self.queue.clear();
                         self.print_status();
@@ -240,13 +240,13 @@ impl Elevator {
     }
 
 
-    // Moves to next floor, if empty queue, set status to idle.
+    // Moves to next floor, if empty queue, set status to idle. If error, does nothing
     pub fn go_next_floor(&mut self) {
-        if self.status != Status::Error{
+        if !((self.status == Status::Error) | (self.status == Status::DoorOpen)){
             if let Some(next_floor) = self.queue.first() {
                 if *next_floor > self.current_floor {
-                    self.motor_direction(DIRN_UP);
                     self.set_status(Status::Moving);
+                    self.motor_direction(DIRN_UP);
                     //self.current_floor += 1;
                     
                 } else if *next_floor < self.current_floor {
@@ -265,6 +265,8 @@ impl Elevator {
                 self.set_status(Status::Idle);
                 self.motor_direction(DIRN_STOP);
             }
+        } else {
+            self.motor_direction(DIRN_STOP);
         }
     }
 

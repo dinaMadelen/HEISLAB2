@@ -29,9 +29,9 @@ impl elevator{
             self.queue.push(floor);
             self.queue = sort_queue(&self);
         }
-        else[
+        else{
             send_status();
-        ]
+        }
     }
     
 
@@ -68,6 +68,7 @@ impl elevator{
                 self.queue.clear();
                 send_status();
             }
+        }
 
     fn sort_queue(&self) -> Vec<i8> {
         let (mut non_negative, mut negative): (Vec<i8>, Vec<i8>) = self.queue
@@ -102,9 +103,11 @@ impl elevator{
             } else {
                 self.direction = None;
             }
-        } else {
+        }
+        else {
             set_status((&mut self,Idle));
         }
+    }
     }
 
     fn send_status(&self){

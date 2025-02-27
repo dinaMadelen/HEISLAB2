@@ -10,7 +10,7 @@ UdpMsg                Contains message data and overhead
 UdpHeader             Contains overhead
 
 -----------------------------------------------Functions in this file:
-serialize               UdpMsg -> Vec<u8>
+serialize              UdpMsg -> Vec<u8>
 deserialize            Vec<u8> -> UdpMsg
 calc_checksum          Calculate checksum to a u8
 comp_checksum          Compare a recived UdpMsg checksum with the calculated checksum
@@ -18,7 +18,7 @@ udp_send               Ensured message integrity
 udp_recive             returns UdpMsg struct
 udp_broadcast          Not ensured message integrity
 udp_recive_ensure      same as recive but verfiies that the message is correct
-udp_send_ensure        same as send, but requrires ACK
+udp_send_retry        same as send, but requrires ACK
 
 ------------------------------------------------Message IDs
 
@@ -97,14 +97,14 @@ impl Elevator{
 
                 }else{
 
-                    if self.queue.first() < self.current_floor { // Get floor in queue or floor out of bounds if empty
+                    if *self.queue.first().unwrap() < self.current_floor { // Get floor in queue or floor out of bounds if empty
                         self.going_up = false; 
-                        self.current_floor = Some(self.queue.first());
+                        self.current_floor = *self.queue.first().unwrap();
                         self.queue.remove(0);
-                        
+
                     } else{
                         self.going_up = true;
-                        self.current_floor = Some(self.queue.first());
+                        self.current_floor = *self.queue.first().unwrap();
                         self.queue.remove(0);
                     }
                 }

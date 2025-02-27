@@ -24,8 +24,8 @@ fn main() {
         print!("Starting program.\nNo sender found: Setting role to sender\nDropping socket for reciving\n");
         drop(socket); 
         sleep(Duration::from_millis(50));   // Wait for OS to release the port
-        assume_primary(last_received); // Start new instance of listner with the last recived message as startingref
-                                             // and start swap to sending
+        assume_primary(last_received);      // Start new instance of listner with the last recived message as startingref
+                                            // and start swap to sending
     }
 }
 

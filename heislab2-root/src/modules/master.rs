@@ -1,5 +1,5 @@
 
-
+#[warn(non_snake_case)]
 /*Fordeling av ordre
 fordeling av ordre basert på kost funksjon
 

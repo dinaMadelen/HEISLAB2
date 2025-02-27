@@ -1,3 +1,4 @@
+#[warn(non_snake_case)]
 
 use std::time::{Instant, Duration};https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::thread; // imported in elevator.rs, do i need it here?
@@ -26,7 +27,7 @@ fn receive_order(slave: &mut Elevator, new_order: u8) -> bool {
 // Process next order in queue
 fn process_orders(slave: &mut Elevator) {
     while let Some(order) = slave.queue.pop() {
-        move_elevator_to(order);
+        slave.go_next_floor(order);
         notify_completed(slave.id, order);
     }
 }
@@ -59,7 +60,9 @@ fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> b
     }
 
     // Find missing orders: Orders in "old_worldview" but not in "new_worldview"
+
     let mut missing_orders = Vec::new();
+    // Add missing orders to missing order vector
     for order in &slave.queue {
         if !new_worldview.contains(order) {
             missing_orders.push(order.clone());
@@ -69,6 +72,7 @@ fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> b
     // Notify master if there are missing orders
     if !missing_orders.is_empty() {
         notify_master_error(slave.id, missing_orders.clone());
+        println!("Master worldview is missing orders, notifing master")
         return false;
     }
 
@@ -86,13 +90,12 @@ fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> b
     }
 
     println!("Updated worldview");
-
-    true
+    return true;
 }
 
 // Missing order in worldview, notify master that there is a missing order
 fn notify_wordview_error(slave_id: u8, missing_orders: Vec<u8>) {
-    let message = make_udp_msg(slave_id, MessageType::WorldviewDiscrepancy, missing_orders);
+    let message = make_udp_msg(slave_id, MessageType::WorldviewError, missing_orders);
     udp_send(&socket, &master_address(), &message);
 }
 

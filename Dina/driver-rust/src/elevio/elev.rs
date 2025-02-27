@@ -193,6 +193,7 @@ impl Elevator {
 
                 //SIER DEN IKKE BEVEGER SEG LENGER
                 self.direction = 0;
+                
             }
 
             Status::Stop => {
@@ -201,7 +202,7 @@ impl Elevator {
                         self.status = Status::Idle;
                     }
                     _ => {
-                        // KILL ELEVATOR !
+                        // KILL ELEVATOR !?
                         for f in 0..(self.num_floors) {
                             for c in 0..3 {
                                 self.call_button_light(f, c, false);
@@ -209,7 +210,7 @@ impl Elevator {
                         }
 
                         self.motor_direction(DIRN_STOP);
-                        self.status = Status::Error;
+                        self.status = Status::Stop;
                         self.queue.clear();
                         self.print_status();
                     }

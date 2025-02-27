@@ -2,9 +2,15 @@
 use std::time::{Instant, Duration};https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::thread; // imported in elevator.rs, do i need it here?
 
-struct MasterStatus {
-    last_lifesign_master: Instant,
+
+// Create and update a variable of this struct when you recive a worldview 
+// let mut lifesign = Lifesign{lastlife_sign: Instant::now()};  Call this when creating the first timestamp
+// lifesign.lastlife_sign = Instant::now(); call this when updating the timestep
+struct Lifesign {
+    last_lifesign: Instant,
 }
+
+
 
 // Recive order from master
 fn receive_order(slave: &mut Elevator, new_order: u8) -> bool {
@@ -43,39 +49,46 @@ fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
     return false;
 }
 
-// Compare hash of new worldview with old.
-fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) {
 
-
-    if current_worldview_hash==new_worldview_hash{
-        // No changes in worldview
-        print("Recived worldview matches")
+fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> bool {
+    // Compare if worldviews match
+    if slave.queue.iter().cloned().collect::<Vec<Vec<u8>>>() == new_worldview {
+        println!("Received worldview matches");
+        // No changes, no reason to continue comparing
         return true;
     }
 
-    let current_worldview: HashSet<u8> = slave.queue.iter().cloned().collect();
-    let new_worldview_set: HashSet<u8> = new_worldview.iter().cloned().collect();
-
-    // Identify missing orders (orders in current worldview but NOT in new worldview)
-    let missing_orders: Vec<u8> = current_worldview.difference(&new_worldview_set).cloned().collect();
-    
-    // Identify new orders (orders in new worldview but NOT in current worldview)
-    let new_orders: Vec<u8> = new_worldview_set.difference(&current_worldview).cloned().collect();
-    
-    // Notify master about missing orders
-    if !missing_orders.is_empty() {
-        notify_master_discrepancy(slave.id, missing_orders.clone());
+    // Find missing orders: Orders in "old_worldview" but not in "new_worldview"
+    let mut missing_orders = Vec::new();
+    for order in &slave.queue {
+        if !new_worldview.contains(order) {
+            missing_orders.push(order.clone());
+        }
     }
 
-    // Merge worldviews (Union)
-    slave.queue = current_worldview.union(&new_worldview_set).cloned().collect();
-    
-    println!(
-        "Updated worldview for elevator {}. New queue: {:?}",
-        slave.id, slave.queue
-    );
-}
+    // Notify master if there are missing orders
+    if !missing_orders.is_empty() {
+        notify_master_error(slave.id, missing_orders.clone());
+        return false;
+    }
 
+    // Find new orders: Orders in "new_worldview" but not in "old_worldview"
+    let mut new_orders = Vec::new();
+    for order in &new_worldview {
+        if !slave.queue.contains(order) {
+            new_orders.push(order.clone());
+        }
+    }
+
+    // Merge worldviews (Union of current and new)
+    for order in new_orders {
+        slave.queue.insert(order);
+    }
+
+    println!("Updated worldview");
+
+    true
+}
 
 // Missing order in worldview, notify master that there is a missing order
 fn notify_wordview_error(slave_id: u8, missing_orders: Vec<u8>) {

@@ -9,3 +9,11 @@ crossbeam-channel = "0.5"
 serde = { version = "1", features = ["derive"] }
 bincode = "1"
 sha2 = { version = "0.11.0-pre.4" }
+
+[lib]
+name = "heislab2_root"
+path = "src/lib.rs"
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"

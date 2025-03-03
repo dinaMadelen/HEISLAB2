@@ -1,4 +1,4 @@
-#![allow(warnings)]
+// #![allow(warnings)]
 //UDP Functions for sending and reciving data over UDP
 
 /*----------------------Left to IMPLEMENT:
@@ -168,7 +168,7 @@ use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Ad
 use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
 use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
 
-use crate::modules::elevator;
+use crate::elevator;
 //----------------------------------------------Enum
 #[derive(Debug, Serialize, Deserialize, Clone)]
 enum message_type {

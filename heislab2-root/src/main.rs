@@ -1,6 +1,11 @@
-// sett kompilator flagg
-#![allow(dead_code, unused_imports)]
+#![allow(warnings)]
 
-use heislab2_root::modules;
+pub mod udp;
+pub mod elevator;
+pub mod system_init;
 
-fn main() {}
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Hello, world!");
+    
+    Ok(())
+}

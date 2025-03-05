@@ -1,44 +1,70 @@
-// #![allow(dead_code)]
-#![allow(warnings)]
+#![allow(dead_code)]
 
+use std::convert::TryInto;
 use std::fmt;
 use std::io::*;
 use std::net::TcpStream;
 use std::sync::*;
-use std::time::Duration;
 use std::thread;
-use std::convert::TryInto;
+use std::time::Duration;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ElevatorStatus {
+    Idle,
+    Moving,
+    DoorOpen,
+    Error,
+    Stop,
+    MovingUp, //kristoffer
+    MovingDown, //kristoffer
+}
+
+impl ElevatorStatus {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ElevatorStatus::Idle => "Idle",
+            ElevatorStatus::Moving => "Moving",
+            ElevatorStatus::DoorOpen => "DoorOpen",
+            ElevatorStatus::Error => "Error",
+            ElevatorStatus::Stop => "Stop",
+            ElevatorStatus::MovingUp => "MovingUp", //kristoffer
+            ElevatorStatus::MovingDown => "MovingDown", //kristoffer
+        }
+    }
+}
+
+//------------
+// Kristoffer
+//------------
+#[derive(Clone, Debug, PartialEq)]
+pub enum CallType {
+    PendingUp,
+    PendingDown,
+    ServingUp,
+    ServingDown,
+}
+
+impl CallType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            CallType::PendingUp => "PendingUp",
+            CallType::PendingDown => "PendingDown",
+            CallType::ServingUp => "ServingUp",
+            CallType::ServingDown => "ServingDown",
+        }
+    }
+}
+//------------
 
 #[derive(Clone, Debug)]
 pub struct Elevator {
     socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub ID:u8,
-    pub current_floor:u8,
-    pub queue:Vec<u8>,
-    pub status:Status,
-    pub direction:i8
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Status{
-    Idle,
-    Moving,
-    DoorOpen,
-    Error
-}
-
-impl Status{
-    pub fn as_str(&self) -> &str{
-        match self{
-            Status::Idle => "Idle",
-            Status::Moving => "Moving",
-            Status::DoorOpen => "DoorOpen",
-            Status::Error => "Error"
-        }
-        
-    }
+    pub ID: u8,
+    pub current_floor: u8,
+    pub queue: Vec<u8>,
+    pub status: ElevatorStatus,
+    pub direction: i8,
 }
 
 pub const HALL_UP: u8 = 0;
@@ -57,7 +83,7 @@ impl Elevator {
             ID: 0,
             current_floor: 1,
             queue: Vec::new(),
-            status: Status::Idle,
+            status: ElevatorStatus::Idle,
             direction: 0,
         })
     }
@@ -132,138 +158,137 @@ impl Elevator {
         if !self.queue.contains(&floor) {
             self.queue.push(floor);
             self.sort_queue();
-        }
-        else{
+        } else {
             self.print_status();
         }
     }
-    
 
     // Sets current status (Enum Status) for elevator,
-    pub fn set_status(&mut self, status: Status){
-        match status{
-
+    pub fn set_status(&mut self, status: ElevatorStatus) {
+        match status {
             // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
-            Status::Moving => {
+            ElevatorStatus::Moving => {
                 //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
-                match self.status{
-                
-                    Status::Moving | Status::Idle=> {
-                        self.status = Status::Moving;
+                match self.status {
+                    ElevatorStatus::Moving | ElevatorStatus::Idle => {
+                        self.status = ElevatorStatus::Moving;
                         let first_item_in_queue = self.queue.first().unwrap();
                         if *first_item_in_queue < self.current_floor {
                             self.direction = -1;
-                            
-                        } else if *first_item_in_queue > self.current_floor{
+                        } else if *first_item_in_queue > self.current_floor {
                             self.direction = 1;
                         }
                     }
-                    Status::DoorOpen=>{
-                        //NEI
-                        self.status = Status::Moving;
+                    _ => {
+                        //Do Something?
                     }
-                    Status::Error =>{
-                        //NEI
-                        //self.status = Status::Idle;
-                        
-                    }
-
                 }
                 //IMPLEMENT LIGHT FUNCTIONALITY HERE
-
             }
 
-            Status::DoorOpen=> {
-                self.status = Status::DoorOpen;
-            }
+            ElevatorStatus::DoorOpen => match self.status {
+                ElevatorStatus::DoorOpen => {
+                    self.status = ElevatorStatus::Idle;
+                }
+                _ => {
+                    self.status = ElevatorStatus::DoorOpen;
+                }
+            },
 
-            Status::Idle => {
-                self.status = Status::Idle;
+            ElevatorStatus::Idle => {
+                self.status = ElevatorStatus::Idle;
 
                 //SKRUR AV LYSET FOR DER DEN ER
-                if self.direction == -1{
-                    self.call_button_light(self.current_floor, HALL_UP , false);
-                }else{
-                    self.call_button_light(self.current_floor, HALL_DOWN , false);
+                if self.direction == -1 {
+                    self.call_button_light(self.current_floor, HALL_UP, false);
+                } else {
+                    self.call_button_light(self.current_floor, HALL_DOWN, false);
                 };
-                self.call_button_light(self.current_floor, CAB , false);
+                self.call_button_light(self.current_floor, CAB, false);
 
                 //SIER DEN IKKE BEVEGER SEG LENGER
                 self.direction = 0;
             }
 
-            Status::Error => {
-                match self.status{
-                    Status::Error =>{
-                        self.status = Status::Idle;
+            ElevatorStatus::Stop => {
+                match self.status {
+                    ElevatorStatus::Stop => {
+                        self.status = ElevatorStatus::Idle;
                     }
-                    Status::Moving=>{
-                        self.motor_direction(DIRN_STOP);
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
-                        
-                    }
-                    Status::Idle=>{
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
-                    }
+                    _ => {
+                        // KILL ELEVATOR !?
+                        for f in 0..(self.num_floors) {
+                            for c in 0..3 {
+                                self.call_button_light(f, c, false);
+                            }
+                        }
 
-                    Status::DoorOpen=>{ //DENNE MÅ ENDRES PÅ!
-                        self.status = Status::Error;
+                        self.motor_direction(DIRN_STOP);
+                        self.status = ElevatorStatus::Stop;
                         self.queue.clear();
                         self.print_status();
                     }
                 }
-                
+            }
+
+            ElevatorStatus::Error => {
+                match self.status {
+                    ElevatorStatus::Error => {
+                        self.status = ElevatorStatus::Idle;
+                    }
+                    _ => {
+                        // KILL ELEVATOR !
+
+                        self.motor_direction(DIRN_STOP);
+                        self.status = ElevatorStatus::Error;
+                        self.queue.clear();
+                        self.print_status();
+                    }
+                }
             }
         }
     }
+    
     pub fn sort_queue(&self) -> Vec<u8> {
         let mut sorted_queue = self.queue.clone();
-        let (mut non_negative, mut negative): (Vec<u8>, Vec<u8>) = sorted_queue
-            .into_iter()
-            .partition(|&x| x >= 0);
-    
+        let (mut non_negative, mut negative): (Vec<u8>, Vec<u8>) =
+            sorted_queue.into_iter().partition(|&x| x >= 0);
+
         non_negative.sort();
         negative.sort();
-    
+
         // Non-negative numbers first, negative numbers last
         non_negative.extend(negative);
 
         let (mut infront, mut behind): (Vec<u8>, Vec<u8>) = non_negative
-        .into_iter()
-        .partition(|&x| x <= self.current_floor);
+            .into_iter()
+            .partition(|&x| x <= self.current_floor);
 
         infront.extend(behind);
         return infront;
     }
 
-
-    // Moves to next floor, if empty queue, set status to idle. If error, does nothing
+    // Moves to next floor, if empty queue, set status to idle. If !(moving  idle), do nothing
     pub fn go_next_floor(&mut self) {
-        if !((self.status == Status::Error) | (self.status == Status::DoorOpen)){
+        if ((self.status == ElevatorStatus::Moving) | (self.status == ElevatorStatus::Idle)) {
             if let Some(next_floor) = self.queue.first() {
                 if *next_floor > self.current_floor {
-                    self.set_status(Status::Moving);
+                    self.set_status(ElevatorStatus::Moving);
                     self.motor_direction(DIRN_UP);
                     //self.current_floor += 1;
-                    
                 } else if *next_floor < self.current_floor {
-                    self.set_status(Status::Moving);
+                    self.set_status(ElevatorStatus::Moving);
                     self.motor_direction(DIRN_DOWN);
                     //self.current_floor -= 1;
-                    
-                } else if *next_floor == self.current_floor{
-                    self.set_status(Status::Idle);
+                } else if *next_floor == self.current_floor {
+                    self.set_status(ElevatorStatus::Idle);
                     self.motor_direction(DIRN_STOP);
                     self.queue.remove(0);
-                    
+
                     self.door_open_sequence();
                 }
             } else {
-                self.set_status(Status::Idle);
+                self.set_status(ElevatorStatus::Idle);
                 self.motor_direction(DIRN_STOP);
             }
         } else {
@@ -271,24 +296,26 @@ impl Elevator {
         }
     }
 
-    fn print_status(&self){
+    fn print_status(&self) {
         println!("status:{}", self.status.as_str());
     }
-    
+
     //MIDLERTIDIG FUNKSJON
     pub fn door_open_sequence(&mut self) {
-        //MIDLERTIDIG FUNKSJON
+        self.set_status(ElevatorStatus::DoorOpen);
+
         let handle = thread::spawn(|| {
             thread::sleep(Duration::from_secs(2)); // Sleep for 2 seconds
+
             println!("Thread woke up!");
         });
-    
+
         handle.join().unwrap(); // Wait for the thread to finish
+
+        self.set_status(ElevatorStatus::DoorOpen);
         self.go_next_floor();
     }
-    
 }
-
 
 impl fmt::Display for Elevator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

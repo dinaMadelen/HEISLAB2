@@ -165,10 +165,10 @@ use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html    
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode; // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
-use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
-use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
+use std::thread::sleep;
+use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html // https://doc.rust-lang.org/std/thread/fn.sleep.html
 
-use crate::elevator;
+use crate::elevator_2;
 //----------------------------------------------Enum
 #[derive(Debug, Serialize, Deserialize, Clone)]
 enum message_type {
@@ -206,7 +206,11 @@ struct UdpMsg {
 
 //----------------------------------------------Functions
 
-fn make_Udp_msg(elevator: elevator::Elevator, message_type: message_type, message: Vec<u8>) -> UdpMsg {
+fn make_Udp_msg(
+    elevator: elevator_2::Elevator,
+    message_type: message_type,
+    message: Vec<u8>,
+) -> UdpMsg {
     let hash = calc_checksum(&message);
     let mut overhead = UdpHeader {
         sender_id: elevator.ID,

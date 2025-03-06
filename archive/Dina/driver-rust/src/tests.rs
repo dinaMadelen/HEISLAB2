@@ -1,92 +1,72 @@
+use std::thread::*;
+use std::time::*;
+use elevio::elev;
+use crossbeam_channel as cbc;
+
+use driver_rust::elevio;
+use driver_rust::elevio::elev as e;
+use elev::Status;
+
 #[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
 mod tests {
     use super::*;
-    use std::net::UdpSocket;
+    let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
+    let elev_num_floors = 4;
+
 
     #[test]
+    //Function for testing the set status mod
     fn test_set_status() {
-        let elev_num_floors = 4;
-        let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
 
+        //IDLE TEST
         elevator.set_status(Status::Idle);
         assert_eq!(elevator.status, Status::Idle);
+        println!("Test: IDLE OK");
+
+        //MOVING TEST
+        elevator.set_status(Status::Moving);
+        assert_eq!(elevator.status, Status::Moving);
+        
+        elevator.set_status(Status::Idle);
+        assert_eq!(elevator.status, Status::Idle);
+        println!("Test: MOVING OK");
+
+
+        //DOOROPEN TEST
+        elevator.set_status(Status::DoorOpen);
+        assert_eq!(elevator.status, Status::DoorOpen);
+
+        elevator.set_status(Status::DoorOpen);
+        assert_eq!(elevator.status, Status::Idle);
+
+        println!("Test: DOOROPEN OK");
+        
+
+        //STOP TEST
+        elevator.set_status(Status::Stop);
+        assert_eq!(elevator.status, Status::Stop);
+
+        elevator.set_status(Status::Idle);
+        assert_eq!(elevator.status, Status::Stop);
 
         elevator.set_status(Status::Moving);
+        assert_eq!(elevator.status, Status::Stop);
+
+        elevator.set_status(Status::Stop);
+        assert_eq!(elevator.status, Status::Idle);
+
+        println!("Test: STOP OK");
 
     }
 
-
     #[test]
-    fn test_serialize_deserialize() {
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                sequence_number: 0,
-                checksum: vec![0x12, 0x34],
-            },
-            data: vec![1, 2, 3, 4],
-        };
+    fn test_go_to_floor() {
+        elevator.add_to_queue(2);
+        elevator.go_next_floor();
 
-        let serialized = serialize(&msg);
-        let deserialized = deserialize(&serialized).expect("Deserialization failed");
-
-        assert_eq!(msg.header.sender_id, deserialized.header.sender_id);
-        assert_eq!(msg.header.sequence_number, deserialized.header.sequence_number);
-        assert_eq!(msg.data, deserialized.data);
-    }
-
-    #[test]
-    fn test_calc_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
-        assert!(!checksum.is_empty());
-    }
-
-    #[test]
-    fn test_comp_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                sequence_number: 0,
-                checksum,
-            },
-            data,
-        };
-        assert!(comp_checksum(&msg));
-    }
-
-    #[test]
-    fn test_udp_send_recv() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
-            
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                sequence_number: 0,
-                checksum: vec![0x12, 0x34],
-            },
-            data: vec![1, 2, 3, 4],
-        };
-            
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-            
-        let msg_clone = msg.clone();
-        std::thread::spawn(move || {
-            //delay?
-            udp_send(&send_socket, local_addr, &msg_clone);
-        });
-            
-        let received_msg = udp_recive(&recv_socket, 5).expect("Failed to receive message");
-        assert_eq!(msg.data, received_msg.data);
+        
+        elevator.set_status()
+        
     }
 }
-
-
-
+  

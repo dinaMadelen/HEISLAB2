@@ -159,6 +159,11 @@ impl Elevator {
                             self.direction = 1;
                         }
                     }
+
+                    Status::Stop =>{
+                        self.status = Status::Stop;
+                        
+                    }
                     _ =>{
                         //Do Something? 
                     }
@@ -172,7 +177,7 @@ impl Elevator {
                 match self.status{
                     Status::DoorOpen => {
                         self.status = Status::Idle;
-                    }  
+                    }
                     _ => {
                         self.status = Status::DoorOpen;
                     }
@@ -181,21 +186,31 @@ impl Elevator {
             }
 
             Status::Idle => {
-                self.status = Status::Idle;
+                match self.status{
+                    Status::Stop =>{
+                        self.status = Status::Stop;
+                        //Do Something? 
+                    }
+                    _ => {
+                        self.status = Status::Idle;
 
-                //SKRUR AV LYSET FOR DER DEN ER
-                if self.direction == -1{
-                    self.call_button_light(self.current_floor, HALL_UP , false);
-                }else{
-                    self.call_button_light(self.current_floor, HALL_DOWN , false);
-                };
-                self.call_button_light(self.current_floor, CAB , false);
+                        //SKRUR AV LYSET FOR DER DEN ER
+                        if self.direction == -1{
+                            self.call_button_light(self.current_floor, HALL_UP , false);
+                        }else{
+                            self.call_button_light(self.current_floor, HALL_DOWN , false);
+                        };
+                        self.call_button_light(self.current_floor, CAB , false);
 
-                //SIER DEN IKKE BEVEGER SEG LENGER
-                self.direction = 0;
+                        //SIER DEN IKKE BEVEGER SEG LENGER
+                        self.direction = 0;
+                    }
+                }
+                
                 
             }
 
+            //From stop you can only swap out by calling stop again
             Status::Stop => {
                 match self.status{
                     Status::Stop => {
@@ -230,6 +245,10 @@ impl Elevator {
                         self.status = Status::Error;
                         self.queue.clear();
                         self.print_status();
+                        /*
+                        let msg: Vec<u8> = "ded"
+                        make_Udp_msg(self, Error_offline, msg);
+                        */
                     }
                 }
                 
@@ -303,7 +322,7 @@ impl Elevator {
             println!("Thread woke up!");
         });
     
-        handle.join().unwrap(); // Wait for the thread to finish
+        //handle.join().unwrap(); // Wait for the thread to finish
 
         self.set_status(Status::DoorOpen);
         self.go_next_floor();

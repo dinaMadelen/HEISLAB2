@@ -178,13 +178,12 @@ impl Elevator {
     /// Sets status for elevator
     pub fn set_status(&mut self, status: ElevatorStatus) {
         match status {
-            // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
-            ElevatorStatus::Moving => self.handle_moving_status(),
+            ElevatorStatus::Moving   => self.handle_moving_status(),
             ElevatorStatus::DoorOpen => self.handle_door_open_status(),
-            ElevatorStatus::Idle => self.handle_idle_status(),
-            ElevatorStatus::Stop => self.handle_stop_status(),
-            ElevatorStatus::Error => self.handle_error_status(),
-            _ => (), // denne må fikses
+            ElevatorStatus::Idle     => self.handle_idle_status(),
+            ElevatorStatus::Stop     => self.handle_stop_status(),
+            ElevatorStatus::Error    => self.handle_error_status(),
+            _                        => (), // denne må fikses
         }
     }
 

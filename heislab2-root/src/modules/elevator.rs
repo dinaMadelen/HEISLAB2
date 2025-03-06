@@ -1,5 +1,4 @@
-// #![allow(dead_code)]
-#![allow(warnings)]
+#![allow(dead_code)]
 
 use std::fmt;
 use std::io::*;
@@ -14,7 +13,7 @@ use std::convert::TryInto;
 pub struct Elevator {
     socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub ID:u8,
+    pub ID: u8,
     pub current_floor:u8,
     pub queue:Vec<u8>,
     pub status:Status,
@@ -26,7 +25,8 @@ pub enum Status{
     Idle,
     Moving,
     DoorOpen,
-    Error
+    Error,
+    Stop
 }
 
 impl Status{
@@ -35,7 +35,8 @@ impl Status{
             Status::Idle => "Idle",
             Status::Moving => "Moving",
             Status::DoorOpen => "DoorOpen",
-            Status::Error => "Error"
+            Status::Error => "Error",
+            Status::Stop => "Stop"
         }
         
     }
@@ -148,7 +149,7 @@ impl Elevator {
                 //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
                 match self.status{
                 
-                    Status::Moving | Status::Idle=> {
+                    Status::Moving | Status::Idle => {
                         self.status = Status::Moving;
                         let first_item_in_queue = self.queue.first().unwrap();
                         if *first_item_in_queue < self.current_floor {
@@ -158,14 +159,13 @@ impl Elevator {
                             self.direction = 1;
                         }
                     }
-                    Status::DoorOpen=>{
-                        //NEI
-                        self.status = Status::Moving;
-                    }
-                    Status::Error =>{
-                        //NEI
-                        //self.status = Status::Idle;
+
+                    Status::Stop =>{
+                        self.status = Status::Stop;
                         
+                    }
+                    _ =>{
+                        //Do Something? 
                     }
 
                 }
@@ -174,22 +174,62 @@ impl Elevator {
             }
 
             Status::DoorOpen=> {
-                self.status = Status::DoorOpen;
+                match self.status{
+                    Status::DoorOpen => {
+                        self.status = Status::Idle;
+                    }
+                    _ => {
+                        self.status = Status::DoorOpen;
+                    }
+                }
+                
             }
 
             Status::Idle => {
-                self.status = Status::Idle;
+                match self.status{
+                    Status::Stop =>{
+                        self.status = Status::Stop;
+                        //Do Something? 
+                    }
+                    _ => {
+                        self.status = Status::Idle;
 
-                //SKRUR AV LYSET FOR DER DEN ER
-                if self.direction == -1{
-                    self.call_button_light(self.current_floor, HALL_UP , false);
-                }else{
-                    self.call_button_light(self.current_floor, HALL_DOWN , false);
-                };
-                self.call_button_light(self.current_floor, CAB , false);
+                        //SKRUR AV LYSET FOR DER DEN ER
+                        if self.direction == -1{
+                            self.call_button_light(self.current_floor, HALL_UP , false);
+                        }else{
+                            self.call_button_light(self.current_floor, HALL_DOWN , false);
+                        };
+                        self.call_button_light(self.current_floor, CAB , false);
 
-                //SIER DEN IKKE BEVEGER SEG LENGER
-                self.direction = 0;
+                        //SIER DEN IKKE BEVEGER SEG LENGER
+                        self.direction = 0;
+                    }
+                }
+                
+                
+            }
+
+            //From stop you can only swap out by calling stop again
+            Status::Stop => {
+                match self.status{
+                    Status::Stop => {
+                        self.status = Status::Idle;
+                    }
+                    _ => {
+                        // KILL ELEVATOR !?
+                        for f in 0..(self.num_floors) {
+                            for c in 0..3 {
+                                self.call_button_light(f, c, false);
+                            }
+                        }
+
+                        self.motor_direction(DIRN_STOP);
+                        self.status = Status::Stop;
+                        self.queue.clear();
+                        self.print_status();
+                    }
+                } 
             }
 
             Status::Error => {
@@ -197,23 +237,18 @@ impl Elevator {
                     Status::Error =>{
                         self.status = Status::Idle;
                     }
-                    Status::Moving=>{
+                    _ =>{
+
+                        // KILL ELEVATOR !
+
                         self.motor_direction(DIRN_STOP);
                         self.status = Status::Error;
                         self.queue.clear();
                         self.print_status();
-                        
-                    }
-                    Status::Idle=>{
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
-                    }
-
-                    Status::DoorOpen=>{ //DENNE MÅ ENDRES PÅ!
-                        self.status = Status::Error;
-                        self.queue.clear();
-                        self.print_status();
+                        /*
+                        let msg: Vec<u8> = "ded"
+                        make_Udp_msg(self, Error_offline, msg);
+                        */
                     }
                 }
                 
@@ -241,9 +276,9 @@ impl Elevator {
     }
 
 
-    // Moves to next floor, if empty queue, set status to idle. If error, does nothing
+    // Moves to next floor, if empty queue, set status to idle. If !(moving  idle), do nothing
     pub fn go_next_floor(&mut self) {
-        if !((self.status == Status::Error) | (self.status == Status::DoorOpen)){
+        if ((self.status == Status::Moving) | (self.status == Status::Idle)){
             if let Some(next_floor) = self.queue.first() {
                 if *next_floor > self.current_floor {
                     self.set_status(Status::Moving);
@@ -261,6 +296,8 @@ impl Elevator {
                     self.queue.remove(0);
                     
                     self.door_open_sequence();
+
+            
                 }
             } else {
                 self.set_status(Status::Idle);
@@ -277,17 +314,21 @@ impl Elevator {
     
     //MIDLERTIDIG FUNKSJON
     pub fn door_open_sequence(&mut self) {
-        //MIDLERTIDIG FUNKSJON
+        self.set_status(Status::DoorOpen);
+
         let handle = thread::spawn(|| {
             thread::sleep(Duration::from_secs(2)); // Sleep for 2 seconds
+            
             println!("Thread woke up!");
         });
     
-        handle.join().unwrap(); // Wait for the thread to finish
+        //handle.join().unwrap(); // Wait for the thread to finish
+
+        self.set_status(Status::DoorOpen);
         self.go_next_floor();
     }
-    
 }
+
 
 
 impl fmt::Display for Elevator {
@@ -296,3 +337,159 @@ impl fmt::Display for Elevator {
         write!(f, "Elevator@{}({})", addr, self.num_floors)
     }
 }
+
+use std::thread::*;
+use std::time::*;
+use elevio::elev;
+use crossbeam_channel as cbc;
+
+use driver_rust::elevio;
+use driver_rust::elevio::elev as e;
+use elev::Status;
+
+#[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
+mod tests {
+    use super::*;
+    
+    let elev_num_floors = 4;
+    let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
+    
+    println!("Elevator started:\n{:#?}", elevator);
+
+    let poll_period = Duration::from_millis(25);
+
+    let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+    {
+        let elevator = elevator.clone();
+        spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
+    }
+
+    let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
+    {
+        let elevator = elevator.clone();
+        spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
+    }
+
+    let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
+    {
+        let elevator = elevator.clone();
+        spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
+    }
+
+    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
+    {
+        let elevator = elevator.clone();
+        spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
+    }
+
+    let mut dirn = e::DIRN_DOWN;
+
+    #[test]
+    //Function for testing the set status mod
+    fn test_set_status() {
+
+        //IDLE TEST
+        elevator.set_status(Status::Idle);
+        assert_eq!(elevator.status, Status::Idle);
+        println!("Test: IDLE OK");
+
+        //MOVING TEST
+        elevator.set_status(Status::Moving);
+        assert_eq!(elevator.status, Status::Moving);
+        
+        elevator.set_status(Status::Idle);
+        assert_eq!(elevator.status, Status::Idle);
+        println!("Test: MOVING OK");
+
+
+        //DOOROPEN TEST
+        elevator.set_status(Status::DoorOpen);
+        assert_eq!(elevator.status, Status::DoorOpen);
+
+        elevator.set_status(Status::DoorOpen);
+        assert_eq!(elevator.status, Status::Idle);
+
+        println!("Test: DOOROPEN OK");
+        
+
+        //STOP TEST
+        elevator.set_status(Status::Stop);
+        assert_eq!(elevator.status, Status::Stop);
+
+        elevator.set_status(Status::Idle);
+        assert_eq!(elevator.status, Status::Stop);
+
+        elevator.set_status(Status::Moving);
+        assert_eq!(elevator.status, Status::Stop);
+
+        elevator.set_status(Status::Stop);
+        assert_eq!(elevator.status, Status::Idle);
+
+        println!("Test: STOP OK");
+
+    }
+
+    #[test]
+    fn test_go_to_floor() {
+        elevator.add_to_queue(3);
+        elevator.go_next_floor();
+
+        let seconds = Duration::from_secs(5);
+        let start = SystemTime::now();
+                    
+        
+
+        loop {
+            cbc::select! {
+                //tror denne kan bli        
+                std::thread::sleep(Duration::new(5, 0));        
+                recv(floor_sensor_rx) -> a => {
+                    let floor = a.unwrap();
+                    elevator.current_floor = floor;
+                    println!("Floor: {:#?}", floor);
+                    elevator.go_next_floor();  
+                },
+
+                match start.elapsed() {
+                    Ok(elapsed) if elapsed > seconds => {
+                        break;
+                    }
+                    _ => {},
+                }
+            }            
+        }
+        assert_eq!(elevator.current_floor, 3);
+
+        elevator.add_to_queue(1);
+        elevator.go_next_floor();
+
+        let seconds = Duration::from_secs(5);
+        let start = SystemTime::now();
+
+        loop {
+            cbc::select! {
+                //tror denne kan bli        
+                std::thread::sleep(Duration::new(5, 0));        
+                recv(floor_sensor_rx) -> a => {
+                    let floor = a.unwrap();
+                    elevator.current_floor = floor;
+                    println!("Floor: {:#?}", floor);
+                    elevator.go_next_floor();  
+                },
+
+                match start.elapsed() {
+                    Ok(elapsed) if elapsed > seconds => {
+                        break;
+                    }
+                    _ => {},
+                }
+
+            }
+            
+        }
+        
+        assert_eq!(elevator.current_floor, 1);
+        println!("Test: GO TO FLOOR OK");
+    }
+}
+  

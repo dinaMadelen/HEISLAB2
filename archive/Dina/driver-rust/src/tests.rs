@@ -61,12 +61,65 @@ mod tests {
 
     #[test]
     fn test_go_to_floor() {
-        elevator.add_to_queue(2);
+        elevator.add_to_queue(3);
         elevator.go_next_floor();
 
+        let seconds = Duration::from_secs(5);
+        let start = SystemTime::now();
+                    
         
-        elevator.set_status()
+
+        loop {
+            cbc::select! {
+                //tror denne kan bli        
+                std::thread::sleep(Duration::new(5, 0));        
+                recv(floor_sensor_rx) -> a => {
+                    let floor = a.unwrap();
+                    elevator.current_floor = floor;
+                    println!("Floor: {:#?}", floor);
+                    elevator.go_next_floor();  
+                },
+
+                match start.elapsed() {
+                    Ok(elapsed) if elapsed > seconds => {
+                        break;
+                    }
+                    _ => {},
+                }
+            }            
+        }
+        assert_eq!(elevator.current_floor, 3);
+
+        elevator.add_to_queue(1);
+        elevator.go_next_floor();
+
+        let seconds = Duration::from_secs(5);
+        let start = SystemTime::now();
+
+        loop {
+            cbc::select! {
+                //tror denne kan bli        
+                std::thread::sleep(Duration::new(5, 0));        
+                recv(floor_sensor_rx) -> a => {
+                    let floor = a.unwrap();
+                    elevator.current_floor = floor;
+                    println!("Floor: {:#?}", floor);
+                    elevator.go_next_floor();  
+                },
+
+                match start.elapsed() {
+                    Ok(elapsed) if elapsed > seconds => {
+                        break;
+                    }
+                    _ => {},
+                }
+
+            }
+            
+        }
         
+        assert_eq!(elevator.current_floor, 1);
+        println!("Test: GO TO FLOOR OK");
     }
 }
   

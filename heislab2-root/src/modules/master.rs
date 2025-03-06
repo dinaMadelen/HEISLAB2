@@ -1,4 +1,3 @@
-
 #[warn(non_snake_case)]
 /*Fordeling av ordre
 fordeling av ordre basert på kost funksjon  XXXXXXXXXX
@@ -12,9 +11,6 @@ Gi fra seg master rolle XXXXXXXXXXXXXXXXXXXXXXXX
 usikker på om denne trengs da slaver skal ta over rollen automatisk hvis master går offline
 men kan være fin dersom det er noe som gjør at master vil restarte og vil framskynde prosessen
 
-Styring av lys
-kontroll å slå på lys når det er bekreftet at alle har mottatt(må bære bekreftet for å sikre integritet)
-
 Example for worldview struct
 worldview is a vector of vectors that contain the orders of every active cab
 Master_view={
@@ -26,15 +22,19 @@ Master_view={
 
 //-----------------------IMPORTS------------------------------------------------------------
 
+use crate::modules::udp::{udp_send_ensure,udp_broadcast,udp_receive,make_Udp_msg};
+use crate::modules::elevator::{Elevator,Status};
+use std::net::UdpSocket;
+
 //-----------------------STRUCTS------------------------------------------------------------
 
-struct Worldview{
+pub struct Worldview{
 
-    orders: Vec<Elevator>
-    lights: Vec<u8>
+    orders: Vec<Elevator>,
+    lights: Vec<u8>,
 }
 
-enum role{
+pub enum Role{
     Master,
     Slave,
     Error,
@@ -42,34 +42,44 @@ enum role{
 
 //-----------------------FUNCTIONS---------------------------------------------------------
 
-//Broadcast order and wait for responce from reciver, if not recived resend, if this fail. find return false
-//possibly not needed as each elevator will add any new order in the worldview to the queue.
-// could just ack the broadcast form the slave that gets assigned the order
+///Broadcast order and wait for responce from reciver, if not recived resend, if this fail. find return false
+///The diffrence from just adding from worldview broadcast and from give_order() is that unlike regular udp_broadcast() give_order() requires an acknoledgement from the recivers
+
 fn give_order(master: &Elevator, slave_id: u8, new_order: u8) -> bool {
 
     let mut retries = 3;
     let message = make_udp_msg(master.id, MessageType::NewOrder, new_order);
 
-    while retries > 0 {
-        if udp_send_ensure(&socket, &slave_address(slave_id), &message) {
+    udp_broadcast(&socket, &slave_address(slave_id), &message);
+
+    let mut retry: u8 = 4;
+    let mut accepted: Vec<u8> = Vec::new();
+
+    while retry > 0{
+        udp_receive(); 
+    // add id of ack sender to accepted
+        if accepted.len() == elevators.len() {
             return true;
+0       }else{
+            println!("Missing acknowledgements from active elevators");
         }
-        retries -= 1;
+        retry -= 1;
     }
+    return false;
 
     println!("Failed to deliver order to slave {}", slave_id);
     return false;
 }
 
 
-// Send order to remove one or more orders from a specific elevator
+/// Send order to remove one or more orders from a specific elevator
 fn remove_from_queue(slave_id: u8, removed_orders: Vec<u8>) -> bool {
 
     let message = make_udp_msg(master.id, MessageType::RemoveOrder, removed_orders);
     return udp_send_ensure(&socket, &slave_address(slave_id), &message);
 }
 
-// Compare message and send out union of the recived and current worldview
+/// Compare message and send out the corrected worldview (union of the recived and current worldview)
 fn correct_master_worldview(master: &Elevator) -> bool {
 
     let missing_orders = todo!("Vector of vectors containing the queues from the slave with orders that dont exist in worldview");
@@ -82,10 +92,10 @@ fn correct_master_worldview(master: &Elevator) -> bool {
     return udp_broadcast(&socket, &message);
 }
 
-// Broadcast worldview
+/// Broadcast worldview
 fn master_worldview(master:Elevator) -> bool{
     
-    make_Udp_msg(sender_id: master,message_type: Wordview, message:Vec<u8>) 
+    make_Udp_msg(sender_id: master,message_type: Wordview, message:Vec<u8>); 
     
     return udp_broadcast(&socket,&message);
 }
@@ -102,7 +112,7 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 }
 */
 
-// Handle slave failure, compensate for a slave going offline
+/// Handle slave failure, compensate for a slave going offline
 fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
@@ -118,20 +128,19 @@ fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
     }
 }
 
-// Reassign order
+/// Reassign order
 fn reassign_orders(orders: Vec<u8>) {
+
     for order in orders {
         for best_alternative in best_to_worst_elevator(order){
-            msg= make_Udp_msg(sender_id:my_id,message_type: message_type, message:Vec<u8>)
+            msg= make_Udp_msg(sender_id:my_id, message_type: message_type, message:Vec<u8>)
             // fix inputs to udp_send_ensure function, dont remember exactly how it was, check udp.rs.
             udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg)
-
         }
-
     }
 }
 
-// Cost function that returns order to the best fitting elevators from best to worst alternative.
+/// Cost function that returns order to the best fitting elevators from best to worst alternative.
 fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
 
     // Vec<Elevator.ID, Score> Higher score = better alternative
@@ -176,16 +185,14 @@ fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
 }
 
 
-
-
-// If for some reason more than master is active, forexample race during election or one didnt recive the first message from new master.
-// master with lowest id keeps the role, the rest become slaves.
+/// If for some reason more than master is active, forexample race during election or one didnt recive the first message from new master.
+/// master with lowest id keeps the role, the rest become slaves.
 fn handle_multiple_masters(me: &Elevator, sender: &Elevator, worldview: &Worldview) -> bool {
     
     if me.role == role::Master {
         return false;
 
-        //Give away master role, simple solution, Kill program and reboot
+        // Give away master role, simple solution, Kill program and reboot
      }else{
         if sender.ID < me.ID
         relinquish_master
@@ -317,5 +324,3 @@ mod tests {
         assert!(result || !result);
     }
 }
-
-

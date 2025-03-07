@@ -1,3 +1,4 @@
+
 #[warn(non_snake_case)]
 /*
 
@@ -18,27 +19,29 @@ Melde ifra om worldview error
 
 //-----------------------IMPORTS------------------------------------------------------------
 
+use crate::modules::elevator::Elevator; //Import for elevator struct
+use crate::modules::udp::{udp_send_ensure, udp_broadcast, make_Udp_msg};
+use std::thread::sleep;
 use std::time::{Instant, Duration};https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::thread; // imported in elevator.rs, do i need it here?
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
 
-use crate::elevator::Elevator;//Import for elevator struct
 
 
 
 //-----------------------STRUCTS------------------------------------------------------------
 
-// Create and update a variable of this struct when you recive a worldview 
-// let mut lifesign = Lifesign{lastlife_sign: Instant::now()};  Call this when creating the first timestamp
-// lifesign.lastlife_sign = Instant::now(); call this when updating the timestep
+/// Create and update a variable of this struct when you recive a worldview 
+/// let mut lifesign = Lifesign{lastlife_sign: Instant::now()};  Call this when creating the first timestamp
+/// lifesign.lastlife_sign = Instant::now(); call this when updating the timestep
 struct Lifesign {
     last_lifesign: Instant,
 }
 
 
 
-// Recive order from master
+/// Recive order from master
 fn receive_order(slave: &mut Elevator, new_order: u8) -> bool {
     if !slave.queue.contains(&new_order) {
         slave.queue.push(new_order);
@@ -101,7 +104,7 @@ fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> b
 
     let mut missing_orders = Vec::new();
     // Add missing orders to missing order vector
-    for order in &slave.queue {
+    for order in &slave.queue{
         if !new_worldview.contains(order) {
             missing_orders.push(order.clone());
         }
@@ -261,3 +264,4 @@ mod tests {
         // Not sure how to test this as it reboots the program, maybe drop it and just test while running the program?
     }
 }
+

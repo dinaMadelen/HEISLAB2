@@ -7,11 +7,13 @@ use driver_rust::elevio;
 use driver_rust::elevio::elev as e;
 use elev::Status;
 
+#![allow(dead_code)]
+
 #[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
 mod tests {
     use super::*;
-    let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
     let elev_num_floors = 4;
+    let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
 
 
     #[test]

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![warn(unused_variables)]
 
 use std::fmt;
 use std::io::*;
@@ -338,54 +339,64 @@ impl fmt::Display for Elevator {
     }
 }
 
-use std::thread::*;
-use std::time::*;
-use elevio::elev;
-use crossbeam_channel as cbc;
 
-use driver_rust::elevio;
-use driver_rust::elevio::elev as e;
-use elev::Status;
+
 
 #[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
 mod tests {
-    use super::*;
+    //use super::poll;
+
+    use std::thread::*;
+    use std::time::*;
+    use crossbeam_channel as cbc;
+    use crate::modules::poll;
+    use crate::modules::elevator::Elevator;
+    use crate::modules::elevator::Status;
+
+    pub const HALL_UP: u8 = 0;
+    pub const HALL_DOWN: u8 = 1;
+    pub const CAB: u8 = 2;
+    
+    pub const DIRN_DOWN: u8 = u8::MAX;
+    pub const DIRN_STOP: u8 = 0;
+    pub const DIRN_UP: u8 = 1;
+
 
     #[test]
     //Function for testing the set status mod
     fn test_set_status() {
         let elev_num_floors = 4;
-        let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
+        let mut elevator = Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
         
         println!("Elevator started:\n{:#?}", elevator);
         
         let poll_period = Duration::from_millis(25);
 
-        let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+        let (call_button_tx, call_button_rx) = cbc::unbounded::<poll::CallButton>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
+            spawn(move || poll::call_buttons(elevator, call_button_tx, poll_period));
         }
 
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
+            spawn(move || poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
         }
 
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
+            spawn(move || poll::stop_button(elevator, stop_button_tx, poll_period));
         }
 
         let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
+            spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
         }
 
-        let mut dirn = e::DIRN_DOWN;
+        let mut dirn = DIRN_DOWN;
 
 
         //IDLE TEST
@@ -431,65 +442,65 @@ mod tests {
 
     #[test]
     fn test_go_to_floor() {
-        elevator.add_to_queue(3);
-        elevator.go_next_floor();
+        
         let elev_num_floors = 4;
-        let mut elevator = e::Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
+        let mut elevator = Elevator::init("localhost:15657", elev_num_floors).expect("Failed to initialize elevator");
         
         println!("Elevator started:\n{:#?}", elevator);
         
         let poll_period = Duration::from_millis(25);
 
-        let (call_button_tx, call_button_rx) = cbc::unbounded::<elevio::poll::CallButton>();
+        let (call_button_tx, call_button_rx) = cbc::unbounded::<poll::CallButton>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::call_buttons(elevator, call_button_tx, poll_period));
+            spawn(move || poll::call_buttons(elevator, call_button_tx, poll_period));
         }
 
         let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
+            spawn(move || poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
         }
 
         let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::stop_button(elevator, stop_button_tx, poll_period));
+            spawn(move || poll::stop_button(elevator, stop_button_tx, poll_period));
         }
 
         let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
         {
             let elevator = elevator.clone();
-            spawn(move || elevio::poll::obstruction(elevator, obstruction_tx, poll_period));
+            spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
         }
 
-        let mut dirn = e::DIRN_DOWN;
+        let mut dirn = DIRN_DOWN;
 
 
         let seconds = Duration::from_secs(5);
         let start = SystemTime::now();
-                    
+        elevator.add_to_queue(3);
+        elevator.go_next_floor();            
         
 
         loop {
+            std::thread::sleep(Duration::new(5, 0));  
             cbc::select! {
-                //tror denne kan bli        
-                std::thread::sleep(Duration::new(5, 0));        
+                //tror denne kan bli          
                 recv(floor_sensor_rx) -> a => {
                     let floor = a.unwrap();
                     elevator.current_floor = floor;
                     println!("Floor: {:#?}", floor);
                     elevator.go_next_floor();  
-                },
-
-                match start.elapsed() {
-                    Ok(elapsed) if elapsed > seconds => {
-                        break;
-                    }
-                    _ => {},
                 }
-            }            
+            }   
+
+            match start.elapsed() {
+                Ok(elapsed) if elapsed > seconds => {
+                    break;
+                }
+                _ => {},
+            }      
         }
         assert_eq!(elevator.current_floor, 3);
 
@@ -500,23 +511,23 @@ mod tests {
         let start = SystemTime::now();
 
         loop {
+            std::thread::sleep(Duration::new(5, 0)); 
             cbc::select! {
                 //tror denne kan bli        
-                std::thread::sleep(Duration::new(5, 0));        
+                       
                 recv(floor_sensor_rx) -> a => {
                     let floor = a.unwrap();
                     elevator.current_floor = floor;
                     println!("Floor: {:#?}", floor);
                     elevator.go_next_floor();  
-                },
-
-                match start.elapsed() {
-                    Ok(elapsed) if elapsed > seconds => {
-                        break;
-                    }
-                    _ => {},
                 }
 
+            }
+            match start.elapsed() {
+                Ok(elapsed) if elapsed > seconds => {
+                    break;
+                }
+                _ => {},
             }
             
         }

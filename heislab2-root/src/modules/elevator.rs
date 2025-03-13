@@ -8,6 +8,7 @@ use std::sync::*;
 use std::time::Duration;
 use std::thread;
 use std::convert::TryInto;
+use modules::alias_lib;
 
 
 #[derive(Clone, Debug)]
@@ -43,13 +44,6 @@ impl Status{
     }
 }
 
-pub const HALL_UP: u8 = 0;
-pub const HALL_DOWN: u8 = 1;
-pub const CAB: u8 = 2;
-
-pub const DIRN_DOWN: u8 = u8::MAX;
-pub const DIRN_STOP: u8 = 0;
-pub const DIRN_UP: u8 = 1;
 
 impl Elevator {
     pub fn init(addr: &str, num_floors: u8) -> Result<Elevator> {

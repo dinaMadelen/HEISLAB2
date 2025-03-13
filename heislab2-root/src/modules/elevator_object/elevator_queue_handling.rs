@@ -1,3 +1,10 @@
+use elevator_object::elevator_init;
+use elevator_object::elevator_movement;
+use elevator_object::elevator_status_functions;
+use elevator_object::elevator_queue_handling;
+
+use elevator_object::poll;
+
 impl Elevator{
     pub fn add_to_queue(&mut self, order:Order) {
         if !self.queue.contains(&order) {

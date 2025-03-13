@@ -8,8 +8,14 @@ use std::sync::*;
 use std::time::Duration;
 use std::thread;
 use std::convert::TryInto;
-use modules::alias_lib;
-use modules::order_object::Order;
+
+
+use elevator_object::elevator_init;
+use elevator_object::elevator_movement;
+use elevator_object::elevator_status_functions;
+use elevator_object::elevator_queue_handling;
+
+use elevator_object::poll;
 
 
 #[derive(Clone, Debug)]

@@ -2,12 +2,14 @@
 #![warn(unused_variables)]
 
 use std::fmt;
-use std::io::*;
-use std::net::TcpStream;
-use std::sync::*;
-use std::time::Duration;
-use std::thread;
-use std::convert::TryInto;
+
+use elevator_object::elevator_init;
+use elevator_object::elevator_movement;
+use elevator_object::elevator_status_functions;
+use elevator_object::elevator_queue_handling;
+
+use elevator_object::poll;
+
 use modules::alias_lib;
 
 #[derive(Clone, Debug, PartialEq)]

@@ -54,6 +54,7 @@ use bincode; use sha2::digest::Update;
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
 use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
+
 use crate::modules::elevator::Elevator;
 use crate::modules::slave;
 use crate::modules::master::{Worldview,handle_multiple_masters};
@@ -95,10 +96,14 @@ pub struct UdpMsg {
 
 //----------------------------------------------Functions
 
+///make_Udp_msg
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `elevator` - crate::modules::elevator::Elevator - . Sender
+/// * `message_type` - message_type - what kind of message, check enum message_type
+/// * `message` - Vec<u8> The message to be sendt
+/// 
 /// 
 /// # Returns:
 ///
@@ -119,14 +124,19 @@ fn make_Udp_msg(elevator: crate::modules::elevator::Elevator, message_type: mess
     return msg;
 }
 
+/// udp_receive
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `socket` - &UdpSocket - what socket we are reading from.
+/// * `max_wait` - u32 - maximum waittime in milliscounds.
+/// * `slave` - &Elevator - Refrence to elevator.
+/// * `me` - &Elevator  - Refrence to this elevator.
+/// * `worldview` - &mut Worldview - refrence to worldview.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
 ///
 fn udp_receive(socket: &UdpSocket, max_wait: u32, slave: &mut Elevator, me: &Elevator, worldview: &mut Worldview) -> Option<UdpMsg> {
     socket
@@ -170,11 +180,13 @@ fn udp_receive(socket: &UdpSocket, max_wait: u32, slave: &mut Elevator, me: &Ele
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave` - &Elevator - referance to elevator.
+/// * `worldview` - &mut Worldview - current worldview.
+/// * `msg` - UdpMsg - Recived message.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - NONE - .
 ///
 fn handle_wordview(slave: &mut Elevator, me: &Elevator, worldview: &mut Worldview, msg: UdpMsg) {
     println!("Updating worldview...");
@@ -182,14 +194,16 @@ fn handle_wordview(slave: &mut Elevator, me: &Elevator, worldview: &mut Worldvie
     handle_multiple_masters(me, slave, worldview);
 }
 
+/// handle_ack
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - Recived message .
+/// * `sent_messages` &mut Vec<UdpMsg>-  -.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -NONE- .
 ///
 fn handle_ack(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>) {
     println!("Received ACK from ID: {}", msg.header.sender_id);
@@ -205,10 +219,15 @@ fn handle_ack(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>) {
     }
 }
 
+///handle_nack
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - .The recived message
+/// * `sent_messages` - &Vec<UdpMsg> - List of messages waiting for responses
+/// * `socket` -&UdpSocket  - Sending scokcet.
+/// * `target_adress` - SocketAddr - reciver adress .
+/// 
 /// 
 /// # Returns:
 ///
@@ -229,10 +248,13 @@ fn handle_nak(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>, socket: &UdpSocket, 
 }
 
 
-/// 
+/// handle_new_order
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave` - &mut Elevator - refrence to elevator.
+/// * `msg` - UdpMsg - recived message.
+/// * `socket` - &udpSocket - sending socket.
+/// * `sender_adress` - &SocketAdress - reciving adress.
 /// 
 /// # Returns:
 ///
@@ -255,14 +277,15 @@ fn handle_new_order(slave: &mut Elevator, msg: UdpMsg, socket: &UdpSocket, sende
     }
 }
 
-/// 
+/// handle_new_master
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - recived message.
+/// * `active_elevators` - &mut Vec<elevators> - Vector of active elevators.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -NONE- .
 ///
 fn handle_new_master(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
@@ -284,25 +307,29 @@ fn handle_new_master(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
     }
 }
 
-/// 
+/// handle_new_online
+/// Adds new online elevator to active alevators vector
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - .
+/// * `active_elevators` - Vec<Elevator> - .
 /// 
 /// # Returns:
 ///
 /// Returns - - .
 ///
-fn handle_new_online(msg: UdpMsg) {
+fn handle_new_online(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     !todo("Handle innit message from newly online elevator")
 }
 
-/// 
+/// handle_error_worldview
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - .
+/// * `worldview` - &mut Worldview - .
+/// * `active_elevators` - &Vec<Elevator> - .
 /// 
 /// # Returns:
 ///
@@ -322,26 +349,24 @@ fn handle_error_worldview(msg: UdpMsg, worldview: &mut Worldview, active_elevato
     }
 }
 
-/// 
+/// handle_error_offline
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - UdpMsg - .
+/// * `active_elevators` -  - .
+/// * `active_elevators` -  - .
 /// 
 /// # Returns:
 ///
 /// Returns - - .
 ///
-fn handle_error_offline(msg: UdpMsg, active_elevators: &mut Vec<Elevator>, inactive_elevators: &mut Vec<Elevator>) {
+fn handle_error_offline(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
     println!("Elevator {} went offline. Reassigning orders...", msg.header.sender_id);
 
     // Remove the offline elevator from active list
     if let Some(index) = active_elevators.iter().position(|e| e.ID == msg.header.sender_id) {
         let offline_elevator = active_elevators.remove(index);
         println!("Removed elevator ID: {} from active list.", msg.header.sender_id);
-
-        // Move offline elevator to inactive list
-        inactive_elevators.push(offline_elevator.clone());
-        println!("Elevator ID: {} moved to inactive list.", msg.header.sender_id);
 
         // Extract orders from the offline elevator
         let orders = offline_elevator.queue.clone();
@@ -352,46 +377,48 @@ fn handle_error_offline(msg: UdpMsg, active_elevators: &mut Vec<Elevator>, inact
     }
 }
 
-
-/// Split UdpMsg into bytes
+/// serialize
+/// Split UdpMsg into bytes for easier transmission
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - &UdpMsg - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - Vec<u8>- a string of the serialized message.
 ///
 fn serialize(msg: &UdpMsg) -> Vec<u8> {
     let serialized_msg = bincode::serialize(msg).expect("Failed to serialize message");
     return serialized_msg;
 }
 
+/// deserialize
 /// Combine bytes in message buffer into UdpMsg
-/// /// 
+///
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `buffer` - &[u8] - refrence to the buffer containing the serialized message.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - Option<UdpMsg>- .returns either the deserialized message or none
 ///
 fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
     let deserialized_msg = bincode::deserialize(buffer).ok();
     return deserialized_msg;
 }
 
+/// calc_checksum
 /// Calculate Checksum.
-/// /// 
+/// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `data` &Vec<>-  - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - Vec<u8>- returns the hashed string .
 ///
 fn calc_checksum(data: &Vec<u8>) -> Vec<u8> {
     let mut hasher = Sha256::new();
@@ -400,30 +427,34 @@ fn calc_checksum(data: &Vec<u8>) -> Vec<u8> {
     return hash.to_vec();
 }
 
-/// Compare checksums, Not sure if we need this or not.
+// comp_checksum
+/// Compare checksums of a message's data, with its attached checksum.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `&UdpMsg` - &UdpMsg - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' if they match or 'false' if they dont.
 ///
 fn comp_checksum(msg: &UdpMsg) -> bool {
     return calc_checksum(&msg.data) == msg.header.checksum;
 }
 
-
+///udp_ack
 ///ACK, Responds to original messag with ACK, checksum of original message is used as data to ensure which message it is responding to.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `socket` - &UdpSocket - 
+/// * `target_adress` - SocketAddr - .
+/// * `original_msg` - &UdpMsg - .
+/// * `sender_id` - u8 - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
 fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
@@ -441,16 +472,19 @@ fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg
 }
 
 
-
+/// udp_nak
 ///NAK, Responds to original messag with NAK, checksum of original message is used as data to ensure which message it is responding to.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
-/// 
+/// * `socket` - &UdpSocket - .
+/// * `target_adress` - SocketAddr - .
+/// * `original_msg` - &UdpMsg - .
+/// * `sender_id` - u8 - .
+///  
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
 fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
@@ -469,16 +503,18 @@ fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg
 
 
 
-
+///udp_send
 ///Sending UDP message.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `socket` - &UdpSocket - .
+/// * `target_adress` - SocketAddr -
+/// * `msg` - &UdpMsg - . .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' if sucsessfull and 'false' if not .
 ///
 fn udp_send(socket: &UdpSocket, target_adress: SocketAddr, msg: &UdpMsg) -> bool {
     let data = serialize(msg);
@@ -494,15 +530,16 @@ fn udp_send(socket: &UdpSocket, target_adress: SocketAddr, msg: &UdpMsg) -> bool
     }
 }
 
+///udp_broadcast
 ///Broadcast
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `msg` - &UdpMsg - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - None - .
 ///
 fn udp_broadcast(msg: &UdpMsg) {
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket, broadcast");
@@ -523,15 +560,20 @@ fn udp_broadcast(msg: &UdpMsg) {
     }
 }
 
+///udp_send_ensure
 /// Sending UDP, with retry
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `socket` - &UdpSocket - .
+/// * `target_addr` - &str - .
+/// * `msg` - &UdpMsg - .
+/// * `max_retry` -  - .
+/// * `sent_messages` - &mut Vec<UdpMsg> - ..
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' else returns 'false'.
 ///
 fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg, max_retry: u8, sent_messages: &mut Vec<UdpMsg>) -> bool {
     let mut retries = max_retry;
@@ -589,16 +631,18 @@ fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg, max_retr
     false
 }
 
-
+/// udp_receive_ensure
 /// Reciving UDP, with ACK
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `socket: &UdpSocket` -  -
+/// * `max_wait` - u8 - .
+/// * `receiver_id` - u8 - .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -Option<UdpMsg> - returns either a UDP Message or nothing .
 ///
 fn udp_receive_ensure(socket: &UdpSocket, max_wait: u8, receiver_id: u8) -> Option<UdpMsg> {
     socket

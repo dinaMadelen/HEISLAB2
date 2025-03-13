@@ -1,0 +1,13 @@
+Here is some general information about the code:
+
+Our code uses TCP, and a peer to peer system.
+The elevators can share their orders, and the best elevator takes it, though this algorithm is not yet optimal.
+
+The code uses a priority_value to decide which elevator which should take the order. This algorithm is not very good right now, 
+as it only finds the distance between the floor and buttons. In this part there are a lot of commented out code, which didn't run as
+intended.
+
+The code can be run by writing:
+
+go run main.go -id X
+

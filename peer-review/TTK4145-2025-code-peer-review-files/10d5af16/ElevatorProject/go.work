@@ -1,0 +1,14 @@
+go 1.22.1
+
+use (
+	"."
+	"./Driver"
+	"./elevator"
+	"./elevator_io_device"
+	"./fsm"
+	"./request"
+	"./timer"
+	"./communication"
+	"./elevator_logic"
+	"./hra"
+)

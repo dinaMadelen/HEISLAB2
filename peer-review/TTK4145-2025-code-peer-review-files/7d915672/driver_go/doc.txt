@@ -1,0 +1,2 @@
+peer2peer, all elevators should know all other elevator structs, should use heartbeat to check if other elevators is not connected anymore(not implemented yet)
+Using hall_requestassigner to give the Orders of each Elevator also contain an ID of which elevator should service each hall call, so all elevators should be have the same data in the hall call part of their Orders

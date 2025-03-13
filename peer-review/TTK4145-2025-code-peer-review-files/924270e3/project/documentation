@@ -1,0 +1,11 @@
+-------------
+Overview
+- using peer-to-peer communication
+
+Main modules:
+- elevator
+--> Handles elevator state and movement logic
+- requests
+--> Handles request handling and nertwork synchronization
+- main
+--> Coordinates system execution

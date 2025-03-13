@@ -1,0 +1,3 @@
+--clearRequestVariant       CV_InDirn
+--doorOpenDuration_s        3.0
+--inputPollRate_ms          25

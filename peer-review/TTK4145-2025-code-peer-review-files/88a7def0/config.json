@@ -1,0 +1,7 @@
+{
+  "elevator_addr": "localhost:15657",
+  "num_floors": 4,
+  "local_peer_id": 0,
+  "local_addr": "localhost",
+  "local_port": 15444
+}

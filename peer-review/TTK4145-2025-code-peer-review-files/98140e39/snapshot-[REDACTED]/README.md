@@ -1,0 +1,3 @@
+### Elevator project
+
+Our snapshot only contains the driver for a single elevator and the beginning of a peer to peer network with UDP broadcasting. We plan on using the handed out UDP protocol. All feedback will be appreciated...

@@ -1,0 +1,8 @@
+{
+    "number_of_elevators": 3,
+    "number_of_floors": 4,
+    "polling_interval_ms": 25,
+    "clear_request_variant": "All",
+    "door_open_duration_seconds": 3,
+    "simulation_travel_duration_seconds": 2.5
+}

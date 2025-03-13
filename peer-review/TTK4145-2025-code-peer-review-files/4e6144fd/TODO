@@ -1,0 +1,45 @@
+GENERAL
+---------------------
+> [x] Make a TODO list
+
+> [ ] Create functioning Elevator
+> [ ] Create functioning Heartbeat
+> [ ] Create functioning Networking
+
+
+ELEVATOR
+---------------------
+
+HEARTBEAT
+---------------------
+
+NETWORKING
+---------------------
+
+> [x] Rigorously test UDP
+> [ ] Clean up UDP Protocol for readability and code quality
+
+> [x] Rigorously test TCP
+> [ ] Clean up TCP Protocol for readability and code quality
+
+> [ ] Create TCP Heartbeat that closes unresponsive connections
+
+> [x] Create Peer Detection
+> [x] Test Peer Detection
+> [ ] Clean up Peer Detection for readability and code quality
+
+> [x] Create Causality Broadcasting
+> [x] Test Causality Broadcasting
+> [ ] Clean up Causality Broadcasting for readability and code quality
+
+> [ ] Create 3-Phase Commit
+> [ ] Test 3-Phase Commit
+> [ ] Clean up 3-Phase Commit for readability and code quality
+
+> [ ] Create JSON module / Use existing JSON module if it exists
+> [ ] Test JSON module
+> [ ] Clean up JSON module
+
+> [ ] Create Shared State
+> [ ] Test Shared State
+> [ ] Clean up Shared State

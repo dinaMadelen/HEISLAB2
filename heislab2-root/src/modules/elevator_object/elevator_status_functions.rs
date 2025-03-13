@@ -12,6 +12,8 @@ use elevator_object::poll;
 
 use modules::alias_lib;
 
+use super::Elevator; 
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Status{
     Idle,

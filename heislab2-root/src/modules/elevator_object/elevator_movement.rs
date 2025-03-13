@@ -13,6 +13,7 @@ use elevator_object::elevator_queue_handling;
 
 use elevator_object::poll;
 
+use super::Elevator; 
 
 impl Elevator{
     pub fn door_open_sequence(&mut self) {

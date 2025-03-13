@@ -6,9 +6,12 @@ mod tests {
     use std::thread::*;
     use std::time::*;
     use crossbeam_channel as cbc;
-    use crate::modules::poll;
-    use crate::modules::elevator::Elevator;
-    use crate::modules::elevator::Status;
+
+    use super::Elevator;
+    use super::Status;
+
+    use crate::elevator_object::poll;
+    
 
     pub const HALL_UP: u8 = 0;
     pub const HALL_DOWN: u8 = 1;

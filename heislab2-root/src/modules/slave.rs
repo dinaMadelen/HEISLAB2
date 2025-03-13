@@ -21,6 +21,8 @@
 //! ```
 
 
+//the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
+
 #[warn(non_snake_case)]
 
 //-----------------------IMPORTS------------------------------------------------------------
@@ -44,54 +46,63 @@ struct Lifesign {
 
 //----------------------Fucntions-----------------------------------------------------------
 
-
+/// recive_order
 /// Recive order from master and add it to queue if it is not already in the queue
+/// then ack the master that the order has been added
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave` - &mut Elevator - &refrence to the elevator where the order should be addded.
+/// * `new_order` - u8 - floor that should be added to the queue.
+/// * `socket` - &UdpSocket - socket of the sender.
+/// * `master_adress` - SocketAddr - adress where the master is expecting the ack.
+/// * `original_msg` - &UdpMsg - refrence to the udpmessage where the slave recived the order.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool- 'true' if order has been added to queue or the order already was in the queue and ackowledgement has been sent, if the acknowledgement failed it returns 'false' 
 ///
-fn receive_order(slave: &mut Elevator, new_order: u8, socket: &UdpSocket, sender_address: SocketAddr, original_msg: &UdpMsg) -> bool {
+fn receive_order(slave: &mut Elevator, new_order: u8, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg) -> bool {
     
     if !slave.queue.contains(&new_order) {
         slave.queue.push(new_order);
         println!("{} added to elevator {}", new_order, slave.id);
-        udp_ack(socket, sender_address, original_msg, slave.id);
-        return true;
+        return udp_ack(socket, master_address, original_msg, slave.id);
+    }else{
+        println!("{} already in queue for elevator {}", new_order, slave.id);
+        return udp_ack(socket, master_address, original_msg, slave.id);
     }
-    return false;
 }
 
-
+/// notify_completed
 /// Broadcast that an order is completed
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave_id` - u8 - ID of the elevator that completed the order.
+/// * `order` - u8 - floornumber of the completed order.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - 'true' if succsessful broadcast, 'false' if failed to broadcast.
 ///
 fn notify_completed(slave_id: u8, order: u8) {
 
     let message = make_udp_msg(slave_id, MessageType::OrderCompleted, order);
-    udp_broadcast(&message);
+    return udp_broadcast(&message);
 }
 
+/// cancel_order
 /// Remove an active order from a queue
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave` - &mut Elevator - refrence to the elevator where the order should be removed from.
+/// * `order` - u8 - floor that should be removed from queue.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns 'true' if the order was successuly removed, returns 'false' if the floor couldnt be found in the queue.
 ///
 fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 
@@ -100,6 +111,7 @@ fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
         println!("Order {} removed from queue of elevator {}", order, slave.id);
         return true;
     }
+    println!("Order {} couldnt be found in queue of elevator {}", order, slave.id)
     return false;
 }
 

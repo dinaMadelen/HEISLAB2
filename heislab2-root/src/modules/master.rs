@@ -21,6 +21,8 @@
 //! [dependencies]
 //! ```
 
+//the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
+
 #[warn(non_snake_case)]
 
 //-----------------------IMPORTS------------------------------------------------------------
@@ -163,18 +165,21 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 */
 
 
-/// Broadcast worldview
+/// handle_slave_failure
 /// Handle slave failure, take action to secure service for orders when a slave goes offline
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `slave_id` - u8 - ID of the elevator that has failed.
+/// * `elevators` - &mut Vec<Elevator> - refrence to the vector containing the active elevators.
 /// 
-/// # Returns:
+/// # Returns: 
+/// 
+/// Returns - bool - `true` if orders have been succsessfully distributed and elevator har been removed from active elevators
+/// else returns `false`
 ///
-/// Returns - - .
 ///
-fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
+fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>)  -> bool {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
@@ -184,29 +189,32 @@ fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
         let orders = elevators[index].queue.clone(); 
         elevators.remove(index);
         reassign_orders(orders, elevators);
+        return true;
     } else {
         println!("Error: cant find Elevator with ID {}", slave_id);
+        return false;
     }
 }
 
 /// Reassign order
-/// 
+/// Reassigns a or more orders from one elevator to active elevators
 ///  
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `orders` - Vec<u8> - orders to be distributed.
+/// * `elevators` - &mut Vec<Elevator> - refrence to the vector containing the active elevators.
 /// 
 /// # Returns:
+/// 
+/// returns nothing.
 ///
-/// Returns - - .
-///
-fn reassign_orders(orders: Vec<u8>) {
+fn reassign_orders(orders: Vec<u8>)  {
 
     for order in orders {
         for best_alternative in best_to_worst_elevator(order){
             msg= make_Udp_msg(sender_id:my_id, message_type: message_type, message:Vec<u8>)
             // fix inputs to udp_send_ensure function, dont remember exactly how it was, check udp.rs.
-            return udp_send_ensure(&UdpSocket, &str, &UdpMsg);
+            udp_send_ensure(&UdpSocket, &str, &UdpMsg);
         }
     }
 }
@@ -215,11 +223,12 @@ fn reassign_orders(orders: Vec<u8>) {
 ///  
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `order` - u8 - the floor number.
+/// * `elevators` - &Vec<Elevator> - refrence to list of active elevators that the functions will sort.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Retruns - Vec<u8> - a list of i IDs in decending order from best fit to worst fit.
 ///
 fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
 
@@ -264,17 +273,20 @@ fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
     return scores.into_iter().map(|(id, score)| id).collect();
 }
 
-
+/// handle_multiple_masters
 /// If for some reason more than master is active, forexample race during election or one didnt recive the first message from new master.
-/// master with lowest id keeps the role, the rest become slaves.
+/// master with lowest ID keeps the role, the rest become slaves.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `me` - &Elevator - refrence to this elevator.
+/// * `sender` - &Elevator - refrence to senders elevator .
+/// * `worldview` - &Worldview - .
+/// 
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - Some(bool) - returns false if the ID is its own, returns true if it keeps the master if the ID is higher than the sender, reboots if it is lower.
 ///
 fn handle_multiple_masters(me: &Elevator, sender: &Elevator, worldview: &Worldview) -> bool {
     
@@ -295,7 +307,7 @@ fn handle_multiple_masters(me: &Elevator, sender: &Elevator, worldview: &Worldvi
 
 //----------------------------------TESTS-------------------------------------------------------------
 
-#[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
+#[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test" 
 mod tests {
     use super::*;
     use std::net::{UdpSocket, SocketAddr};

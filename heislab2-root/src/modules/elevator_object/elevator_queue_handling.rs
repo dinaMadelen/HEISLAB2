@@ -1,7 +1,7 @@
 impl Elevator{
-    pub fn add_to_queue(&mut self, floor: u8) {
-        if !self.queue.contains(&floor) {
-            self.queue.push(floor);
+    pub fn add_to_queue(&mut self, order:Order) {
+        if !self.queue.contains(&order) {
+            self.queue.push(order);
             self.sort_queue();
         }
         else{
@@ -9,8 +9,11 @@ impl Elevator{
         }
     }
     
-    pub fn sort_queue(&self) -> Vec<u8> {
+    //DENNE MÅ ENDRES
+    pub fn sort_queue(&self) -> Vec<Order> {
+        !todo("MAKE SORT QUEUE ACTUALLY SORT QUEUE");
         let mut sorted_queue = self.queue.clone();
+
         let (mut non_negative, mut negative): (Vec<u8>, Vec<u8>) = sorted_queue
             .into_iter()
             .partition(|&x| x >= 0);
@@ -27,6 +30,7 @@ impl Elevator{
 
         infront.extend(behind);
         return infront;
+
     }
 
 }

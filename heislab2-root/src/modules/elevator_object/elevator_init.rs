@@ -9,6 +9,7 @@ use std::time::Duration;
 use std::thread;
 use std::convert::TryInto;
 use modules::alias_lib;
+use modules::order_object::Order;
 
 
 #[derive(Clone, Debug)]
@@ -17,7 +18,7 @@ pub struct Elevator {
     pub num_floors: u8,
     pub ID: u8,
     pub current_floor:u8,
-    pub queue:Vec<u8>,
+    pub queue:Vec<Order>,
     pub status:Status,
     pub direction:i8
 }

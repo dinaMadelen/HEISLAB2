@@ -1,1 +1,19 @@
-todo
+0c25976e
+
+9
+
+-The code is very well structured With comments that Clearly split the code into parts that are more managable and understandable. Using multiline comments to indicate the start and end of a task is a Nice way to saparate between comments of the acutal code and the divisions that are done for readability.
+
+-The code is very detailed and handels many cases that is not specified in the Project description. e.g. confirming that the adress of incomming messages
+
+- It seems overly complex compared to the Project requirements. for example colorcoating for messeages is a Nice touch but adds nothing to the information information itself and is a detriment to readability of the code itself. print_cosmic_err is a sinner here.
+
+-In general the variable and function names are very good and intuitive, they give a good explanation of what the variable or furnction is/does without a wall of comments.
+
+-Is it necessary to use both UDP and TCP?, would it be beneficial/simpler to use only one to reduce the complexity of the system. There are ways to Ensure the integrity of the communication over UDP, forexample adding sequencing and acknowledgment to your packets instead of using both UDP and TCP.
+
+-Im not an expert but isnt running unsafe{} in a multithreaded program for a mutable global variable (e.g PRINT_INFO_ON) without proper synchronization a problem?
+
+-Do you have any way of knowing if it takes unreasnoable long time to service an order that has been given to an elevator. forexample if there is an obstruction blockign the elevator from proceding is there a way to detct and handle this order?
+
+-Overall it looks very good, and it seems you have full control and are on route to finish With a good product once you have implemented the missing elements.

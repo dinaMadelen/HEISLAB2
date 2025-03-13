@@ -1,39 +1,46 @@
+//! ## Master Module
+//! This module provides structs and functions for the master node
+//! 
+//! ## The structs includes:
+//! - **Worldview**
+//! - **Role**
+//! 
+//! ## The functions includes:
+//! - 'give_order'
+//! - 'remove_from_queue'
+//! - 'correct_master_worldview'
+//! - 'master_worldview
+//! - 'handle_slave_failure'
+//! - 'reassign_orders'
+//! - 'best_to_worst_elevator'
+//! - 'handle_multiple_masters'
+//! 
+//! ## Dependencies
+//! 
+//! ```toml
+//! [dependencies]
+//! ```
+
 #[warn(non_snake_case)]
-/*Fordeling av ordre
-fordeling av ordre basert på kost funksjon  XXXXXXXXXX
-
-Worldview broadcast & retting av feil i worldview XXXXXXXXXXX
-sending av wordview(eksisterer broadcast funksjon i UDP modulen) 
-
-Gi ordre og forvent svar fra alle aktive 
-
-Gi fra seg master rolle XXXXXXXXXXXXXXXXXXXXXXXX
-usikker på om denne trengs da slaver skal ta over rollen automatisk hvis master går offline
-men kan være fin dersom det er noe som gjør at master vil restarte og vil framskynde prosessen
-
-Example for worldview struct
-worldview is a vector of vectors that contain the orders of every active cab
-Master_view={
-    worldview: Vec<Elevator> = [elevator1],[elevator2],[elevator3],[elevator4],
-    lights: Vec<u8> = [lights_cab1, lights_cab2, lights_cab3, lights_cab3, lights_cab4],
-}
-
-*/
 
 //-----------------------IMPORTS------------------------------------------------------------
 
 use crate::modules::udp::{udp_send_ensure,udp_broadcast,udp_receive,make_Udp_msg};
 use crate::modules::elevator::{Elevator,Status};
+use cargo::modules::slave::{reboot_program};
 use std::net::UdpSocket;
+
 
 //-----------------------STRUCTS------------------------------------------------------------
 
+/// A struct that holds all the elevators aswell as all active lights
 pub struct Worldview{
 
     orders: Vec<Elevator>,
     lights: Vec<u8>,
 }
 
+/// All possible roles of a node
 pub enum Role{
     Master,
     Slave,
@@ -42,9 +49,21 @@ pub enum Role{
 
 //-----------------------FUNCTIONS---------------------------------------------------------
 
+
+/// Sends an order to a slave elevator and waits for an acknowledgment.
 ///Broadcast order and wait for responce from reciver, if not recived resend, if this fail. find return false
 ///The diffrence from just adding from worldview broadcast and from give_order() is that unlike regular udp_broadcast() give_order() requires an acknoledgement from the recivers
-
+/// 
+/// # Arguments:
+/// 
+/// * `master` - &Elevator - A reference to the master `Elevator` initiating the order.
+/// * `slave_id` - u8 - The ID of the elevator receiving the order.
+/// * `new_order` - u8 - floor number of the new order.
+/// 
+/// # Returns:
+///
+/// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
+///
 fn give_order(master: &Elevator, slave_id: u8, new_order: u8) -> bool {
 
     let mut retries = 3;
@@ -71,15 +90,36 @@ fn give_order(master: &Elevator, slave_id: u8, new_order: u8) -> bool {
     return false;
 }
 
-
-/// Send order to remove one or more orders from a specific elevator
+///remove_from_queue
+/// Broadcast order to remove one or more orders from a specific elevator
+///
+/// # Arguments:
+/// 
+/// * `slave_id` - u8 - ID of the elevator where the order/orders should be removed from.
+/// * `removed_orders` - Vec<u8> - Vector of orders that will be removed.
+/// 
+/// # Returns:
+///
+/// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
+///
 fn remove_from_queue(slave_id: u8, removed_orders: Vec<u8>) -> bool {
 
     let message = make_udp_msg(master.id, MessageType::RemoveOrder, removed_orders);
     return udp_send_ensure(&socket, &slave_address(slave_id), &message);
 }
 
+
+/// correct_master_worldview
 /// Compare message and send out the corrected worldview (union of the recived and current worldview)
+/// 
+/// # Arguments:
+/// 
+/// * `master` - &Elevator - Refrence to master elevator.
+/// 
+/// # Returns:
+///
+/// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
+///
 fn correct_master_worldview(master: &Elevator) -> bool {
 
     let missing_orders = todo!("Vector of vectors containing the queues from the slave with orders that dont exist in worldview");
@@ -93,6 +133,16 @@ fn correct_master_worldview(master: &Elevator) -> bool {
 }
 
 /// Broadcast worldview
+/// Compare message and send out the corrected worldview (union of the recived and current worldview)
+/// 
+/// # Arguments:
+/// 
+/// * `master` - &Elevator - Refrence to master elevator.
+/// 
+/// # Returns:
+///
+/// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
+///
 fn master_worldview(master:Elevator) -> bool{
     
     make_Udp_msg(sender_id: master,message_type: Wordview, message:Vec<u8>); 
@@ -112,7 +162,18 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 }
 */
 
-/// Handle slave failure, compensate for a slave going offline
+
+/// Broadcast worldview
+/// Handle slave failure, take action to secure service for orders when a slave goes offline
+/// 
+/// # Arguments:
+/// 
+/// * `` -  - .
+/// 
+/// # Returns:
+///
+/// Returns - - .
+///
 fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
@@ -129,18 +190,37 @@ fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>) {
 }
 
 /// Reassign order
+/// 
+///  
+/// # Arguments:
+/// 
+/// * `` -  - .
+/// 
+/// # Returns:
+///
+/// Returns - - .
+///
 fn reassign_orders(orders: Vec<u8>) {
 
     for order in orders {
         for best_alternative in best_to_worst_elevator(order){
             msg= make_Udp_msg(sender_id:my_id, message_type: message_type, message:Vec<u8>)
             // fix inputs to udp_send_ensure function, dont remember exactly how it was, check udp.rs.
-            udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg)
+            return udp_send_ensure(&UdpSocket, &str, &UdpMsg);
         }
     }
 }
 
 /// Cost function that returns order to the best fitting elevators from best to worst alternative.
+///  
+/// # Arguments:
+/// 
+/// * `` -  - .
+/// 
+/// # Returns:
+///
+/// Returns - - .
+///
 fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
 
     // Vec<Elevator.ID, Score> Higher score = better alternative
@@ -187,22 +267,29 @@ fn best_to_worst_elevator(order: u8, elevators: &Vec<Elevator>) -> Vec<u8> {
 
 /// If for some reason more than master is active, forexample race during election or one didnt recive the first message from new master.
 /// master with lowest id keeps the role, the rest become slaves.
+/// 
+/// # Arguments:
+/// 
+/// * `` -  - .
+/// 
+/// # Returns:
+///
+/// Returns - - .
+///
 fn handle_multiple_masters(me: &Elevator, sender: &Elevator, worldview: &Worldview) -> bool {
     
     if me.role == role::Master {
         return false;
 
         // Give away master role, simple solution, Kill program and reboot
-     }else{
-        if sender.ID < me.ID
-        relinquish_master
+    }else if sender.ID < me.ID{
         reboot_program();
 
         // Keep master role
-        }else{
+    }else{
             return true; 
-        }
-     }
+    }
+    
 }
 
 

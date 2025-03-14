@@ -1,47 +1,41 @@
 0c25976e
 9
--The code is very well structured With comments that Clearly split the code into parts that are more managable and understandable. Using multiline comments to indicate the start and end of a task is a Nice way to saparate between comments of the acutal code and the divisions that are done for readability.
--The code is very detailed and handels many cases that is not specified in the Project description. e.g. confirming that the adress of incomming messages
-- It seems overly complex compared to the Project requirements. for example colorcoating for messeages is a Nice touch but adds nothing to the information information itself and is a detriment to readability of the code itself. print_cosmic_err is a sinner here.
--In general the variable and function names are very good and intuitive, they give a good explanation of what the variable or furnction is/does without a wall of comments.
--Is it necessary to use both UDP and TCP?, would it be beneficial/simpler to use only one to reduce the complexity of the system. There are ways to Ensure the integrity of the communication over UDP, forexample adding sequencing and acknowledgment to your packets instead of using both UDP and TCP.
--Im not an expert but isnt running unsafe{} in a multithreaded program for a mutable global variable (e.g PRINT_INFO_ON) without proper synchronization a problem?
--Do you have any way of knowing if it takes unreasnoable long time to service an order that has been given to an elevator. forexample if there is an obstruction blockign the elevator from proceding is there a way to detct and handle this order?
--Overall it looks very good, and it seems you have full control and are on route to finish With a good product once you have implemented the missing elements.
+The code is very well structured With comments that Clearly split the code into parts that are more managable and understandable. Using multiline comments to indicate the start and end of a task is a Nice way to saparate between comments of the acutal code and the divisions that are done for readability.
+The code is very detailed and handels many cases that is not specified in the Project description. e.g. confirming that the adress of incomming messages
+It seems overly complex compared to the Project requirements. for example colorcoating for messeages is a Nice touch but adds nothing to the information information itself and is a detriment to readability of the code itself. print_cosmic_err is a sinner here.
+In general the variable and function names are very good and intuitive, they give a good explanation of what the variable or furnction is/does without a wall of comments.
+Is it necessary to use both UDP and TCP?, would it be beneficial/simpler to use only one to reduce the complexity of the system. There are ways to Ensure the integrity of the communication over UDP, forexample adding sequencing and acknowledgment to your packets instead of using both UDP and TCP.
+Im not an expert but isnt running unsafe{} in a multithreaded program for a mutable global variable (e.g PRINT_INFO_ON) without proper synchronization a problem?
+Do you have any way of knowing if it takes unreasnoable long time to service an order that has been given to an elevator. forexample if there is an obstruction blockign the elevator from proceding is there a way to detct and handle this order?
+Overall it looks very good, and it seems you have full control and are on route to finish With a good product once you have implemented the missing elements.
 
 6e9c22cf
 8
--In general the code is well structured and uses Clear and intuitive naming of variables and functions.
--The functions could benefit from having more modules as some modules are getting quite large.
--Need to improve error handeling, and handeling edgecases.
+In general the code is well structured and uses Clear and intuitive naming of variables and functions.
+The functions could benefit from having more modules as some modules are getting quite large.
+Need to improve error handeling, and handeling edgecases.
 
 2be0c418
 9
-- The entry point code is well crafted. Just reading through main.rs alone paints a very clear picure of the things that are happening at the top-level. There are almost no comments in main.rs, but this is not even a problem because of how readable and clean the code is. The project also has a very descriptive and nice readme file that explains the high-level design of the project, and is very helpful to getting to know the codebase. However, since main.rs should be able to be used as a black box (take command line arguments and just work), i feel like there should be a short section early on, either in the readme or a comment in main.rs itself, that breifly describes how the program should be used. What arguments does it take? What does it do? Reading through the args struct gives information about the program args, but it doesn't say what the program does, and i should not have to start reading code to know what arguments to pass to a program.
-- From a outside point of view, the choice of module Structure and naming (the interface in general) is good, and gives a clear indication of the functionality of the module. This makes it a lot easier to get up to speed on the codebase, and provides for seamless integration of potential new developers/collaborators.
-- From a inside point of view the code has good usage of "modular" functions (smaller functions that call other smaller functions). The code is compact and readable, and despite this the number of small functions is held reasonably low. It could however benefit from a bit more modularity here and there, especially wrapping the handling of "things" inside handler functions. This would make the high-level thought behind the code easier to follow. Having the concrete handling of specific cases in a high-level of abstraction function ruins the readability of the code. If i want to know how a certain case is handled, i should just go to that function. All i need to know in the high-level function is that all cases are probed for and handled accordingly. 
-- The details of the code are good. Names are very descriptive, and makes for easy reading. The commenting could be better in the lower-level code. Since the naming is so good, commenting is really not neccessary in the high-level of abstraction code. However in the lower levels, comments can make it easier to follow along, without always having to infer the purpose of some line of code.
-- My gut feeling is that this group has handled the project well. The design seems thought through, and the code is well crafted. There could be made some improvements here and there, but this is just nitpicking and well within the capabilities of the group. The proposed improvements just consists of improving the separation of higher and lower level of abstraction code, and adding some comments in lower level code. This is not too hard, and the group could easily manage this. 
-
+The entry point code is well crafted. Just reading through main.rs alone paints a very clear picure of the things that are happening at the top-level. There are almost no comments in main.rs, but this is not even a problem because of how readable and clean the code is. The project also has a very descriptive and nice readme file that explains the high-level design of the project, and is very helpful to getting to know the codebase. However, since main.rs should be able to be used as a black box (take command line arguments and just work), i feel like there should be a short section early on, either in the readme or a comment in main.rs itself, that breifly describes how the program should be used. What arguments does it take? What does it do? Reading through the args struct gives information about the program args, but it doesn't say what the program does, and i should not have to start reading code to know what arguments to pass to a program.
+From a outside point of view, the choice of module Structure and naming (the interface in general) is good, and gives a clear indication of the functionality of the module. This makes it a lot easier to get up to speed on the codebase, and provides for seamless integration of potential new developers/collaborators.
+From a inside point of view the code has good usage of "modular" functions (smaller functions that call other smaller functions). The code is compact and readable, and despite this the number of small functions is held reasonably low. It could however benefit from a bit more modularity here and there, especially wrapping the handling of "things" inside handler functions. This would make the high-level thought behind the code easier to follow. Having the concrete handling of specific cases in a high-level of abstraction function ruins the readability of the code. If i want to know how a certain case is handled, i should just go to that function. All i need to know in the high-level function is that all cases are probed for and handled accordingly. 
+The details of the code are good. Names are very descriptive, and makes for easy reading. The commenting could be better in the lower-level code. Since the naming is so good, commenting is really not neccessary in the high-level of abstraction code. However in the lower levels, comments can make it easier to follow along, without always having to infer the purpose of some line of code.
+My gut feeling is that this group has handled the project well. The design seems thought through, and the code is well crafted. There could be made some improvements here and there, but this is just nitpicking and well within the capabilities of the group. The proposed improvements just consists of improving the separation of higher and lower level of abstraction code, and adding some comments in lower level code. This is not too hard, and the group could easily manage this. 
 
 c7028f29
-Overall score: 8
-
+8
 Top level entry points: The initial look at the structure of the folders and the naming of the files gives an orderly feel. When looking closer at main.rs it seems that this entry point is mainly just to spawn the elevators and implement an unending loop so the rest of the threads can run, which is a nice way to do it, even though the code should include a few more comments so it is more understandable.
 The master slave functionality is apparent, but the behaviour of each elevator is very spread and getting a complete understanding of the system is difficult.
-
 Individual modules from the outside:
 Each module seems to be working with only one subject, this makes the code structured, except some of the distributor modules, which we believe could be simplified, or separated into smaller pieces (ex. Making a separate function  for interpreting messages from the receiver, preparing messages and a function for sending the messages). 
-
 Individual modules from the inside:
 The code could not be described as entirely self documenting, since it is not completely obvious what each and every function does. 
 But there is a lot of functionality which is easy to understand as well. Everything inside the elevator controller is structured and understandable, the cost function module and main is also easy to understand. 
 The states of the elevator seems to be modified in several separate places, we believe this could cause problems if the threads try to modify it at the same time.
-
 Interactions between modules:
 The modules seem to be interacting well, the only comment is that it might need a bit more separation. 
 There is also a slight lack of tracability which might be fixed by moving some of the distributor functionality to main, we believe this could make the entire systems functionality more apparent. 
-
 Details:
 The variable naming is good, but we believe that you can make the code more understandable by adding more comments, and making some of the variable names more distinct. 
 Gut feel: It seems like there is a good idea behind the system and I believe that it will work well when it is finished. I believe that the system could be split into a bit more functions that do less, with names that make the functionality more blatant. There is also a severe lack of comments that in combination with the big functions (that do a lot of things), makes it a bit hard to understand. As a whole the behaviour seems good, and we believe that the only place where the code is lacking is traceability and naming.  Gut feeling 8/10 it is good!

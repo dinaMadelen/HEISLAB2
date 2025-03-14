@@ -3,7 +3,8 @@ use std::thread;
 use std::time;
 
 
-use super::elevator;
+use super::elevator_init::Elevator; 
+use super::elevator_status_functions::Status;
 
 #[derive(Debug)]
 pub struct CallButton {
@@ -11,7 +12,7 @@ pub struct CallButton {
     pub call: u8,
 }
 
-pub fn call_buttons(elev: elevator::Elevator, ch: cbc::Sender<CallButton>, period: time::Duration) {
+pub fn call_buttons(elev: Elevator, ch: cbc::Sender<CallButton>, period: time::Duration) {
     let mut prev = vec![[false; 3]; elev.num_floors.into()];
     loop {
         for f in 0..elev.num_floors {
@@ -27,7 +28,7 @@ pub fn call_buttons(elev: elevator::Elevator, ch: cbc::Sender<CallButton>, perio
     }
 }
 
-pub fn floor_sensor(elev: elevator::Elevator, ch: cbc::Sender<u8>, period: time::Duration) {
+pub fn floor_sensor(elev: Elevator, ch: cbc::Sender<u8>, period: time::Duration) {
     let mut prev = u8::MAX;
     loop {
         if let Some(f) = elev.floor_sensor() {
@@ -40,7 +41,7 @@ pub fn floor_sensor(elev: elevator::Elevator, ch: cbc::Sender<u8>, period: time:
     }
 }
 
-pub fn stop_button(elev: elevator::Elevator, ch: cbc::Sender<bool>, period: time::Duration) {
+pub fn stop_button(elev: Elevator, ch: cbc::Sender<bool>, period: time::Duration) {
     let mut prev = false;
     loop {
         let v = elev.stop_button();
@@ -52,7 +53,7 @@ pub fn stop_button(elev: elevator::Elevator, ch: cbc::Sender<bool>, period: time
     }
 }
 
-pub fn obstruction(elev: elevator::Elevator, ch: cbc::Sender<bool>, period: time::Duration) {
+pub fn obstruction(elev: Elevator, ch: cbc::Sender<bool>, period: time::Duration) {
     let mut prev = false;
     loop {
         let v = elev.obstruction();

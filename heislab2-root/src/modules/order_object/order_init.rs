@@ -1,16 +1,17 @@
-use modules::alias_lib;
 
 // IF CAB THE ORDER IS LOCAL
-struct Order {
-    floor: u8,
-    order_type: u8,
+#[derive(Clone, Debug,PartialEq)]
+pub struct Order {
+    pub floor: u8,
+    pub order_type: u8,
 }
 
 impl Order{
-    pub fn init(addr: &str, floor: u8, order_type:u8) -> Result<Order> {
-        Ok(Self {
+    pub fn init(floor: u8, order_type:u8) -> Order {
+        Self {
             floor: floor,
             order_type: order_type,
-        })
+        }
     }
+
 }

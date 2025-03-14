@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
+#[allow(unused_imports)]
 
 use std::fmt;
 use std::io::*;
@@ -10,13 +11,12 @@ use std::thread;
 use std::convert::TryInto;
 
 
-use elevator_object::elevator_init;
-use elevator_object::elevator_movement;
-use elevator_object::elevator_status_functions;
-use elevator_object::elevator_queue_handling;
+use crate::modules::elevator_object::*;
 
-use elevator_object::poll;
+use super::elevator_status_functions::Status;
+use crate::modules::order_object::order_init::Order;
 
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
 #[derive(Clone, Debug)]
 pub struct Elevator {

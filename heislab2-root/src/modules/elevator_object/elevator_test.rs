@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![warn(unused_variables)]
+#[allow(unused_imports)]
+
 
 #[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test"
 mod tests {
@@ -9,8 +13,9 @@ mod tests {
 
     use super::Elevator;
     use super::Status;
+    use super::Order;
 
-    use crate::elevator_object::poll;
+    use crate::modules::elevator_object::poll;
     
 
     pub const HALL_UP: u8 = 0;

@@ -1,18 +1,14 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
+#[allow(unused_imports)]
 
 use std::fmt;
 
-use elevator_object::elevator_init;
-use elevator_object::elevator_movement;
-use elevator_object::elevator_status_functions;
-use elevator_object::elevator_queue_handling;
+use crate::modules::elevator_object::*;
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use super::elevator_init::Elevator; 
 
-use elevator_object::poll;
 
-use modules::alias_lib;
-
-use super::Elevator; 
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Status{
@@ -37,7 +33,7 @@ impl Status{
 }
 
 impl Elevator{
-    fn print_status(&self){
+    pub fn print_status(&self){
         println!("status:{}", self.status.as_str());
     }
     
@@ -51,10 +47,10 @@ impl Elevator{
                     Status::Moving | Status::Idle => {
                         self.status = Status::Moving;
                         let first_item_in_queue = self.queue.first().unwrap();
-                        if *first_item_in_queue < self.current_floor {
+                        if first_item_in_queue.floor < self.current_floor {
                             self.direction = -1;
                             
-                        } else if *first_item_in_queue > self.current_floor{
+                        } else if first_item_in_queue.floor > self.current_floor{
                             self.direction = 1;
                         }
                     }

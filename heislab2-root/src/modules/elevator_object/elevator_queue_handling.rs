@@ -1,11 +1,13 @@
-use elevator_object::elevator_init;
-use elevator_object::elevator_movement;
-use elevator_object::elevator_status_functions;
-use elevator_object::elevator_queue_handling;
+#![allow(dead_code)]
+#![warn(unused_variables)]
+#[allow(unused_imports)]
 
-use elevator_object::poll;
+use crate::modules::elevator_object::*;
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
-use super::Elevator; 
+use super::elevator_init::Elevator; 
+use super::elevator_status_functions::Status;
+use crate::modules::order_object::order_init::Order;
 
 impl Elevator{
     pub fn add_to_queue(&mut self, order:Order) {
@@ -20,25 +22,9 @@ impl Elevator{
     
     //DENNE MÅ ENDRES
     pub fn sort_queue(&self) -> Vec<Order> {
-        !todo("MAKE SORT QUEUE ACTUALLY SORT QUEUE");
-        let mut sorted_queue = self.queue.clone();
+        //todo!("MAKE SORT QUEUE ACTUALLY SORT QUEUE");
 
-        let (mut non_negative, mut negative): (Vec<u8>, Vec<u8>) = sorted_queue
-            .into_iter()
-            .partition(|&x| x >= 0);
-    
-        non_negative.sort();
-        negative.sort();
-    
-        // Non-negative numbers first, negative numbers last
-        non_negative.extend(negative);
-
-        let (mut infront, mut behind): (Vec<u8>, Vec<u8>) = non_negative
-        .into_iter()
-        .partition(|&x| x <= self.current_floor);
-
-        infront.extend(behind);
-        return infront;
+        return self.queue.clone();
 
     }
 

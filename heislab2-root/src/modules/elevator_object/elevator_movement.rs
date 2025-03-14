@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![warn(unused_variables)]
+#[allow(unused_imports)]
+
 use std::fmt;
 use std::io::*;
 use std::net::TcpStream;
@@ -5,15 +9,12 @@ use std::sync::*;
 use std::time::Duration;
 use std::thread;
 
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use crate::modules::elevator_object::*;
 
-use elevator_object::elevator_init;
-use elevator_object::elevator_movement;
-use elevator_object::elevator_status_functions;
-use elevator_object::elevator_queue_handling;
 
-use elevator_object::poll;
-
-use super::Elevator; 
+use super::elevator_init::Elevator; 
+use super::elevator_status_functions::Status;
 
 impl Elevator{
     pub fn door_open_sequence(&mut self) {
@@ -32,18 +33,18 @@ impl Elevator{
 
     pub fn go_next_floor(&mut self) {
         if ((self.status == Status::Moving) | (self.status == Status::Idle)){
-            if let Some(next_floor) = self.queue.first() {
-                if *next_floor > self.current_floor {
+            if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
+                if next_floor > self.current_floor {
                     self.set_status(Status::Moving);
                     self.motor_direction(DIRN_UP);
                     //self.current_floor += 1;
                     
-                } else if *next_floor < self.current_floor {
+                } else if next_floor < self.current_floor {
                     self.set_status(Status::Moving);
                     self.motor_direction(DIRN_DOWN);
                     //self.current_floor -= 1;
                     
-                } else if *next_floor == self.current_floor{
+                } else if next_floor == self.current_floor{
                     self.set_status(Status::Idle);
                     self.motor_direction(DIRN_STOP);
                     self.queue.remove(0);

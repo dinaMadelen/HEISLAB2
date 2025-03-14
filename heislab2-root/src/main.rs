@@ -2,11 +2,11 @@ use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
 
-use driver_rust::modules::elevator_object::*;
+use heislab2_root::modules::elevator_object::*;
 use alias_lib::{HALL_DOWN, HALL_UP, CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
-use driver_rust::modules::order_object::order_init::Order;
+use heislab2_root::modules::order_object::order_init::Order;
 
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
@@ -56,9 +56,22 @@ fn main() -> std::io::Result<()> {
             recv(call_button_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
+
+                //Light turned on for correct lamp
                 elevator.call_button_light(call_button.floor, call_button.call, true);
+
+                //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor,call_button.call);
+
+                //if the order is a cab call
+                //Add to own queue
+                //broadcast addition, but since order is in own cab the others taking over will not help  
                 elevator.add_to_queue(new_order);
+
+                //if order is a hall call
+                //broadcast order 
+
+                //Safety if elevator is idle to double check if its going to correct floor
                 if &elevator.status == &(Status::Idle){
                     elevator.go_next_floor();
                 }
@@ -68,8 +81,14 @@ fn main() -> std::io::Result<()> {
 
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
-                elevator.current_floor = floor;
                 println!("Floor: {:#?}", floor);
+
+                //update current floor status
+                elevator.current_floor = floor;
+                
+                //broadcast current floor -this should also function as a ping
+
+                //keep following current route
                 elevator.go_next_floor();
                 
             },
@@ -78,7 +97,12 @@ fn main() -> std::io::Result<()> {
             recv(stop_button_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
-                elevator.set_status(Status::Error);
+                
+                elevator.set_status(Status::Stop);
+
+                //broadcast current floor, stop and current queue - this might be redistributed
+
+                //turn of lights
                 for f in 0..elev_num_floors {
                     for c in 0..3 {
                         elevator.call_button_light(f, c, false);
@@ -90,9 +114,29 @@ fn main() -> std::io::Result<()> {
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
+
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
+
+                //broadcast obstruction
                 
             },
+
+            //recv UDP message
+
+            //check message type 
+            //if messafe is from master
+            
+
+            //if order is yours
+            //add to own queue
+
+            //if order is someone elses
+            //add to full queue
+
+            //if message is from slave 
+            //if order, add to own full queue and world view
+            //if message is regarding dead elevator update elevators alive
+            //if message is 
         }
     }
 }

@@ -115,56 +115,67 @@ fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
     return false;
 }
 
-/// Updates the elevator's order queue based on a received worldview.
+/// update_from_worldview
+/// Checks for discrepancies between the elevators worldview and the masters worldview
+/// if there are orders in the worldview that do not exist in the queue , it updates the elevator's order queue based on a received worldview.
+/// if there are missing orders in the worldview, it notifies the master that there are missing orders.
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `active_elevators` - &mut Vec<Elevator> - refrence to list of active elevatosrs.
+/// * `new_worldview` - Vec<Vec<u8>>) - Vectors of vectors containing the orders, the outer vector holds each queue. .
+/// 
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-fn update_from_worldview(slave: &mut Elevator, new_worldview: Vec<Vec<u8>>) -> bool {
-    let slave_queue_snapshot = slave.queue.clone();
-    
-    let mut all_orders: Vec<u8> = new_worldview.iter().flatten().cloned().collect();
-    all_orders.sort();
-    all_orders.dedup();
+fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview: Vec<Vec<u8>>) -> bool {
 
-    if slave_queue_snapshot == all_orders {
-        println!("Received worldview matches");
-        return true;
+    for elevator in active_elevators.iter_mut(){
+        
+
+        let mut elevator_queue_snapshot = elevator.queue.clone();
+        
+        //Sort orders
+        let mut all_orders: Vec<u8> = new_worldview.iter().flatten().cloned().collect();
+        all_orders.sort();
+        all_orders.dedup();
+
+        if elavtor_queue_snapshot == all_orders {
+            // No need to change worldview for this order, check next elevator
+            println!("Received worldview matches for ID {}" elvator.ID);
+            continue;
+        }
+
+        let missing_orders: Vec<u8> = elevator_queue_snapshot.iter()
+            // Find orders that are missing from queues.
+            .filter(|&&order| !all_orders.contains(&order))
+            .cloned()
+            .collect();
+
+        if !missing_orders.is_empty() {
+            // No missing orders in queues, must be missing from worldview, notify master
+            notify_worldview_error(elevator.id, &missing_orders);
+            println!("Master worldview is missing orders, notifying master");
+            return false;
+        }
+
+        let new_orders: Vec<u8> = all_orders.iter()
+            .filter(|&&order| !elevator_queue_snapshot.contains(&order))
+            .cloned()
+            .collect();
+
+        elevator.queue.extend(new_orders);
+        println!("Updated worldview");
     }
-
-    let missing_orders: Vec<u8> = slave_queue_snapshot.iter()
-        .filter(|&&order| !all_orders.contains(&order))
-        .cloned()
-        .collect();
-
-    if !missing_orders.is_empty() {
-        notify_worldview_error(slave.id, &missing_orders);
-        println!("Master worldview is missing orders, notifying master");
-        return false;
-    }
-
-    let new_orders: Vec<u8> = all_orders.iter()
-        .filter(|&&order| !slave_queue_snapshot.contains(&order))
-        .cloned()
-        .collect();
-
-    slave.queue.extend(new_orders);
-    println!("Updated worldview");
-    true
-}
-
-    // Merge worldviews (Union of current and new)
-    for order in new_orders {
-        slave.queue.insert(order);
-    }
-
-    println!("Updated worldview");
+        // Merge worldviews (Union of current and new)
+        for order in new_orders {
+            elevator.queue.insert(order);
+        }
+        println!("Updated worldview");
     return true;
+
 }
 
 /// Missing order in worldview, notify master that there is a missing order/orders

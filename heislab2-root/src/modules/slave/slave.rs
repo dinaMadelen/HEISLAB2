@@ -27,8 +27,8 @@
 
 //-----------------------IMPORTS------------------------------------------------------------
 
-use crate::modules::elevator::Elevator; //Import for elevator struct
-use crate::modules::udp::{UdpMsg, MessageType, udp_send_ensure, udp_broadcast, make_Udp_msg, udp_ack};
+use crate::modules::elevator::elevator_init::Elevator; //Import for elevator struct
+use crate::modules::udp::udp::{UdpMsg, MessageType, udp_send_ensure, udp_broadcast, make_Udp_msg, udp_ack};
 use std::net::{UdpSocket, SocketAddr};
 use std::thread::sleep;
 use std::time::{Instant, Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html

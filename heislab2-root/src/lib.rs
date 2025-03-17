@@ -13,8 +13,21 @@ pub mod modules{
         pub mod order_init;
     }
 
-    pub mod master;
-    pub mod slave;
+    pub mod master{
+        pub mod master;
+        pub mod master_test;
+    };
+
+    pub mod slave{
+        pub mod slave;
+        pub mod slave_test;
+    };
+
+    pub mod udp{
+        pub mod udp;
+        pub mod udp_test;
+    };
+    
     pub mod system_init;
     pub mod udp;
 

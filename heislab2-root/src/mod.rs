@@ -1,5 +1,5 @@
 pub mod modules{
-    
+
     pub mod elevator_object {
         pub mod elevator_init;
         pub mod elevator_movement;
@@ -22,6 +22,11 @@ pub mod modules{
     pub mod slave{
         pub mod slave;
         pub mod slave_test;
+    };
+    
+    pub mod udp{
+        pub mod udp;
+        pub mod udp_test;
     };
     
     pub mod system_init;

@@ -50,23 +50,26 @@ use bincode; use sha2::digest::Update;
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
 use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
+use std::sync::Mutex;
+use std::sync::Arc;
 
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::Elevator;
 use crate::modules::slave;
-use crate::modules::master::{Worldview,handle_multiple_masters,Role,reassign_orders,correct_master_worldview};
-use crate::modules::order_object::order_init::Order;
+use crate::modules::master::{Worldview,handle_multiple_masters,Role,reassign_orders,correct_master_worldview,generate_worldview};
+use crate::modules::slave::update_from_worldview;
+use crate::module::system_status::SystemState;
 
-
-static mut failed_orders: Vec<Order> = Vec::new(); //MAKE THIS GLOBAL
+static MY_ID:u8 = 0;
+static MAX_FLOOR:u8 = 4;
 
 
 //----------------------------------------------Enum
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum MessageType {
 
-    Wordview,
+    Worldview,
     Ack,
     Nak,
     New_Order,
@@ -146,7 +149,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn udp_receive(&self, max_wait: u32, slave: &mut Elevator, me: &Elevator, active_elevators: &mut <Elevator>) -> Option<UdpMsg> {
+    pub fn udp_receive(&self, max_wait: u32, slave: &mut Elevator, me: &Elevator, state:&mut SystemState) -> Option<UdpMsg> {
         self.receiver_socket
             .set_read_timeout(Some(Duration::from_millis(max_wait as u64)))
             .expect(&format!("Failed to set read timeout of {} ms", max_wait));
@@ -161,15 +164,15 @@ impl UdpHandler {
                     println!("Message type: {:?}", msg.header.message_type);
 
                     match msg.header.message_type{
-                        MessageType::Wordview => {handle_wordview(slave, me, active_elevators, msg);},
-                        MessageType::Ack => {handle_ack(msg, &mut sent_messages);},
-                        MessageType::Nak => {handle_nak(msg, &mut sent_messages, &self.sender_socket, sender);},
+                        MessageType::Worldview => {handle_worldview(slave, me, state.active_elevators, msg);},
+                        MessageType::Ack => {handle_ack(msg, &mut state.sent_messages);},
+                        MessageType::Nak => {handle_nak(msg, &mut state.sent_messages, &self.sender_socket, sender);},
                         MessageType::New_Order => {handle_new_order(slave, msg, &self.sender_socket, &sender);},
-                        MessageType::New_Master => {handle_new_master(msg, &mut active_elevators);;},
-                        MessageType::New_Online => {handle_new_online(msg,&mut *active_elevators);},
-                        MessageType::Error_Worldview => {handle_error_worldview(msg,&mut *active_elevators);},
-                        MessageType::Error_Offline => {handle_error_offline(msg, &self.sender_socket, &mut *active_elevators);},
-                        MessageType::Order_Complete => {handle_remove_order(msg, &mut *active_elevators, &mut failed_orders);},
+                        MessageType::New_Master => {handle_new_master(msg, state.active_elevators);},
+                        MessageType::New_Online => {handle_new_online(msg, state.active_elevators);},
+                        MessageType::Error_Worldview => {handle_error_worldview(msg,state.active_elevators);},
+                        MessageType::Error_Offline => {handle_error_offline(msg, &self.sender_socket, state.active_elevators,state.failed_orders);},
+                        MessageType::Order_Complete => {handle_remove_order(msg, state.active_elevators, state.failed_orders);},
                         _ => println!("Unreadable message received from {}", sender),
                     }
                         return Some(msg);
@@ -199,11 +202,11 @@ impl UdpHandler {
 ///
 /// Returns - - .
 ///
-pub fn make_Udp_msg(elevator: crate::modules::elevator::Elevator, message_type: MessageType, message: Vec<Elevator>) -> UdpMsg {
+pub fn make_Udp_msg(message_type: MessageType, message: Vec<Elevator>) -> UdpMsg {
     let hash = calc_checksum(&message);
     let mut overhead = UdpHeader {
-        sender_id: elevator.ID,
-        message_type: MessageType,
+        sender_id: MY_ID,
+        message_type: message_type,
         checksum: hash,
     };
 
@@ -228,10 +231,12 @@ pub fn make_Udp_msg(elevator: crate::modules::elevator::Elevator, message_type: 
 ///
 /// Returns - NONE - .
 ///
-pub fn handle_wordview(slave: &mut Elevator, me: &Elevator, active_elevators, msg: UdpMsg) {
+pub fn handle_worldview(slave: &mut Elevator, me: &Elevator, active_elevators:Arc<Mutex<Vec<Elevator>>>, msg: UdpMsg) {
     println!("Updating worldview...");
     update_from_worldview(slave, msg.data.clone());
-    generate_worldview(active_elevators);
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    generate_worldview(active_elevators.clone());
+    drop(active_elevators_locked);
     handle_multiple_masters(me, slave);
 }
 
@@ -328,11 +333,12 @@ pub fn handle_new_order(slave: &mut Elevator, msg: UdpMsg, socket: &UdpSocket, s
 ///
 /// Returns -NONE- .
 ///
-pub fn handle_new_master(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
+pub fn handle_new_master(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
 
     // Set current master's role to Slave
-    if let Some(current_master) = active_elevators.iter_mut().find(|elevator| elevator.role == Role::Master) {
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    if let Some(current_master) = active_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
         println!("Changing current master (ID: {}) to slave.", current_master.ID);
         current_master.role = Role::Slave;
     } else {
@@ -340,7 +346,7 @@ pub fn handle_new_master(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
     }
 
     // Set new master
-    if let Some(new_master) = active_elevators.iter_mut().find(|elevator| elevator.ID == msg.header.sender_id) {
+    if let Some(new_master) = active_elevators_locked.iter_mut().find(|elevator| elevator.ID == msg.header.sender_id) {
         println!("Updating elevator ID {} to Master.", msg.header.sender_id);
         new_master.role = Role::Master;
     } else {
@@ -359,14 +365,17 @@ pub fn handle_new_master(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) {
 ///
 /// Returns `true` if the elevator was added or already in the vector, otherwise `false`.
 ///
-pub fn handle_new_online(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) -> bool {
+pub fn handle_new_online(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+
     // Check if elevator is already active
-    if active_elevators.iter().any(|e| e.ID == msg.header.sender_id) {
+    if active_elevators_locked.iter().any(|e| e.ID == msg.header.sender_id) {
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
     }
+    drop(active_elevators_locked);
 
     // Find address
     let addr = if let Some(elevator) = msg.data.first() {
@@ -385,7 +394,9 @@ pub fn handle_new_online(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) -> b
     // Create a new elevator instance using the provided init function
     match Elevator::init(inn_addr, out_addr, NUM_FLOOR, id) { // 
         Ok(new_elevator) => {
-            active_elevators.push(new_elevator);
+            let mut active_elevators_locked = active_elevators.lock().unwrap();
+            active_elevators_locked.push(new_elevator);
+            drop(active_elevators_locked);
             println!("Added new elevator ID {} at address {}.", msg.header.sender_id, addr);
             return true;
         }
@@ -408,14 +419,14 @@ pub fn handle_new_online(msg: UdpMsg, active_elevators: &mut Vec<Elevator>) -> b
 ///
 /// Returns - - .
 ///
-pub fn handle_error_worldview(msg: UdpMsg, active_elevators: &mut Vec<&Elevator>) {
+pub fn handle_error_worldview(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
-    let missing_orders : Vec<Elevator> = msg.data.clone();
+    let mut missing_orders : Vec<Elevator> = msg.data.clone();
 
     // Compare and correct worldview based on received data
-    if correct_master_worldview(master,&mut missing_orders, active_elevator) {
+    if correct_master_worldview(&mut missing_orders, active_elevators) {
         println!("Worldview corrected based on report from ID: {}", msg.header.sender_id);
     } else {
         println!("ERROR: Failed to correct worldview");
@@ -433,12 +444,13 @@ pub fn handle_error_worldview(msg: UdpMsg, active_elevators: &mut Vec<&Elevator>
 ///
 /// Returns - - .
 ///
-pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: &mut Vec<Elevator>) {
+pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: Arc<Mutex<Vec<Elevator>>>,failed_orders:Arc<Mutex<Vec<Order>>>) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Elevator> = None;
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
 
-    active_elevators.retain(|e| {
+    active_elevators_locked.retain(|e| {
         if e.ID == msg.header.sender_id {
             removed_elevator = Some(e.clone());
             false  // Removing the elevator
@@ -446,6 +458,7 @@ pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: &m
             true  // Keeping the elevator
         }
     });
+    drop(active_elevators_locked);
 
     // Check if the elevator was removed
     if let Some(offline_elevator) = removed_elevator {
@@ -455,7 +468,7 @@ pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: &m
         let orders = offline_elevator.queue.clone();
         println!("Reassigning orders, if any: {:?}", orders);
         let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
-        crate::modules::master::reassign_orders(order_ids, master, active_elevators, &mut failed_orders);
+        crate::modules::master::reassign_orders(order_ids, active_elevators, failed_orders);
     } else {
         println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
     }
@@ -471,13 +484,15 @@ pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: &m
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: UdpMsg, active_elevators: &mut Vec<Elevator>,failed_orders:&mut Vec<Order>) {
+pub fn handle_remove_order(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>,FAILED_ORDERS: Arc<Mutex<Vec<Order>>>) {
     println!("Removing order from ID: {}", msg.header.sender_id);
 
-    if let Some(elevator) = active_elevators.iter_mut().find(|e| e.ID == msg.header.sender_id) {
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+
+    if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == msg.header.sender_id) {
         
         
-        if let Some(elevator_from_msg) = <Vec<Elevator> as AsRef<T>>::as_ref(&msg.data).and_then(|data: &Vec<Elevator>| data.first()) {
+        if let Some(elevator_from_msg) = msg.data.first() {
             
             
             if let Some(order) = elevator_from_msg.queue.first() {

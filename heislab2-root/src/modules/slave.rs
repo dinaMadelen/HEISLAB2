@@ -1,8 +1,6 @@
 //! ## Slave Module
 //! This module provides structs and functions for slave nodes
 //! 
-//! ## The structs includes:
-//! - **last_lifesign**: Time instance of when the last message from master was recived.
 //! 
 //! ## The functions includes:
 //! - 'receive_order'
@@ -27,9 +25,10 @@
 //-----------------------IMPORTS------------------------------------------------------------
 
 use crate::modules::elevator_object::elevator_init::Elevator; //Import for elevator struct
-use crate::modules::udp::{UdpMsg, MessageType, udp_send_ensure, udp_broadcast, make_Udp_msg, udp_ack};
-
-
+use crate::modules::udp::{UdpMsg, MessageType, UdpHandler, udp_broadcast, make_Udp_msg,udp_ack};
+use crate::modules::order_object::order_init::Order;
+use crate::modules::master::Role;
+use crate::modules::system_status::SystemState;
 
 use std::net::{UdpSocket, SocketAddr};
 use std::thread::sleep;
@@ -37,18 +36,13 @@ use std::time::{Instant, Duration}; //https://doc.rust-lang.org/std/time/struct.
 use std::thread; // imported in elevator.rs, do i need it here?
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
-use crate::modules::order_object::order_init::Order;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
-
-
-static mut failed_orders: Vec<Order> = Vec::new(); //MAKE THIS GLOBAL
+static MY_ID:u8 = 0;
+static MAX_FLOOR:u8 = 4;
 
 //-----------------------STRUCTS------------------------------------------------------------
-
-/// Tracks last lifesign from master 
-struct Lifesign {
-    last_lifesign: Instant,
-}
 
 
 //----------------------Fucntions-----------------------------------------------------------
@@ -137,12 +131,15 @@ pub fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview: &Worldview) -> bool {
+pub fn update_from_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>, new_worldview: &Worldview) -> bool {
 
     let mut worldview_changed = false;
 
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+
     for wv_elevator in &new_worldview.elevators{
-        if let Some(elevator) = active_elevators.iter_mut().find(|e| e.ID == wv_elevator.ID){
+        if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == wv_elevator.ID){
+
 
             let active_queue=elevator.queue.clone();
 
@@ -163,8 +160,8 @@ pub fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview
         } else{
             // Add missing worldview elevator to active elevators
             println!("Found missing elevator, Adding new elevator ID {} from worldview.", new_elevator.ID);
-            active_elevators.push(new_elevator.clone());
-            worldview_changeed = true;
+            active_elevators_locked.push(new_elevator.clone());
+            worldview_changed = true;
         }
     }   
     return worldview_changed;
@@ -182,8 +179,8 @@ pub fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview
 ///
 pub fn notify_worldview_error(slave_id: u8, missing_orders: Vec<Elevator>) {
 
-    let message = make_Udp_msg(slave_id, MessageType::Error_Worldview, missing_orders);
-    udp_send(&socket, &master_address.to_string(), &message);
+    let message = make_Udp_msg(MessageType::Error_Worldview, missing_orders);
+    UdpHandler.send(&master_address.to_string(), &message);
 }
 
 
@@ -197,13 +194,13 @@ pub fn notify_worldview_error(slave_id: u8, missing_orders: Vec<Elevator>) {
 ///
 /// Returns - - .
 ///
-pub fn check_master_failure() -> bool {
+pub fn check_master_failure(&mut me, state: &mut SystemState) -> bool {
 
     loop{
         sleep(Duration::from_millis(5000));
-        if  last_lifesign_master>Duration::from_millis(5000) {
+        if  state.last_lifesign>Duration::from_millis(5000) {
             println!("Master not broadcasting, electing new master");
-            set_new_master(&mut me);
+            set_new_master(&mut me,state);
             return true;
         }
     }    
@@ -222,18 +219,20 @@ pub fn check_master_failure() -> bool {
 ///
 /// Returns - - .
 ///
-pub fn set_new_master(me: &mut &Elevator){
+pub fn set_new_master(me: &mut &Elevator,state: &mut SystemState){
 
     sleep(Duration::from_millis((150*&me.ID.into())));
         if check_master_failure(){
-            if let Some(old_master) = active_elevators.iter_mut().find(|e| matches!(e.role, Role::Master)) {
+            let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+            if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| matches!(e.role, Role::Master)) {
                 old_master.role = Role::Slave;
                 println!("Old master (ID: {}) set to Slave.", old_master.ID);
             }
+            drop(active_elevators_locked);
             me.role = Role::Master;
             println!("New master (ID: {}).", me.ID);
 
-            let message = make_Udp_msg(me, MessageType::New_Master, vec![]);
+            let message = make_Udp_msg(MessageType::New_Master, vec![]);
             udp_broadcast(&message);
         }
     

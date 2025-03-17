@@ -2,6 +2,7 @@
 #![warn(unused_variables)]
 #[allow(unused_imports)]
 
+use std::io::*;
 use std::fmt;
 use std::io::*;
 use std::net::TcpStream;
@@ -22,6 +23,13 @@ pub use crate::modules::master::Role;
 pub use super::elevator_status_functions::Status;
 pub use crate::modules::order_object::order_init::Order;
 pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+
+//-------------- GLOBALS/and CONSTANTS
+
+static MY_ID:u8 = 0;
+static MAX_FLOOR:u8 = 4;
+//static mut FAILED_ORDERS: Arc<Mutex<Vec<Order>>> = Arc::new(Mutex::new(Vec::new())); //MAKE THIS GLOBAL
+//static mut ACTIVE_ELEVATORS: Arc<Mutex<Vec<Elevator>>> = Arc::new(Mutex::new(Vec::new())); //MAKE THIS GLOBAL
 
 //Function to find IP adress
 fn get_ip() -> Option<IpAddr> {

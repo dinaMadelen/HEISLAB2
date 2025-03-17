@@ -34,9 +34,11 @@ use crate::modules::order_object::order_init::Order;
 
 use serde::{Serialize, Deserialize};
 use std::net::UdpSocket;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
-
-static mut failed_orders: Vec<Orders> = Vec::new(); //MAKE THIS GLOBAL
+static MY_ID:u8 = 0;
+static MAX_FLOOR:u8 = 4;
 
 /* 
 //-----------------------GLOBAL VARIABLES---------------------------------------------------
@@ -49,7 +51,7 @@ static mut FAILED_ORDERS: Option<Arc<Mutex<Vec<Order>>>> = None;
 /// A struct that holds all the active elevators aswell as all active lights
 pub struct Worldview{
 
-    worldview_elevators: Vec<Elevator>,
+    elevators: Vec<Elevator>,
     lights: Vec<u8>,
 }
 
@@ -80,18 +82,26 @@ pub enum Role{
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn give_order(master: &Elevator, elevator:&Elevator, new_order: Vec<&Order>, active_elevators: &Vec<Elevator>) -> bool {
+pub fn give_order(elevator:&Elevator, new_order: Vec<&Order>, active_elevators: Arc<Mutex<Vec<Elevator>>>) -> bool {
 
     let mut retries = 3;
     let max_timeout_ms = 300;
     let mut received_acks = Vec::new();
 
-    let message = make_Udp_msg(master.ID, MessageType::NewOrder, new_order);
+    for order in new_order {
+        elevator.queue.push(order.clone()); // Assuming elevator has a queue field of Vec<Order>
+    }
 
-    let mut missing_acks: Vec<u8> = active_elevators.iter().map(|e| e.ID).collect(); // https://doc.rust-lang.org/beta/std/iter/trait.Iterator.html
+    let message = make_Udp_msg(MessageType::NewOrder, vec![elevator.clone()]);
+
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
+
+    let mut missing_acks: Vec<u8> = active_elevators_locked.iter().map(|e| e.ID).collect(); // https://doc.rust-lang.org/beta/std/iter/trait.Iterator.html
+
+    drop(active_elevators_locked);
 
 
-    println!("Broadcasting new order floor:{:?} elevator:{}",order, elevator.ID);
+    println!("Broadcasting new order floor:{:?} elevator:{}",order.floor, elevator.ID);
 
     udp_broadcast(&message);
 
@@ -130,7 +140,7 @@ pub fn give_order(master: &Elevator, elevator:&Elevator, new_order: Vec<&Order>,
             // Send the order to all elevators where ack has not been recvied
             for &elevator_id in &missing_acks {
             let target_address = &elevator.ID;
-                UdpHandler.send(socket, &target_address, &message);
+                UdpHandler.send(&target_address, &message);
             }
             
         }
@@ -161,7 +171,7 @@ pub fn give_order(master: &Elevator, elevator:&Elevator, new_order: Vec<&Order>,
 ///
 pub fn remove_from_queue(slave: &mut Elevator, removed_orders: Vec<Elevator>) -> bool {
 
-    let message = make_Udp_msg(me.ID, MessageType::RemoveOrder, removed_orders);
+    let message = make_Udp_msg(MessageType::RemoveOrder, removed_orders);
     return udp_send_ensure(&socket, &slave.inn_address, &message, 3, sent_messages);
 }
 
@@ -179,8 +189,8 @@ pub fn remove_from_queue(slave: &mut Elevator, removed_orders: Vec<Elevator>) ->
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn correct_master_worldview(master: &mut Elevator, missing_orders:&mut Vec<Elevator>, active_elevators: &mut Vec<Elevator>) -> bool {
-    println!("Correcting worldview for master {}", master.ID);
+pub fn correct_master_worldview(missing_orders:&mut Vec<Elevator>, active_elevators: Arc<Mutex<Vec<Elevator>>>) -> bool {
+    println!("Correcting worldview for master {}", MY_ID);
 
     let mut changes_made = false;
 
@@ -190,8 +200,9 @@ pub fn correct_master_worldview(master: &mut Elevator, missing_orders:&mut Vec<E
     }
 
     // Compare active elevators to missing orders list
+    let mut active_elevators_locked = active_elevators.lock().unwrap();
     for missing_elevator in missing_orders.iter_mut() {
-        if let Some(elevator) = active_elevators.iter_mut().find(|e| e.ID == missing_elevator.ID) {
+        if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == missing_elevator.ID) {
             for order in &missing_elevator.queue {
                 if !elevator.queue.contains(&order) {
                     elevator.queue.push(order.clone());
@@ -223,13 +234,14 @@ pub fn correct_master_worldview(master: &mut Elevator, missing_orders:&mut Vec<E
 ///
 /// Returns - Worldview- Returns a worldview struct.
 ///
-pub fn generate_worldview(active_elevators: &Vec<Elevator>) -> Worldview {
+pub fn generate_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>) -> Worldview {
 
     // Find active lights
     let mut lights = Vec::new();
-    for elevator in active_elevators {
+    let mut active_elevators_locked = &*active_elevators.lock().unwrap();
+    for elevator in active_elevators_locked {
 
-        for &order in &elevator.queue {
+        for order in &elevator.queue {
             let floor = order.floor;
             if !lights.contains(&floor) {
                 lights.push(floor);
@@ -242,7 +254,7 @@ pub fn generate_worldview(active_elevators: &Vec<Elevator>) -> Worldview {
     lights.dedup();
 
     return Worldview {
-        elevators: elevators.clone(), 
+        elevators: active_elevators_locked.clone(), 
         lights,                       
     };
 }
@@ -259,11 +271,13 @@ pub fn generate_worldview(active_elevators: &Vec<Elevator>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(master:Elevator) -> bool{
+pub fn master_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>) -> bool{
 
-    let current_worldview = generate_worldview(&elevators);
+    let current_worldview = active_elevators_locked.clone();
+
+    drop(active_elevators_locked);
     
-    let message = make_Udp_msg(master.ID,MessageType::Wordview, data); 
+    let message = make_Udp_msg(MessageType::Wordview, current_worldview); 
     
     return udp_broadcast(&message);
 }
@@ -295,22 +309,26 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 /// else returns `false`
 ///
 ///
-pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>)  -> bool {
+pub fn handle_slave_failure(slave_id: u8,active_elevators: Arc<Mutex<Vec<Elevator>>>, elevators: &mut Vec<Elevator>)  -> bool {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
     // Find and redistribute orders for elevator with that spesific ID
     if let Some(index) = elevators.iter().position(|elevator| elevator.ID == slave_id) {
         // Have to use clone to not take ownership of the queue variable(problem compiling)
-        let orders = elevators[index].queue.clone(); 
+        let orders: Vec<Order> = elevators[index].queue.clone();
         elevators.remove(index);
-        reassign_orders(orders_u8, master, socket, elevators, &mut failed_orders);
+        let mut active_elevators_locked = active_elevators.lock().unwrap();
+        let mut failed_orders_locked = FAILED_ORDERS.lock().unwrap();
+        reassign_orders(orders, active_elevators, &mut failed_order_locked);
         return true;
     } else {
         println!("Error: cant find Elevator with ID {}", slave_id);
         return false;
     }
 }
+
+
 
 /// Reassign order
 /// Reassigns a or more orders from one elevator to active elevators
@@ -321,43 +339,49 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>)  -> boo
 /// * `master` - refrence to master
 /// * `active_elevators` - &mut Vec<Elevator> - refrence to the vector containing the active elevators.
 /// * `socket` - &UdpSocket- socket
-/// * `failed_orders` - list of orders that failed to distribute.
+/// * `FAILED_ORDERS` - list of orders that failed to distribute.
 /// 
 /// # Returns:
 /// 
 /// returns nothing.
 ///
-pub fn reassign_orders(orders: Vec<Order>,master: &Elevator,active_elevators: &Vec<Elevator>,failed_orders: &mut Vec<Order> ) -> bool {
+pub fn reassign_orders(orders: Vec<Order>, active_elevators: Arc<Mutex<Vec<Elevator>>>, FAILED_ORDERS: Arc<Mutex<Vec<Order>>>) -> bool {
     for order in orders {
         let mut assigned = false;
 
-        for best_alternative in best_to_worst_elevator(&order, active_elevators) {
+        let mut active_elevators_locked = active_elevators.lock().unwrap();
+
+        for best_alternative in best_to_worst_elevator(&order, &*active_elevators_locked) {
             println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
-            if give_order(master, &active_elevators[best_alternative as usize], vec![&order], active_elevators) {
+            if give_order(&active_elevators_locked[best_alternative as usize], vec![&order], active_elevators.clone()) {
                 println!("Order {} successfully reassigned to elevator {}", order.floor, best_alternative);
                 assigned = true;
-                break; // Stop trying if assigned successfully
+                break; 
             } else {
                 println!("Failed to assign order {} to elevator {}. Trying next option", order.floor, best_alternative);
             }
         }
+        drop(active_elevators_locked);
 
-        // If no elevator accepted the order, store it for future retry
+        // If no elevator accepted the order, store it for retry
         if !assigned {
             println!("No available elevator for order {}. Storing for retry.", order.floor);
-            failed_orders.push(order);
+            let mut failed_orders_locked = FAILED_ORDERS.lock().unwrap();
+            failed_orders_locked.push(order);
+            drop(failed_orders_locked);
         }
     }
-    if failed_orders.is_empty(){
+
+    let mut failed_orders_locked = FAILED_ORDERS.lock().unwrap();
+    if failed_orders_locked.is_empty() {
         println!("All failed orders are redistributed");
         return true;
-    }else{
-        println!("There are orders that failed to be distributed");
+    } else {
+        println!("There are failed to be distributed");
         return false;
     }
 }
-
 
 
 /// Cost function that returns order to the best fitting elevators from best to worst alternative.

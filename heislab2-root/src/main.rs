@@ -124,7 +124,8 @@ fn main() -> std::io::Result<()> {
             //recv UDP message
 
             //check message type 
-            //if messafe is from master
+            //if message is from master
+            // MAKE HANDLE MASTER MESSAGE FUNCTION
             
 
             //if order is yours
@@ -135,8 +136,9 @@ fn main() -> std::io::Result<()> {
 
             //if message is from slave 
             //if order, add to own full queue and world view
-            //if message is regarding dead elevator update elevators alive
-            //if message is  
+            //if message is an ack update elevators alive
+            
+            
         }
     }
 }

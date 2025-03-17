@@ -27,9 +27,9 @@
 
 //-----------------------IMPORTS------------------------------------------------------------
 
-use crate::modules::udp::{udp_send_ensure,udp_broadcast,udp_receive,make_Udp_msg};
-use crate::modules::elevator::{Elevator,Status};
-use cargo::modules::slave::{reboot_program};
+use crate::modules::udp::udp::{udp_send_ensure,udp_broadcast,udp_receive,make_Udp_msg};
+use crate::modules::elevator_object::elevator_init::{Elevator,Status};
+use cargo::modules::slave::slave::{reboot_program};
 use std::net::UdpSocket;
 
 

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
 #[allow(unused_imports)]
+#![warn(unused_variables)]
 
 use std::fmt;
 use std::io::*;

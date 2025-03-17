@@ -20,21 +20,28 @@
 //! [dependencies]
 //! ```
 
-
 //the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
 
 #[warn(non_snake_case)]
 
 //-----------------------IMPORTS------------------------------------------------------------
 
-use crate::modules::elevator::Elevator; //Import for elevator struct
+use crate::modules::elevator_object::elevator_init::Elevator; //Import for elevator struct
 use crate::modules::udp::{UdpMsg, MessageType, udp_send_ensure, udp_broadcast, make_Udp_msg, udp_ack};
+
+
+
 use std::net::{UdpSocket, SocketAddr};
 use std::thread::sleep;
 use std::time::{Instant, Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::thread; // imported in elevator.rs, do i need it here?
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
+use crate::modules::order_object::order_init::Order;
+
+
+
+static mut failed_orders: Vec<Order> = Vec::new(); //MAKE THIS GLOBAL
 
 //-----------------------STRUCTS------------------------------------------------------------
 
@@ -62,15 +69,15 @@ struct Lifesign {
 ///
 /// Returns - bool- 'true' if order has been added to queue or the order already was in the queue and ackowledgement has been sent, if the acknowledgement failed it returns 'false' 
 ///
-fn receive_order(slave: &mut Elevator, new_order: u8, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg) -> bool {
+pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg) -> bool {
     
     if !slave.queue.contains(&new_order) {
-        slave.queue.push(new_order);
-        println!("{} added to elevator {}", new_order, slave.id);
-        return udp_ack(socket, master_address, original_msg, slave.id);
+        slave.queue.push(new_order.clone());
+        println!("{} added to elevator {}", new_order.floor, slave.ID);
+        return udp_ack(socket, master_address, original_msg, slave.ID);
     }else{
-        println!("{} already in queue for elevator {}", new_order, slave.id);
-        return udp_ack(socket, master_address, original_msg, slave.id);
+        println!("{} already in queue for elevator {}", new_order.floor, slave.ID);
+        return udp_ack(socket, master_address, original_msg, slave.ID);
     }
 }
 
@@ -86,9 +93,9 @@ fn receive_order(slave: &mut Elevator, new_order: u8, socket: &UdpSocket, master
 ///
 /// Returns - bool - 'true' if succsessful broadcast, 'false' if failed to broadcast.
 ///
-fn notify_completed(slave_id: u8, order: u8) {
+pub fn notify_completed(slave_id: u8, order: Order) -> bool {
 
-    let message = make_udp_msg(slave_id, MessageType::OrderCompleted, order);
+    let message = make_Udp_msg(slave_id, MessageType::Order_Complete, elevator:&Elevator);
     return udp_broadcast(&message);
 }
 
@@ -104,14 +111,14 @@ fn notify_completed(slave_id: u8, order: u8) {
 ///
 /// Returns - bool - returns 'true' if the order was successuly removed, returns 'false' if the floor couldnt be found in the queue.
 ///
-fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
+pub fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 
-    if let Some(index) = slave.queue.iter().position(|&o| o == order) {
+    if let Some(index) = slave.queue.iter().position(|o| o.floor == order) {
         slave.queue.remove(index);
-        println!("Order {} removed from queue of elevator {}", order, slave.id);
+        println!("Order {} removed from queue of elevator {}", order, slave.ID);
         return true;
     }
-    println!("Order {} couldnt be found in queue of elevator {}", order, slave.id)
+    println!("Order {} couldnt be found in queue of elevator {}", order, slave.ID);
     return false;
 }
 
@@ -123,59 +130,44 @@ fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 /// # Arguments:
 /// 
 /// * `active_elevators` - &mut Vec<Elevator> - refrence to list of active elevatosrs.
-/// * `new_worldview` - Vec<Vec<u8>>) - Vectors of vectors containing the orders, the outer vector holds each queue. .
+/// * `new_worldview` - &worlcview) - worldview struct.
 /// 
 /// 
 /// # Returns:
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview: Vec<Vec<u8>>) -> bool {
+pub fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview: &Worldview) -> bool {
 
-    for elevator in active_elevators.iter_mut(){
-        
+    let mut worldview_changed = false;
 
-        let mut elevator_queue_snapshot = elevator.queue.clone();
-        
-        //Sort orders
-        let mut all_orders: Vec<u8> = new_worldview.iter().flatten().cloned().collect();
-        all_orders.sort();
-        all_orders.dedup();
+    for wv_elevator in &new_worldview.elevators{
+        if let Some(elevator) = active_elevators.iter_mut().find(|e| e.ID == wv_elevator.ID){
 
-        if elavtor_queue_snapshot == all_orders {
-            // No need to change worldview for this order, check next elevator
-            println!("Received worldview matches for ID {}" elvator.ID);
-            continue;
+            let active_queue=elevator.queue.clone();
+
+            //No new orders
+            if active_queue == new_elevaotor.queue{
+                println!("Worldview matches for ID:{}", elevator.ID);
+                continue;
+            }
+
+            //Found missing order, add them to queue
+            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !active_queue.contains(order)) .cloned().collect();
+            if !missing_orders.is_empty() {
+                println!("Elevator {} is missing orders {:?}. Adding...", active_elevator.ID, missing_orders);
+                elevator.queue.extend(missing_orders);
+                worldview_changed = true;
+            }
+
+        } else{
+            // Add missing worldview elevator to active elevators
+            println!("Found missing elevator, Adding new elevator ID {} from worldview.", new_elevator.ID);
+            active_elevators.push(new_elevator.clone());
+            worldview_changeed = true;
         }
-
-        let missing_orders: Vec<u8> = elevator_queue_snapshot.iter()
-            // Find orders that are missing from queues.
-            .filter(|&&order| !all_orders.contains(&order))
-            .cloned()
-            .collect();
-
-        if !missing_orders.is_empty() {
-            // No missing orders in queues, must be missing from worldview, notify master
-            notify_worldview_error(elevator.id, &missing_orders);
-            println!("Master worldview is missing orders, notifying master");
-            return false;
-        }
-
-        let new_orders: Vec<u8> = all_orders.iter()
-            .filter(|&&order| !elevator_queue_snapshot.contains(&order))
-            .cloned()
-            .collect();
-
-        elevator.queue.extend(new_orders);
-        println!("Updated worldview");
-    }
-        // Merge worldviews (Union of current and new)
-        for order in new_orders {
-            elevator.queue.insert(order);
-        }
-        println!("Updated worldview");
-    return true;
-
+    }   
+    return worldview_changed;
 }
 
 /// Missing order in worldview, notify master that there is a missing order/orders
@@ -188,10 +180,10 @@ fn update_from_worldview(active_elevators: &mut Vec<Elevator>, new_worldview: Ve
 ///
 /// Returns - - .
 ///
-fn notify_worldview_error(slave_id: u8, missing_orders: Vec<u8>) {
+pub fn notify_worldview_error(slave_id: u8, missing_orders: Vec<Elevator>) {
 
-    let message = make_udp_msg(slave_id, MessageType::WorldviewError, missing_orders);
-    udp_send_ensure(&socket, &master_address.to_string(), &message);
+    let message = make_Udp_msg(slave_id, MessageType::Error_Worldview, missing_orders);
+    udp_send(&socket, &master_address.to_string(), &message);
 }
 
 
@@ -205,21 +197,22 @@ fn notify_worldview_error(slave_id: u8, missing_orders: Vec<u8>) {
 ///
 /// Returns - - .
 ///
-fn check_master_failure() -> bool {
+pub fn check_master_failure() -> bool {
 
-    sleep(time::Duration::from_millis(5000));
-    
-    if  last_lifesign_master>Duration::from_secs(5) {
-        println!("Master not broadcasting, electing new master");
-        set_new_master();
-        return true;
-    }
+    loop{
+        sleep(Duration::from_millis(5000));
+        if  last_lifesign_master>Duration::from_millis(5000) {
+            println!("Master not broadcasting, electing new master");
+            set_new_master(&mut me);
+            return true;
+        }
+    }    
     println!("Master still alive");
     return false;
 }
 
 
-/// Wait id*150ms before checking if the master role is taken, if not assume master role and broadcast worldview
+/// Wait ID*150ms before checking if the master role is taken, if not assume master role and broadcast worldview
 /// 
 /// # Arguments:
 /// 
@@ -229,18 +222,21 @@ fn check_master_failure() -> bool {
 ///
 /// Returns - - .
 ///
-set_new_master(&mut me);{
+pub fn set_new_master(me: &mut &Elevator){
 
-    loop{
-    sleep(Duration::from_millis(150*&me.id));
-        if detect_master_failure(){
-            //old_master.role = Role::Slave //i have to fix this as there is no role in elevator struct
-            //me.role = Role::Master// same here
-            let message = make_udp_msg(me.id, MessageType::Worldview, vec![]);
-            udp_broadcast(&socket, &message);
-            break;
+    sleep(Duration::from_millis((150*&me.ID.into())));
+        if check_master_failure(){
+            if let Some(old_master) = active_elevators.iter_mut().find(|e| matches!(e.role, Role::Master)) {
+                old_master.role = Role::Slave;
+                println!("Old master (ID: {}) set to Slave.", old_master.ID);
+            }
+            me.role = Role::Master;
+            println!("New master (ID: {}).", me.ID);
+
+            let message = make_Udp_msg(me, MessageType::New_Master, vec![]);
+            udp_broadcast(&message);
         }
-    }
+    
 }
 
 /// Starts a new instance and kills the old instance of the program
@@ -253,7 +249,7 @@ set_new_master(&mut me);{
 ///
 /// Returns - - .
 ///
-fn reboot_program(){
+pub fn reboot_program(){
 
     Command::new(env::current_exe().expect("Failed to find path to program"))
         .spawn()

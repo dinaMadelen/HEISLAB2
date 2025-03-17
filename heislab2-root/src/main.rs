@@ -136,7 +136,7 @@ fn main() -> std::io::Result<()> {
             //if message is from slave 
             //if order, add to own full queue and world view
             //if message is regarding dead elevator update elevators alive
-            //if message is 
+            //if message is  
         }
     }
 }

@@ -16,6 +16,7 @@ pub mod modules{
     pub mod master;
     pub mod slave;
     pub mod system_init;
+    pub mod system_status;
     pub mod udp;
     
 }

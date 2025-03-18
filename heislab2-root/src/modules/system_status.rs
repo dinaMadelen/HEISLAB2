@@ -3,10 +3,12 @@ use crate::modules::elevator_object::elevator_init::Elevator;
 use crate::modules::udp::{UdpMsg};
 
 use std::sync::{Arc, Mutex};
+use std::time::{Instant, Duration};
 
 pub struct SystemState {
-    pub ME : Elevator,
-    pub master: Elevator,
+    pub me_ID : u8,
+    pub master_ID: u8,
+    pub last_lifesign: Instant,
     pub active_elevators: Arc<Mutex<Vec<Elevator>>>,
     pub failed_orders: Arc<Mutex<Vec<Order>>>,
     pub sent_messages: Arc<Mutex<Vec<UdpMsg>>>,

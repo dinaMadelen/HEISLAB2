@@ -38,7 +38,8 @@
 //! ```
 //! these are primarily used for serialization/deserialization and calculation hash for checksum. 
 
-
+#[allow(unused_imports)]
+#[allow(unused_variables)]
 
 //----------------------------------------------Imports
 use std::net::{SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
@@ -50,23 +51,22 @@ use bincode; use sha2::digest::Update;
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
 use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
-use std::sync::Mutex;
-use std::sync::Arc;
-
+use std::sync::{Mutex,Arc};
+use std::net::{Ipv4Addr,IpAddr};
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::Elevator;
 use crate::modules::slave;
 use crate::modules::master::{Worldview,handle_multiple_masters,Role,reassign_orders,correct_master_worldview,generate_worldview};
 use crate::modules::slave::update_from_worldview;
-use crate::module::system_status::SystemState;
+use crate::modules::system_status::SystemState;
 
 static MY_ID:u8 = 0;
 static MAX_FLOOR:u8 = 4;
 
 
 //----------------------------------------------Enum
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum MessageType {
 
     Worldview,
@@ -81,10 +81,11 @@ pub enum MessageType {
     Error_Offline,
     Request_Resend,
     Order_Complete,
+    Remove_Order,
 }
 
 //----------------------------------------------Structs
-#[derive(Debug, Serialize, Deserialize, Clone)] // this is needed to serialize message
+#[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
 //UDP Header
 pub struct UdpHeader {
     pub sender_id: u8,            // ID of the sender of the message.
@@ -92,7 +93,7 @@ pub struct UdpHeader {
     pub checksum: Vec<u8>,        // Hash of data to check message integrity.
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)] // this is needed to serialize message
+#[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
                                                 //UDP Message Struct
 pub struct UdpMsg {
     pub header: UdpHeader, // Header struct containing information about the message itself
@@ -120,7 +121,7 @@ impl UdpHandler {
     }
 
     /// Sends a UDP message
-    pub fn udp_send(&self, target_address: SocketAddr, msg: &UdpMsg) -> bool {
+    pub fn send(&self, target_address: &SocketAddr, msg: &UdpMsg) -> bool {
         let data = serialize(msg);
         match self.sender_socket.send_to(&data, target_address) {
             Ok(_) => {
@@ -135,7 +136,7 @@ impl UdpHandler {
     }
 
 
-    /// udp_receive
+    /// receive
     /// 
     /// # Arguments:
     /// 
@@ -149,7 +150,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn udp_receive(&self, max_wait: u32, slave: &mut Elevator, me: &Elevator, state:&mut SystemState) -> Option<UdpMsg> {
+    pub fn receive(&self, max_wait: u32, state:&mut SystemState) -> Option<UdpMsg> {
         self.receiver_socket
             .set_read_timeout(Some(Duration::from_millis(max_wait as u64)))
             .expect(&format!("Failed to set read timeout of {} ms", max_wait));
@@ -164,15 +165,15 @@ impl UdpHandler {
                     println!("Message type: {:?}", msg.header.message_type);
 
                     match msg.header.message_type{
-                        MessageType::Worldview => {handle_worldview(slave, me, state.active_elevators, msg);},
-                        MessageType::Ack => {handle_ack(msg, &mut state.sent_messages);},
-                        MessageType::Nak => {handle_nak(msg, &mut state.sent_messages, &self.sender_socket, sender);},
-                        MessageType::New_Order => {handle_new_order(slave, msg, &self.sender_socket, &sender);},
-                        MessageType::New_Master => {handle_new_master(msg, state.active_elevators);},
-                        MessageType::New_Online => {handle_new_online(msg, state.active_elevators);},
-                        MessageType::Error_Worldview => {handle_error_worldview(msg,state.active_elevators);},
-                        MessageType::Error_Offline => {handle_error_offline(msg, &self.sender_socket, state.active_elevators,state.failed_orders);},
-                        MessageType::Order_Complete => {handle_remove_order(msg, state.active_elevators, state.failed_orders);},
+                        MessageType::Worldview => {handle_worldview(state, &msg);},
+                        MessageType::Ack => {handle_ack(&msg, &mut &state.sent_messages);},
+                        MessageType::Nak => {handle_nak(&msg, &mut &state.sent_messages, &self.sender_socket, &sender, &self);},
+                        MessageType::New_Order => {handle_new_order(&msg, &self.sender_socket, &sender, state, &self);},
+                        MessageType::New_Master => {handle_new_master(&msg, &state.active_elevators);},
+                        MessageType::New_Online => {handle_new_online(&msg, state);},
+                        MessageType::Error_Worldview => {handle_error_worldview(&msg, &state.active_elevators);},
+                        MessageType::Error_Offline => {handle_error_offline(&msg, &self.sender_socket, state, &self);},
+                        MessageType::Order_Complete => {handle_remove_order(&msg, &state.active_elevators, &state.failed_orders);},
                         _ => println!("Unreadable message received from {}", sender),
                     }
                         return Some(msg);
@@ -202,7 +203,7 @@ impl UdpHandler {
 ///
 /// Returns - - .
 ///
-pub fn make_Udp_msg(message_type: MessageType, message: Vec<Elevator>) -> UdpMsg {
+pub fn make_Udp_msg(message_type: MessageType, message: &Vec<Elevator>) -> UdpMsg {
     let hash = calc_checksum(&message);
     let mut overhead = UdpHeader {
         sender_id: MY_ID,
@@ -212,7 +213,7 @@ pub fn make_Udp_msg(message_type: MessageType, message: Vec<Elevator>) -> UdpMsg
 
     let msg = UdpMsg {
         header: overhead,
-        data: message,
+        data: message.clone(),
     };
     return msg;
 }
@@ -231,13 +232,15 @@ pub fn make_Udp_msg(message_type: MessageType, message: Vec<Elevator>) -> UdpMsg
 ///
 /// Returns - NONE - .
 ///
-pub fn handle_worldview(slave: &mut Elevator, me: &Elevator, active_elevators:Arc<Mutex<Vec<Elevator>>>, msg: UdpMsg) {
+pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
     println!("Updating worldview...");
-    update_from_worldview(slave, msg.data.clone());
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
-    generate_worldview(active_elevators.clone());
-    drop(active_elevators_locked);
-    handle_multiple_masters(me, slave);
+    update_from_worldview(state, &msg.data);
+    let active_elevators: Vec<Elevator> = {
+        let active_elevators_locked = state.active_elevators.lock().unwrap();
+        active_elevators_locked.clone() 
+    };  
+    generate_worldview(active_elevators);
+    handle_multiple_masters(state, &msg.header.sender_id);
 }
 
 /// handle_ack
@@ -251,15 +254,17 @@ pub fn handle_worldview(slave: &mut Elevator, me: &Elevator, active_elevators:Ar
 ///
 /// Returns -NONE- .
 ///
-pub fn handle_ack(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>) {
+pub fn handle_ack(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>) {
     println!("Received ACK from ID: {}", msg.header.sender_id);
 
+    let mut sent_messages_locked = sent_messages.lock().unwrap();
+
     // Check if this ACK matches sent message
-    if let Some(index) = sent_messages.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
+    if let Some(index) = sent_messages_locked.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
         println!("ACK matches message with checksum: {:?}", msg.data);
         
         // Remove acknowledged message from tracking
-        sent_messages.remove(index);
+        sent_messages_locked.remove(index);
     } else {
         println!("ERROR: Received ACK with unknown checksum {:?}", msg.data);
     }
@@ -279,15 +284,16 @@ pub fn handle_ack(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>) {
 ///
 /// Returns - - .
 ///
-pub fn handle_nak(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>, socket: &UdpSocket, target_address: SocketAddr) {
+pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, socket: &UdpSocket, target_address: &SocketAddr,udp_handler: &UdpHandler) {
     println!("Received NAK from ID: {}", msg.header.sender_id);
 
     // Check if this NAK matches sent message
-    if let Some(index) = sent_messages.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
+    let mut sent_messages_locked = sent_messages.lock().unwrap();
+    if let Some(index) = sent_messages_locked.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
         println!("NAK matches message with checksum: {:?}. Resending...", msg.data);
 
         // Resend the message
-        udp_send(socket, target_address, &sent_messages[index]);
+        udp_handler.send(target_address, &sent_messages_locked[index]);
     } else {
         println!("ERROR: Received NAK with unknown checksum {:?}", msg.data);
     }
@@ -306,21 +312,31 @@ pub fn handle_nak(msg: UdpMsg, sent_messages: &mut Vec<UdpMsg>, socket: &UdpSock
 ///
 /// Returns -None- .
 ///
-pub fn handle_new_order(slave: &mut Elevator, msg: UdpMsg, socket: &UdpSocket, sender_address: &SocketAddr) {
-    println!("New order received ID: {}: {:?}", msg.header.sender_id, msg.data);
+
+pub fn handle_new_order(msg: &UdpMsg, socket: &UdpSocket, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler) {
+    println!("New order received ID: {}", msg.header.sender_id);
 
     if let Some(elevator)=msg.data.first(){
-        for order in &elevator.queue {
-            if !slave.queue.contains(&order){
-                slave.queue.push(order.clone());
-                println!("Order {:?} successfully added to elevator {}.", order, slave.ID);
-            }else {
-                println!("Order {:?} already in queue for elevator {}.", order, slave.ID);
+        let elevator_id = elevator.ID;
+
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
+
+        if let Some(update_elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == elevator_id){
+            for order in &elevator.queue {
+                if !update_elevator.queue.contains(&order){
+                    update_elevator.queue.push(order.clone());
+                    println!("Order {:?} successfully added to elevator {}.", order, elevator.ID);
+                }else {
+                    println!("Order {:?} already in queue for elevator {}.", order, elevator.ID);
+                }
             }
         }
+        udp_ack(socket, *sender_address, &msg, elevator.ID, udp_handler);
+    }else{
+        println!("ERROR: Failed to find elevator");
     }
 
-    udp_ack(socket, *sender_address, &msg, slave.ID);
+    
 }
 
 /// handle_new_master
@@ -333,7 +349,7 @@ pub fn handle_new_order(slave: &mut Elevator, msg: UdpMsg, socket: &UdpSocket, s
 ///
 /// Returns -NONE- .
 ///
-pub fn handle_new_master(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) {
+pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
 
     // Set current master's role to Slave
@@ -365,10 +381,10 @@ pub fn handle_new_master(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>
 ///
 /// Returns `true` if the elevator was added or already in the vector, otherwise `false`.
 ///
-pub fn handle_new_online(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) -> bool {
+pub fn handle_new_online(msg: &UdpMsg, state:&mut SystemState) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
     // Check if elevator is already active
     if active_elevators_locked.iter().any(|e| e.ID == msg.header.sender_id) {
@@ -387,24 +403,27 @@ pub fn handle_new_online(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>
 
     //Dummy values, maybe crate a config file
     let NUM_FLOOR = 4; // find the global variable and replace this
-    let inn_addr =109.108.196.139:3500;
-    let out_addr =109.108.196.139:3600;
-    id=1;
+    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
+    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
+    let id=1;
 
     // Create a new elevator instance using the provided init function
-    match Elevator::init(inn_addr, out_addr, NUM_FLOOR, id) { // 
-        Ok(new_elevator) => {
-            let mut active_elevators_locked = active_elevators.lock().unwrap();
-            active_elevators_locked.push(new_elevator);
-            drop(active_elevators_locked);
-            println!("Added new elevator ID {} at address {}.", msg.header.sender_id, addr);
-            return true;
-        }
+
+
+    let new_elevator = match Elevator::init(&inn_addr, &out_addr, NUM_FLOOR, id, state) {
+        Ok(elevator) => elevator,
         Err(e) => {
             println!("Failed to initialize new elevator {}: {}", msg.header.sender_id, e);
             return false;
         }
-    }
+    };
+
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    active_elevators_locked.push(new_elevator);
+    drop(active_elevators_locked);
+    println!("Added new elevator ID {} at address {}.", msg.header.sender_id, addr);
+    return true;
+    
 }
 
 
@@ -419,7 +438,7 @@ pub fn handle_new_online(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>
 ///
 /// Returns - - .
 ///
-pub fn handle_error_worldview(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>) {
+pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
@@ -444,11 +463,11 @@ pub fn handle_error_worldview(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Eleva
 ///
 /// Returns - - .
 ///
-pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: Arc<Mutex<Vec<Elevator>>>,failed_orders:Arc<Mutex<Vec<Order>>>) {
+pub fn handle_error_offline(msg: &UdpMsg, socket: &UdpSocket,state: &mut SystemState ,udp_handler: &UdpHandler) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Elevator> = None;
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
     active_elevators_locked.retain(|e| {
         if e.ID == msg.header.sender_id {
@@ -468,7 +487,7 @@ pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: Ar
         let orders = offline_elevator.queue.clone();
         println!("Reassigning orders, if any: {:?}", orders);
         let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
-        crate::modules::master::reassign_orders(order_ids, active_elevators, failed_orders);
+        crate::modules::master::reassign_orders(&order_ids, state ,udp_handler);
     } else {
         println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
     }
@@ -484,7 +503,7 @@ pub fn handle_error_offline(msg: UdpMsg, socket: &UdpSocket,active_elevators: Ar
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: UdpMsg, active_elevators: Arc<Mutex<Vec<Elevator>>>,FAILED_ORDERS: Arc<Mutex<Vec<Order>>>) {
+pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>,failed_orders: &Arc<Mutex<Vec<Order>>>) {
     println!("Removing order from ID: {}", msg.header.sender_id);
 
     let mut active_elevators_locked = active_elevators.lock().unwrap();
@@ -548,7 +567,7 @@ pub fn serialize(msg: &UdpMsg) -> Vec<u8> {
 /// Returns - Option<UdpMsg>- .returns either the deserialized message or none
 ///
 pub fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
-    match bincode::deserialize<UdpMsg>(buffer){
+    match bincode::deserialize::<UdpMsg>(buffer){
         Ok(msg)=>{
         return Some(msg)},
         Err(e)=> {
@@ -572,7 +591,7 @@ pub fn calc_checksum(data: &Vec<Elevator>) -> Vec<u8> {
     let serialized_data = bincode::serialize(data).expect("Failed to serialize data");
     let mut hasher = Sha256::new();
     Digest::update(&mut hasher, &serialized_data);
-    let hash?hasher.finalize();
+    let hash = hasher.finalize();
     return hash.as_slice().to_vec();
 }
 
@@ -605,7 +624,7 @@ pub fn comp_checksum(msg: &UdpMsg) -> bool {
 ///
 /// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
-pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8) -> bool {
+pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
 
     let ack_msg = UdpMsg {
@@ -617,7 +636,7 @@ pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &Ud
         data:Vec::new(), 
     };
 
-    return udp_send(socket, target_address, &ack_msg);
+    return udp_handler.send(&target_address, &ack_msg);
 }
 
 
@@ -635,7 +654,7 @@ pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &Ud
 ///
 /// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
-pub fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8) -> bool {
+pub fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
 
     let nak_msg = UdpMsg {
@@ -647,10 +666,10 @@ pub fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &Ud
         data:Vec::new(), 
     };
 
-    return udp_send(socket, target_address, &nak_msg);
+    return udp_handler.send(&target_address, &nak_msg);
 }
 
-
+/* 
 
 ///udp_send
 ///Sending UDP message.
@@ -678,6 +697,8 @@ pub fn udp_send(socket: &UdpSocket, target_adress: SocketAddr, msg: &UdpMsg) -> 
         }
     }
 }
+
+*/
 
 ///udp_broadcast
 ///Broadcast
@@ -712,6 +733,8 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
     return false;
 }   
 
+
+/* 
 ///udp_send_ensure
 /// Sending UDP, with retry
 /// 
@@ -787,6 +810,9 @@ pub fn udp_send_ensure(socket: &UdpSocket, target_addr: &str, msg: &UdpMsg, max_
     false
 }
 
+*/
+
+/* 
 /// udp_receive_ensure
 /// Reciving UDP, with ACK
 /// 
@@ -834,7 +860,7 @@ pub fn udp_receive_ensure(socket: &UdpSocket, max_wait: u8, receiver_id: u8) -> 
 
     return None;
 }
-
+*/
 
 //------------------------------Tests-----------------------
 
@@ -887,6 +913,7 @@ mod tests {
         assert!(comp_checksum(&msg));
     }
 
+    /* 
     #[test]
     fn test_udp_send_receive() {
         let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
@@ -913,6 +940,7 @@ mod tests {
         let received_msg = udp_receive_ensure(&recv_socket, 5, 2).expect("Failed to receive message");
         assert_eq!(msg.data, received_msg.data);
     }
+    */
 
     #[test]
     fn test_udp_ack_nak() {
@@ -941,6 +969,7 @@ mod tests {
         assert_eq!(received_ack.data, original_msg.header.checksum);
     }
 
+    /* 
     #[test]
     fn test_udp_send_ensure() {
         let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
@@ -969,6 +998,8 @@ mod tests {
         let result = udp_send_ensure(&recv_socket, &local_addr.to_string(), &msg, 3, &mut sent_messages);
         assert!(result);
     }
+    */
+
 
     #[test]
     fn test_handle_ack_nak_logic() {

@@ -5,101 +5,85 @@
 use std::io::*;
 use std::fmt;
 use std::io::*;
-use std::net::TcpStream;
 use std::sync::*;
 use std::time::Duration;
 use std::thread;
 use std::convert::TryInto;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
-use std::net::UdpSocket;
+use std::net::{TcpStream,IpAddr, Ipv4Addr, SocketAddr,UdpSocket}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
 use std::sync::{Arc, Mutex};
 use std::io::ErrorKind;
 use serde::{Deserialize, Serialize};
+use local_ip_address::local_ip;
 
-
-
+pub use crate::modules::system_status::SystemState;
 pub use crate::modules::elevator_object::*;
 pub use crate::modules::master::Role;
 pub use super::elevator_status_functions::Status;
 pub use crate::modules::order_object::order_init::Order;
 pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
+
 //-------------- GLOBALS/and CONSTANTS
 
-static MY_ID:u8 = 0;
-static MAX_FLOOR:u8 = 4;
-//static mut FAILED_ORDERS: Arc<Mutex<Vec<Order>>> = Arc::new(Mutex::new(Vec::new())); //MAKE THIS GLOBAL
-//static mut ACTIVE_ELEVATORS: Arc<Mutex<Vec<Elevator>>> = Arc::new(Mutex::new(Vec::new())); //MAKE THIS GLOBAL
 
-//Function to find IP adress
-fn get_ip() -> Option<IpAddr> {
-    // Binds to 0.0.0.0 to get local network IP
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-
-    // "Connects" to somthing, e.g. NTNU's server to trick OS to assign local IP
-    socket.connect("ntnu.no:80").ok()?; 
-    
-    // Get local IP
-    socket.local_addr().ok().map(|addr| addr.ip())
-}
- 
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Elevator {
 
    // #[serde(skip)] // TcpStream cant be serialized, do we need it to be TcpSteam?, i dont see what we need TCPstream for as we use UDP
    //pub socket: Arc<Mutex<TcpStream>>,
 
-    pub inn_address: String,      // UDP Adress for reciving messages
-    pub out_address: String,      // UDP Adress for sending messages
+    pub inn_address: SocketAddr,  // UDP Adress for reciving messages
+    pub out_address: SocketAddr,  // UDP Adress for sending messages
     pub num_floors: u8,           // Isnt this the same for every elevator
     pub ID: u8,                   // ID for this spesific elevaotr
     pub current_floor: u8,        // Which floor the elevator was last registerd at      
     pub queue: Vec<Order>,        // The current queue the elevator is servicing
     pub status: Status,           // Current status of the elevator
-    pub direction: i8,             // Current direction the elevator is headed
-    pub role: Role,
+    pub direction: i8,            // Current direction the elevator is headed
+    pub role: Role,               // Current Role of this elevator
 }
 
 
 impl Elevator {
   
-    pub fn init(inn_addr: &str, out_addr: &str, num_floors: u8, id: u8) -> Elevator {
+    pub fn init(inn_addr: &SocketAddr, out_addr: &SocketAddr, num_floors: u8, id: u8,state:&mut SystemState) -> std::io::Result<Elevator> {
         let my_id = 0; // Should we make a config file for each computer?
         let inport = 3500;
         let outport = 3600;
 
-        let (inn, out) = if id == my_id {
-            match get_ip() {
-                Some(local_ip) => {
-                    let inn = format!("{}:{}",local_ip, inport);
-                    let out = format!("{}:{}",local_ip, outport);
-                    println!("Assigned IP: {} (InPort: {}, OutPort: {})", local_ip, inport, outport);
+        let (inn, out) = if id == state.me_ID {
+            match local_ip() {
+                Ok(ip) => {
+                    let inn = SocketAddr::new(ip, inport);
+                    let out = SocketAddr::new(ip, outport);
+
+                    println!("Assigned IP: {} (InPort: {}, OutPort: {})", ip, inport, outport);
                     (inn, out)
                 }
-                None => {
-                    println!("Could not find local IP address.");
-                    ("127.0.0.1:3500".to_string(), "127.0.0.1:3600".to_string())
+                Err(_) => {
+                    println!("Could not find local IP address., sets default");
+                    let inn = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
+                    let out = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
+                    (inn,out) 
                 }
             }
-        } else {
-            // Convert to strings for so it can be serialized
-            (inn_addr.to_string(), out_addr.to_string())
+        }else{
+            (*inn_addr, *out_addr)
         };
 
 
-        Elevator{
-            //socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
-            inn_address: inn,
-            out_address: out,
-            num_floors,
-            ID: id,
-            current_floor: 1,
-            queue: Vec::new(),
-            status: Status::Idle,
-            direction: 0,
-            role: Role::Slave,
-        }
+        return Ok(Elevator{
+                //socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
+                inn_address: inn,
+                out_address: out,
+                num_floors,
+                ID: id,
+                current_floor: 1,
+                queue: Vec::new(),
+                status: Status::Idle,
+                direction: 0,
+                role: Role::Slave,
+            });
     }
 
 

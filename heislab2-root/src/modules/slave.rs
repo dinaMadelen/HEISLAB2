@@ -21,6 +21,8 @@
 //the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
 
 #[warn(non_snake_case)]
+#[allow(unused_imports)]
+#[allow(unused_variables)]
 
 //-----------------------IMPORTS------------------------------------------------------------
 
@@ -37,7 +39,7 @@ use std::thread; // imported in elevator.rs, do i need it here?
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
 use std::sync::{Arc, Mutex};
-use std::thread;
+
 
 static MY_ID:u8 = 0;
 static MAX_FLOOR:u8 = 4;
@@ -63,15 +65,15 @@ static MAX_FLOOR:u8 = 4;
 ///
 /// Returns - bool- 'true' if order has been added to queue or the order already was in the queue and ackowledgement has been sent, if the acknowledgement failed it returns 'false' 
 ///
-pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg) -> bool {
+pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg, udp_handler: &UdpHandler) -> bool {
     
     if !slave.queue.contains(&new_order) {
         slave.queue.push(new_order.clone());
         println!("{} added to elevator {}", new_order.floor, slave.ID);
-        return udp_ack(socket, master_address, original_msg, slave.ID);
+        return udp_ack(socket, master_address, original_msg, slave.ID, udp_handler);
     }else{
         println!("{} already in queue for elevator {}", new_order.floor, slave.ID);
-        return udp_ack(socket, master_address, original_msg, slave.ID);
+        return udp_ack(socket, master_address, original_msg, slave.ID, udp_handler);
     }
 }
 
@@ -87,10 +89,20 @@ pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket,
 ///
 /// Returns - bool - 'true' if succsessful broadcast, 'false' if failed to broadcast.
 ///
-pub fn notify_completed(slave_id: u8, order: Order) -> bool {
+pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
 
-    let message = make_Udp_msg(slave_id, MessageType::Order_Complete, elevator:&Elevator);
-    return udp_broadcast(&message);
+    let active_elevators_locked = status.active_elevators.lock().unwrap();
+
+    if let Some(elevator) = active_elevators_locked.iter().find(|e| e.ID == status.me_ID) {
+        let mut remove_elevator = elevator.clone();
+        remove_elevator.queue = vec![completed_order];
+
+        let message = make_Udp_msg(MessageType::Order_Complete, &vec![remove_elevator]);
+        return udp_broadcast(&message);
+    }else{
+        println!("Error:Elevator  {} is missing from active", status.me_ID);
+        return false;
+    }
 }
 
 /// cancel_order
@@ -131,20 +143,20 @@ pub fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>, new_worldview: &Worldview) -> bool {
+pub fn update_from_worldview(state: &SystemState, new_worldview: &Vec<Elevator>) -> bool {
 
     let mut worldview_changed = false;
 
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
-    for wv_elevator in &new_worldview.elevators{
+    for wv_elevator in new_worldview{
         if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == wv_elevator.ID){
 
 
             let active_queue=elevator.queue.clone();
 
             //No new orders
-            if active_queue == new_elevaotor.queue{
+            if active_queue == wv_elevator.queue{
                 println!("Worldview matches for ID:{}", elevator.ID);
                 continue;
             }
@@ -152,15 +164,15 @@ pub fn update_from_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>, new_wo
             //Found missing order, add them to queue
             let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !active_queue.contains(order)) .cloned().collect();
             if !missing_orders.is_empty() {
-                println!("Elevator {} is missing orders {:?}. Adding...", active_elevator.ID, missing_orders);
+                println!("Elevator {} is missing orders {:?}. Adding...", elevator.ID, missing_orders);
                 elevator.queue.extend(missing_orders);
                 worldview_changed = true;
             }
 
         } else{
             // Add missing worldview elevator to active elevators
-            println!("Found missing elevator, Adding new elevator ID {} from worldview.", new_elevator.ID);
-            active_elevators_locked.push(new_elevator.clone());
+            println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.ID);
+            active_elevators_locked.push(wv_elevator.clone());
             worldview_changed = true;
         }
     }   
@@ -177,10 +189,11 @@ pub fn update_from_worldview(active_elevators: Arc<Mutex<Vec<Elevator>>>, new_wo
 ///
 /// Returns - - .
 ///
-pub fn notify_worldview_error(slave_id: u8, missing_orders: Vec<Elevator>) {
+pub fn notify_worldview_error(master_adress: String ,slave_id: u8, missing_orders: &Vec<Elevator>,udp_handler: &UdpHandler) {
 
     let message = make_Udp_msg(MessageType::Error_Worldview, missing_orders);
-    UdpHandler.send(&master_address.to_string(), &message);
+    let socket: SocketAddr = master_adress.parse().expect("invalid adress");
+    udp_handler.send(&socket, &message);
 }
 
 
@@ -194,13 +207,14 @@ pub fn notify_worldview_error(slave_id: u8, missing_orders: Vec<Elevator>) {
 ///
 /// Returns - - .
 ///
-pub fn check_master_failure(&mut me, state: &mut SystemState) -> bool {
+pub fn check_master_failure(me:&mut Elevator, state: &mut SystemState) -> bool {
 
     loop{
         sleep(Duration::from_millis(5000));
-        if  state.last_lifesign>Duration::from_millis(5000) {
+
+        if  state.last_lifesign.elapsed() > Duration::from_millis(5000) {
             println!("Master not broadcasting, electing new master");
-            set_new_master(&mut me,state);
+            become_master(me,state);
             return true;
         }
     }    
@@ -219,22 +233,25 @@ pub fn check_master_failure(&mut me, state: &mut SystemState) -> bool {
 ///
 /// Returns - - .
 ///
-pub fn set_new_master(me: &mut &Elevator,state: &mut SystemState){
+pub fn become_master(me: &mut Elevator,state: &mut SystemState){
 
-    sleep(Duration::from_millis((150*&me.ID.into())));
-        if check_master_failure(){
-            let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-            if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| matches!(e.role, Role::Master)) {
-                old_master.role = Role::Slave;
-                println!("Old master (ID: {}) set to Slave.", old_master.ID);
-            }
-            drop(active_elevators_locked);
-            me.role = Role::Master;
-            println!("New master (ID: {}).", me.ID);
-
-            let message = make_Udp_msg(MessageType::New_Master, vec![]);
-            udp_broadcast(&message);
+    sleep(Duration::from_millis((150*u64::from(me.ID))));
+    if check_master_failure(me, state){
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+        if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.ID == state.master_ID) {
+            old_master.role = Role::Slave;
+            println!("Old master (ID: {}) set to Slave.", old_master.ID);
         }
+        if let Some(new_master) = active_elevators_locked.iter_mut().find(|e|e.ID == state.me_ID){
+            new_master.role = Role::Master;
+            println!("New master (ID: {}).", new_master.ID);
+
+            let message = make_Udp_msg(MessageType::New_Master, &vec![new_master.clone()]);
+            udp_broadcast(&message);
+        } else {
+            println!("ERROR: New master is not an active elevator")
+        }
+    }    
     
 }
 

@@ -26,6 +26,7 @@
 
 //-----------------------IMPORTS------------------------------------------------------------
 
+<<<<<<< HEAD:heislab2-root/src/modules/slave.rs
 use crate::modules::cab::Cab; //Import for cab struct
 use crate::modules::udp::{UdpMsg, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
 use crate::modules::order_object::order_init::Order;
@@ -33,6 +34,11 @@ use crate::modules::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
 
 use std::net::{SocketAddr};
+=======
+use crate::modules::elevator::elevator_init::Elevator; //Import for elevator struct
+use crate::modules::udp::udp::{UdpMsg, MessageType, udp_send_ensure, udp_broadcast, make_Udp_msg, udp_ack};
+use std::net::{UdpSocket, SocketAddr};
+>>>>>>> main:heislab2-root/src/modules/slave/slave.rs
 use std::thread::sleep;
 use std::time::{Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function

@@ -50,9 +50,19 @@ use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html    
 use bincode; 
 // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
+<<<<<<< HEAD:heislab2-root/src/modules/udp.rs
 use std::time::{Duration,Instant}; // https://doc.rust-lang.org/std/time/struct.Duration.html
 // use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};
+=======
+use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
+use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
+
+use crate::modules::elevator::elevator_init::Elevator;
+use crate::modules::slave::slave;
+use crate::modules::master::master::{Worldview,handle_multiple_masters};
+
+>>>>>>> main:heislab2-root/src/modules/udp/udp.rs
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
@@ -842,6 +852,7 @@ pub fn udp_receive_ensure(socket: &UdpSocket, max_wait: u8, receiver_id: u8) -> 
 
     return None;
 }
+<<<<<<< HEAD:heislab2-root/src/modules/udp.rs
 */
 
 //------------------------------Tests-----------------------
@@ -1010,3 +1021,6 @@ mod tests {
         assert!(!sent_messages.iter().any(|m| calc_checksum(&m.data) == ack_msg.data));
     }
 }
+=======
+
+>>>>>>> main:heislab2-root/src/modules/udp/udp.rs

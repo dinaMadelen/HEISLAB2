@@ -8,6 +8,10 @@ use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
 use heislab2_root::modules::order_object::order_init::Order;
+use master::master::*;
+use slave::slave::*;
+use udp::udp::*;
+use udp::message_type;
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
 
@@ -69,14 +73,17 @@ fn main() -> std::io::Result<()> {
 
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor,call_button.call);
+                
+                //broadcast addition, but since order is in own cab the others taking over will not help
+                /*
+                make_Udp_msg(elevator, message_type::New_Order); //Broadcasts the new order so others can update wv
 
-                //if the order is a cab call
-                //Add to own queue
-                //broadcast addition, but since order is in own cab the others taking over will not help  
+                if call_button.call == CAB{
+                    elevator.add_to_queue(new_order);
+                }
+                */
+                
                 elevator.add_to_queue(new_order);
-
-                //if order is a hall call
-                //broadcast order 
 
                 //Safety if elevator is idle to double check if its going to correct floor
                 if &elevator.status == &(Status::Idle){
@@ -92,9 +99,10 @@ fn main() -> std::io::Result<()> {
 
                 //update current floor status
                 elevator.current_floor = floor;
+                /*
+                make_Udp_msg(elevator,message_type::Wordview) //guess this is the ping form
+                */
                 
-                //broadcast current floor -this should also function as a ping
-
                 //keep following current route
                 elevator.go_next_floor();
                 
@@ -131,7 +139,8 @@ fn main() -> std::io::Result<()> {
             //recv UDP message
 
             //check message type 
-            //if messafe is from master
+            //if message is from master
+            // MAKE HANDLE MASTER MESSAGE FUNCTION
             
 
             //if order is yours
@@ -142,8 +151,9 @@ fn main() -> std::io::Result<()> {
 
             //if message is from slave 
             //if order, add to own full queue and world view
-            //if message is regarding dead elevator update elevators alive
-            //if message is 
+            //if message is an ack update elevators alive
+            
+            
         }
     }
 }

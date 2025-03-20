@@ -17,10 +17,7 @@ use master::master::*;
 use slave::slave::*;
 use udp::udp::*;
 use udp::message_type;
-<<<<<<< HEAD
 use heislab2_root::modules::io::*;
-=======
->>>>>>> f19bd37e8e41eb0d2fce3ca23146a68703d42eae
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
 

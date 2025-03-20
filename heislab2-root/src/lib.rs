@@ -16,12 +16,12 @@ pub mod modules{
     pub mod master{
         pub mod master;
         pub mod master_test;
-    };
+    }
 
     pub mod slave{
         pub mod slave;
         pub mod slave_test;
-    };
+    }
 
     pub mod udp{
         pub mod udp;

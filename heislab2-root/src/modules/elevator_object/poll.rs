@@ -4,7 +4,6 @@ use std::time;
 
 
 use super::elevator_init::Elevator; 
-use super::elevator_status_functions::Status;
 
 #[derive(Debug)]
 pub struct CallButton {

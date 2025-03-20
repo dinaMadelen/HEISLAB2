@@ -5,10 +5,11 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
+//use std::sync::{Arc, Mutex};
 
 // our crates
 use heislab2_root::modules::elevator_object::*;
-use alias_lib::{HALL_DOWN, HALL_UP, CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
 use heislab2_root::modules::order_object::order_init::Order;
@@ -16,14 +17,25 @@ use master::master::*;
 use slave::slave::*;
 use udp::udp::*;
 use udp::message_type;
+<<<<<<< HEAD
 use heislab2_root::modules::io::*;
+=======
+>>>>>>> f19bd37e8e41eb0d2fce3ca23146a68703d42eae
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
 
 fn main() -> std::io::Result<()> {
+    //Dummy Variables
     let elev_num_floors = 4;
+
+
     let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
+ 
+    //---------------------------------------
+    //Create Mutex for elevators
+    //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
+    //---------------------------------------
 
     let poll_period = Duration::from_millis(25);
 
@@ -51,11 +63,11 @@ fn main() -> std::io::Result<()> {
         spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
     }
 
-    let mut dirn = DIRN_DOWN;
+    let dirn = DIRN_DOWN;
 
 
     if elevator.floor_sensor().is_none() {
-        &elevator.motor_direction(dirn);
+        elevator.motor_direction(dirn);
     }
 
     loop {

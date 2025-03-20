@@ -6,8 +6,9 @@ use std::net;
 use std::process;
 
 
+
 use heislab2_root_test::modules::elevator_object::*;
-use alias_lib::{HALL_DOWN, HALL_UP, CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use alias_lib::{ DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
 use heislab2_root_test::modules::order_object::order_init::Order;
@@ -148,23 +149,28 @@ fn main() -> std::io::Result<()> {
     });
 
     
-    let mut dirn = DIRN_DOWN;
+    let dirn = DIRN_DOWN;
 
 
     if elevator.floor_sensor().is_none() {
-        &elevator.motor_direction(dirn);
+        elevator.motor_direction(dirn);
     }
+    
+    let (door_tx, door_rx) = cbc::unbounded::<bool>();
 
     loop {
         cbc::select! {
             //tror denne kan bli
+            recv(door_rx) -> a => {
+                let door_signal = a.unwrap();
+                if door_signal {
+                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                }
+            }
+
             recv(call_button_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
-
-                //Light turned on for correct lamp
-                
-
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor,call_button.call);
                 
@@ -183,9 +189,9 @@ fn main() -> std::io::Result<()> {
                 let true_status= elevator.status.lock().unwrap();
                 let clone_true_status = true_status.clone();
                 drop(true_status);
-                
+
                 if clone_true_status == Status::Idle{
-                    elevator.go_next_floor();
+                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
                 }
 
                 
@@ -202,7 +208,7 @@ fn main() -> std::io::Result<()> {
                 */
                 
                 //keep following current route
-                elevator.go_next_floor();
+                elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
                 
             },
 
@@ -228,6 +234,7 @@ fn main() -> std::io::Result<()> {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
+
                 //broadcast obstruction
             },
 

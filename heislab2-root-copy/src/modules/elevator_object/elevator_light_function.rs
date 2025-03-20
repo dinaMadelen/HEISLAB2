@@ -1,10 +1,6 @@
 
 use super::elevator_init::Elevator; 
-use super::elevator_status_functions::Status;
 
-use crate::modules::elevator_object::*;
-
-use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 impl Elevator{
     pub fn turn_on_queue_lights(&mut self){
         for order in self.queue.clone(){
@@ -41,6 +37,7 @@ impl Elevator{
             self.call_button_light(last_order.floor, last_order.order_type, true);
         }
     }
+
 
 
 }

@@ -20,5 +20,3 @@ use crate::modules::elevator_object::elevator_init::Elevator;
 use crate::modules::io::io_loop;
 
 use std::sync::*;
-
-

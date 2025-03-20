@@ -12,6 +12,7 @@
 use std::thread::*;
 use std::time::*;
 
+use crossbeam_channel::RecvError;
 // public crates
 use crossbeam_channel as cbc;
 
@@ -29,18 +30,21 @@ pub const POLL_PERIOD: Duration = Duration::from_millis(25);
 //-------------
 // Custom Types
 //-------------
-pub type CallButtonTx = cbc::Sender<poll::CallButton>;
-pub type CallButtonRx = cbc::Receiver<poll::CallButton>;
+pub type CallButtonTx   = cbc::Sender<poll::CallButton>;
+pub type CallButtonRx   = cbc::Receiver<poll::CallButton>;
+pub type CallButtonMsg  = Result<poll::CallButton, RecvError>;
 
-pub type StopButtonTx = cbc::Sender<bool>;
-pub type StopButtonRx = cbc::Receiver<bool>;
+pub type StopButtonTx   = cbc::Sender<bool>;
+pub type StopButtonRx   = cbc::Receiver<bool>;
+pub type StopButtonMsg  = Result<bool, RecvError>;
 
-pub type FloorSensorTx = cbc::Sender<u8>;
-pub type FloorSensorRx = cbc::Receiver<u8>;
+pub type FloorSensorTx  = cbc::Sender<u8>;
+pub type FloorSensorRx  = cbc::Receiver<u8>;
+pub type FloorSensorMsg = Result<u8, RecvError>;
 
-pub type ObstructionTx = cbc::Sender<bool>;
-pub type ObstructionRx = cbc::Receiver<bool>;
-
+pub type ObstructionTx  = cbc::Sender<bool>;
+pub type ObstructionRx  = cbc::Receiver<bool>;
+pub type ObstructionMsg = Result<bool, RecvError>;
 
 //------------------
 // Helper functions
@@ -91,4 +95,29 @@ impl IoChannels {
 
         io_channels
     }
+
+    /// Infinite loop that pools the io channels and handles messages
+    fn io_loop(&self, elevator: &Elevator) -> () {
+        // loop infinitely
+        loop{
+            // wait for a ready rx-channel, fetch message and handle message accordingly
+            cbc::select! {
+                recv(self.call_rx)        -> msg => {handle_call_rx_msg(msg, elevator)},
+                recv(self.stop_rx)        -> msg => {handle_stop_rx_msg(msg, elevator)},
+                recv(self.floor_rx)       -> msg => {handle_floor_rx_msg(msg, elevator)},
+                recv(self.obstruction_rx) -> msg => {handle_obstruction_rx_msg(msg, elevator)},
+            }
+        }
+    }
+
+    fn handle_call_rx_msg(msg: CallButtonMsg, elevator: &Elevator) -> () {
+        
+    }
+    fn handle_stop_rx_msg(msg: StopButtonMsg, elevator: &Elevator) -> () {}
+    fn handle_floor_rx_msg(msg: FloorSensorMsg, elevator: &Elevator) -> () {}
+    fn handle_obstruction_rx_msg(msg: ObstructionMsg, elevator: &Elevator) -> () {}
+
+
 }
+
+

@@ -26,13 +26,13 @@ pub mod modules{
     pub mod udp{
         pub mod udp;
         pub mod udp_test;
-    };
+    }
     
     pub mod system_init;
-    pub mod udp;
 
     pub mod io {
         pub mod io_init;
+        pub mod io_loop;
     }
 
 }

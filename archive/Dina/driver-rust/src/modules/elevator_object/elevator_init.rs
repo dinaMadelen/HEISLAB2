@@ -2,45 +2,43 @@
 #![warn(unused_variables)]
 #[allow(unused_imports)]
 
-use std::io::*;
 use std::fmt;
-use std::net::{TcpStream}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
-use std::sync::{Arc, Mutex};
+use std::io::*;
+use std::net::TcpStream;
+use std::sync::*;
+use std::time::Duration;
+use std::thread;
+use std::convert::TryInto;
 
-pub use crate::modules::system_status::SystemState;
-pub use crate::modules::elevator_object::*;
-pub use crate::modules::master::master::Role;
-pub use super::elevator_status_functions::Status;
-pub use crate::modules::order_object::order_init::Order;
-pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
+use crate::modules::elevator_object::*;
+
+use super::elevator_status_functions::Status;
+use crate::modules::order_object::order_init::Order;
+
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
 #[derive(Clone, Debug)]
 pub struct Elevator {
-    pub socket: Arc<Mutex<TcpStream>>,
+    socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub id: u8,
+    pub ID: u8,
     pub current_floor:u8,
     pub queue:Vec<Order>,
-    pub status: Arc<Mutex<Status>>,
-    pub direction: i8,
-    pub obstruction: bool,
+    pub status:Status,
+    pub direction:i8
 }
 
-
-
 impl Elevator {
-    
     pub fn init(addr: &str, num_floors: u8) -> Result<Elevator> {
         Ok(Self {
             socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
             num_floors,
-            id: 0,
+            ID: 0,
             current_floor: 1,
             queue: Vec::new(),
-            status: Arc::new(Mutex::new(Status::Idle)),
+            status: Status::Idle,
             direction: 0,
-            obstruction: false,
         })
     }
 
@@ -112,9 +110,14 @@ impl Elevator {
 
 }
 
+
+
 impl fmt::Display for Elevator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let addr = self.socket.lock().unwrap().peer_addr().unwrap();
         write!(f, "Elevator@{}({})", addr, self.num_floors)
     }
 }
+
+
+

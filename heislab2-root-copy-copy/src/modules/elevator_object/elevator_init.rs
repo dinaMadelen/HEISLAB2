@@ -6,17 +6,17 @@ use std::fmt;
 use std::io::*;
 use std::net::TcpStream;
 use std::sync::*;
+use std::time::Duration;
+use std::thread;
+use std::convert::TryInto;
 
-//use std::thread;
-//use std::convert::TryInto;
 
-
-//use crate::modules::elevator_object::*;
+use crate::modules::elevator_object::*;
 
 use super::elevator_status_functions::Status;
 use crate::modules::order_object::order_init::Order;
 
-//use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
 #[derive(Clone, Debug)]
 pub struct Elevator {

@@ -11,9 +11,9 @@ mod tests {
     use std::time::*;
     use crossbeam_channel as cbc;
 
-    use crate::modules::elevator_object::elevator_init::Elevator;
-    use crate::modules::elevator_object::elevator_status_functions::Status;
-    use crate::modules::order_object::order_init::Order;
+    use super::Elevator;
+    use super::Status;
+    use super::Order;
 
     use crate::modules::elevator_object::poll;
     
@@ -63,7 +63,7 @@ mod tests {
 
         let mut dirn = DIRN_DOWN;
 
-        
+
         //IDLE TEST
         elevator.set_status(Status::Idle);
         assert_eq!(elevator.status, Status::Idle);
@@ -144,9 +144,7 @@ mod tests {
 
         let seconds = Duration::from_secs(5);
         let start = SystemTime::now();
-        
-        let first_item = Order::init(3,HALL_DOWN);
-        elevator.add_to_queue(first_item);
+        elevator.add_to_queue(3);
         elevator.go_next_floor();            
         
 
@@ -171,9 +169,7 @@ mod tests {
         }
         assert_eq!(elevator.current_floor, 3);
 
-        let second_item = Order::init(1,HALL_UP);
-        elevator.add_to_queue(second_item);
-
+        elevator.add_to_queue(1);
         elevator.go_next_floor();
 
         let seconds = Duration::from_secs(5);

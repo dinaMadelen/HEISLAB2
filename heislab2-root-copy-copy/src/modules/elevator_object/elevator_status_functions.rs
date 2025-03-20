@@ -3,8 +3,6 @@
 #[allow(unused_imports)]
 
 use std::fmt;
-
-//use crate::modules::elevator_object::*;
 use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_STOP};
 use super::elevator_init::Elevator; 
 
@@ -42,7 +40,6 @@ impl Elevator{
 
         println!("status:{}", cloned_true_status_as_str); //This line got angry if i shortened the rest
     }
-    
     pub fn set_status(&mut self, status: Status){
         let true_status= self.status.lock().unwrap();
         let clone_true_status = true_status.clone();

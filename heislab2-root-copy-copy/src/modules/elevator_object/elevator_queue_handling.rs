@@ -3,10 +3,10 @@
 #[allow(unused_imports)]
 
 use crate::modules::elevator_object::*;
-//use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
 use super::elevator_init::Elevator; 
-//use super::elevator_status_functions::Status;
+use super::elevator_status_functions::Status;
 use crate::modules::order_object::order_init::Order;
 
 impl Elevator{
@@ -23,7 +23,7 @@ impl Elevator{
     //DENNE MÅ ENDRES
     pub fn sort_queue(&self) -> Vec<Order> {
         //todo!("MAKE SORT QUEUE ACTUALLY SORT QUEUE");
-        
+
         return self.queue.clone();
 
     }

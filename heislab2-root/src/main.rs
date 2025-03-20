@@ -61,16 +61,20 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
+    let (door_tx, door_rx) = cbc::unbounded::<bool>();
+
     loop {
         cbc::select! {
-            //tror denne kan bli
+            recv(door_rx) -> a => {
+                let door_signal = a.unwrap();
+                if door_signal {
+                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                }
+            },
+
             recv(call_button_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
-
-                //Light turned on for correct lamp
-                elevator.call_button_light(call_button.floor, call_button.call, true);
-
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor,call_button.call);
                 
@@ -82,15 +86,17 @@ fn main() -> std::io::Result<()> {
                     elevator.add_to_queue(new_order);
                 }
                 */
-                
                 elevator.add_to_queue(new_order);
+                elevator.turn_on_queue_lights();
 
                 //Safety if elevator is idle to double check if its going to correct floor
-                if &elevator.status == &(Status::Idle){
-                    elevator.go_next_floor();
-                }
+                let true_status= elevator.status.lock().unwrap();
+                let clone_true_status = true_status.clone();
+                drop(true_status);
 
-                
+                if clone_true_status == Status::Idle{
+                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                }  
             },
 
             recv(floor_sensor_rx) -> a => {
@@ -104,7 +110,7 @@ fn main() -> std::io::Result<()> {
                 */
                 
                 //keep following current route
-                elevator.go_next_floor();
+                elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
                 
             },
 
@@ -123,17 +129,15 @@ fn main() -> std::io::Result<()> {
                         elevator.call_button_light(f, c, false);
                     }
                 }
-                
 
             },
+
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
-
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
 
                 //broadcast obstruction
-                
             },
 
             //recv UDP message
@@ -152,7 +156,6 @@ fn main() -> std::io::Result<()> {
             //if message is from slave 
             //if order, add to own full queue and world view
             //if message is an ack update elevators alive
-            
             
         }
     }

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
+#[allow(unused_imports)]
 
 use std::fmt;
 use std::sync::*;
@@ -8,6 +9,7 @@ use std::thread;
 use crossbeam_channel as cbc;
 
 use super::alias_lib::{DIRN_DOWN, DIRN_UP, DIRN_STOP};
+
 
 
 use super::elevator_init::Elevator; 

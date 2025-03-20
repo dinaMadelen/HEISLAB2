@@ -4,10 +4,10 @@
 
 use std::fmt;
 use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_STOP};
-use super::elevator_init::Elevator; 
+use crate::modules::cab::Cab;
 
 
-#[derive(Clone, Debug, PartialEq,Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Status{
     Idle,
     Moving,
@@ -30,7 +30,7 @@ impl Status{
     }
 }
 
-impl Elevator{
+impl Cab{
     pub fn print_status(&self){
         let true_status= self.status.lock().unwrap();
         let clone_true_status = true_status.clone();

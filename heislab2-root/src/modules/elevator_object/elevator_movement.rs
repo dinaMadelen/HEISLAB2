@@ -16,14 +16,14 @@ use super::elevator_status_functions::Status;
 
     impl Elevator{
         // Set initial status
-         pub fn try_close_door(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>) -> bool{
-             let status_clone = Arc::clone(&self.status); // ✅ Clone Arc so both threads can use it
-         self.door_light(true);
-         thread::spawn(move || {
-             {
-                 {
-                     let mut status = status_clone.lock().unwrap();
-                     *status = Status::DoorOpen;
+        pub fn try_close_door(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>) -> bool{
+        let status_clone = Arc::clone(&self.status); // ✅ Clone Arc so both threads can use it
+        self.door_light(true);
+        thread::spawn(move || {
+            {
+                {
+                    let mut status = status_clone.lock().unwrap();
+                    *status = Status::DoorOpen;
                  }
                  println!("🚪 Doors opened.");
  
@@ -56,32 +56,29 @@ use super::elevator_status_functions::Status;
      }
          
      
-     
+    pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>) {
+        let true_status= self.status.lock().unwrap();
+        let clone_true_status = true_status.clone();
+        drop(true_status);
  
- 
-     pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>) {
-         let true_status= self.status.lock().unwrap();
-         let clone_true_status = true_status.clone();
-         drop(true_status);
- 
-         if (clone_true_status == Status::Moving) | (clone_true_status == Status::Idle){
-             if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
-                 if next_floor > self.current_floor {
-                     self.set_status(Status::Moving);
-                     self.motor_direction(DIRN_UP);
+        if (clone_true_status == Status::Moving) | (clone_true_status == Status::Idle){
+            if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
+                if next_floor > self.current_floor {
+                    self.set_status(Status::Moving);
+                    self.motor_direction(DIRN_UP);
                      //self.current_floor += 1;
                      
-                 } else if next_floor < self.current_floor {
-                     self.set_status(Status::Moving);
-                     self.motor_direction(DIRN_DOWN);
-                     //self.current_floor -= 1;
+                } else if next_floor < self.current_floor {
+                    self.set_status(Status::Moving);
+                    self.motor_direction(DIRN_DOWN);
+                    //self.current_floor -= 1;
                      
-                 } else if next_floor == self.current_floor{
-                     self.motor_direction(DIRN_STOP);
-                     self.turn_off_last_order_light();
-                     self.queue.remove(0);
-                     self.try_close_door(door_tx, obstruction_rx.clone());
-                 }
+                } else if next_floor == self.current_floor{
+                    self.motor_direction(DIRN_STOP);
+                    self.turn_off_last_order_light();
+                    self.queue.remove(0);
+                    self.try_close_door(door_tx, obstruction_rx.clone());
+                }
  
              } else {
                  //self.set_status(Status::Idle);

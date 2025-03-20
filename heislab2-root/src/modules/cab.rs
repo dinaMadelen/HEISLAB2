@@ -29,7 +29,7 @@ pub struct Cab {
     pub id: u8,                   // ID for this spesific elevaotr
     pub current_floor: u8,        // Which floor the elevator was last registerd at      
     pub queue: Vec<Order>,        // The current queue the elevator is servicing
-    pub status: Status,           // Current status of the elevator
+    pub status: Arc<Mutex<Status>>,          // Current status of the elevator
     pub direction: i8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
 }
@@ -69,7 +69,7 @@ impl Cab {
                 id: set_id,
                 current_floor: 1,
                 queue: Vec::new(),
-                status: Status::Idle,
+                status: Arc::new(Mutex::new(Status::Idle)),
                 direction: 0,
                 role: Role::Slave,
             });

@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 
 // IF CAB THE ORDER IS LOCAL
-#[derive(Clone, Debug,PartialEq,Serialize, Deserialize)]
+#[derive(Clone, Debug,PartialEq, Serialize, Deserialize)]
 pub struct Order {
     pub floor: u8,
     pub order_type: u8,

@@ -24,7 +24,6 @@ pub struct Elevator {
     pub queue:Vec<Order>,
     pub status: Arc<Mutex<Status>>,
     pub direction: i8,
-    pub obstruction: bool,
 }
 
 
@@ -40,7 +39,6 @@ impl Elevator {
             queue: Vec::new(),
             status: Arc::new(Mutex::new(Status::Idle)),
             direction: 0,
-            obstruction: false,
         })
     }
 

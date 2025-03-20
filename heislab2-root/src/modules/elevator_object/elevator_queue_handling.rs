@@ -5,9 +5,9 @@
 use crate::modules::elevator_object::*;
 use crate::modules::order_object::order_init::Order;
 
-use crate::modules::elevator_object::elevator_init::Elevator; 
+use crate::modules::cab::Cab; 
 
-impl Elevator{
+impl Cab{
     pub fn add_to_queue(&mut self, order:Order) {
         if !self.queue.contains(&order) {
             self.queue.push(order);
@@ -21,7 +21,6 @@ impl Elevator{
     //DENNE MÅ ENDRES
     pub fn sort_queue(&self) -> Vec<Order> {
         //todo!("MAKE SORT QUEUE ACTUALLY SORT QUEUE");
-
         return self.queue.clone();
 
     }

@@ -18,5 +18,6 @@ pub mod modules{
     pub mod system_init;
     pub mod system_status;
     pub mod udp;
+    pub mod cab; 
     
 }

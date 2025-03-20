@@ -1,46 +1,27 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-use std::sync::{Arc, Mutex};
-use std::net::{TcpStream,IpAddr, Ipv4Addr, SocketAddr,UdpSocket};
-use local_ip_address::local_ip;
-
+//use std::sync::{Arc, Mutex};
 
 use heislab2_root::modules::elevator_object::*;
-use alias_lib::{HALL_DOWN, HALL_UP, CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
 use heislab2_root::modules::order_object::order_init::Order;
 
-
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
 
-
 fn main() -> std::io::Result<()> {
-    //Dummy
-    let mut dummy_SystemState = SystemState{
-        me_ID: 1,
-        master_ID: 0,
-        last_lifesign: Instant::now(),
-        active_elevators: Arc::new(Mutex::new(vec![Elevator{ID:1,queue:vec![Order{floor:3,order_type:1}]},Elevator{ID:2,queue:vec![Order{floor:1,order_type:1}]},])),
-        failed_orders: Arc::new(Mutex::new(vec![Order{floor:4,order_type:1}])),
-        sent_messages: Arc::new(Mutex::new(vec![UdpMsg{data:vec![] },])),
-    };
-    match local_ip() {
-        Ok(ip) => {println!("{}",ip)};
-        Err(e) => {println!("No ip, error: {}",e)};
-    };
-    let inn = SocketAddr::new(ip, 5000);
-    let out = SocketAddr::new(ip, 6000);// Think this should be a .config
-
-    //---------------------------------------
+    //Dummy Variables
     let elev_num_floors = 4;
-    let mut elevator = Elevator::init(&inn, &out,0 as u8, elev_num_floors,dummy_SystemState)?;
+
+
+    let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
  
     //---------------------------------------
     //Create Mutex for elevators
-    let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
+    //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
     //---------------------------------------
 
     let poll_period = Duration::from_millis(25);
@@ -69,11 +50,11 @@ fn main() -> std::io::Result<()> {
         spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
     }
 
-    let mut dirn = DIRN_DOWN;
+    let dirn = DIRN_DOWN;
 
 
     if elevator.floor_sensor().is_none() {
-        &elevator.motor_direction(dirn);
+        elevator.motor_direction(dirn);
     }
 
     loop {

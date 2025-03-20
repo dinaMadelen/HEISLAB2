@@ -5,10 +5,8 @@
 use std::fmt;
 use serde::{Deserialize, Serialize};
 
-use crate::modules::elevator_object::*;
-use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_STOP};
 use super::elevator_init::Elevator; 
-
 
 
 #[derive(Clone, Debug, PartialEq,Serialize, Deserialize)]
@@ -40,6 +38,7 @@ impl Elevator{
     }
     
     pub fn set_status(&mut self, status: Status){
+
         match status{
             // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
             Status::Moving => {

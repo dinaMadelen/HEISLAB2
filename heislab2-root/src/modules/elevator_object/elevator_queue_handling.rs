@@ -3,11 +3,9 @@
 #[allow(unused_imports)]
 
 use crate::modules::elevator_object::*;
-use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
-
-use super::elevator_init::Elevator; 
-use super::elevator_status_functions::Status;
 use crate::modules::order_object::order_init::Order;
+
+use crate::modules::elevator_object::elevator_init::Elevator; 
 
 impl Elevator{
     pub fn add_to_queue(&mut self, order:Order) {

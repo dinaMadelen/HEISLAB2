@@ -8,10 +8,10 @@ use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use elevator_status_functions::Status;
 use heislab2_root::modules::order_object::order_init::Order;
-use master::master::*;
-use slave::slave::*;
-use udp::udp::*;
-use udp::message_type;
+use heislab2_root::modules::master::master;
+use heislab2_root::modules::slave::slave;
+use heislab2_root::modules::udp::udp;
+
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
 

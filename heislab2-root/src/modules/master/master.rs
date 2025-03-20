@@ -28,14 +28,13 @@
 #[allow(unused_variables)]
 
 //-----------------------IMPORTS------------------------------------------------------------
-use crate::modules::udp::{UdpMsg,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
+use crate::modules::udp::udp::{UdpMsg,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::elevator_object::elevator_init::{Status};
 use crate::modules::cab::Cab;
-use crate::modules::slave::{reboot_program};
+use crate::modules::slave::slave::{reboot_program};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
 
-<<<<<<< HEAD:heislab2-root/src/modules/master.rs
 
 
 use serde::{Serialize, Deserialize};
@@ -46,12 +45,6 @@ use std::time::Duration;
 //-----------------------GLOBAL VARIABLES---------------------------------------------------
 static mut FAILED_ORDERS: Option<Arc<Mutex<Vec<Order>>>> = None;
 */
-=======
-use crate::modules::udp::udp::{udp_send_ensure,udp_broadcast,udp_receive,make_Udp_msg};
-use crate::modules::elevator_object::elevator_init::{Elevator,Status};
-use cargo::modules::slave::slave::{reboot_program};
-use std::net::UdpSocket;
->>>>>>> main:heislab2-root/src/modules/master/master.rs
 
 
 //-----------------------STRUCTS------------------------------------------------------------

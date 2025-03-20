@@ -68,8 +68,7 @@ mod tests {
 
         // Create elevator
         let mut elevator = 
-            Elevator::init("127.0.0.1:1234", 5).unwrap(),
-            Elevator::init("127.0.0.1:1234", 5).unwrap(),;
+            Elevator::init("127.0.0.1:1234", 5).unwrap();
 
         // Set values elevators 
         elevators[1].ID = 2;

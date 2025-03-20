@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 pub use crate::modules::system_status::SystemState;
 pub use crate::modules::elevator_object::*;
-pub use crate::modules::master::Role;
+pub use crate::modules::master::master::Role;
 pub use super::elevator_status_functions::Status;
 pub use crate::modules::order_object::order_init::Order;
 pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
@@ -19,7 +19,7 @@ pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP
 pub struct Elevator {
     pub socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub ID: u8,
+    pub id: u8,
     pub current_floor:u8,
     pub queue:Vec<Order>,
     pub status:Status,
@@ -35,7 +35,7 @@ impl Elevator {
         Ok(Self {
             socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
             num_floors,
-            ID: 0,
+            id: 0,
             current_floor: 1,
             queue: Vec::new(),
             status: Status::Idle,

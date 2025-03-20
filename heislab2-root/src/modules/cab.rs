@@ -10,7 +10,7 @@ use local_ip_address::local_ip;
 
 pub use crate::modules::system_status::SystemState;
 pub use crate::modules::elevator_object::*;
-pub use crate::modules::master::Role;
+pub use crate::modules::master::master::Role;
 pub use crate::modules::elevator_object::elevator_status_functions::Status;
 pub use crate::modules::order_object::order_init::Order;
 pub use crate::modules::cab::elevator_init::Elevator;

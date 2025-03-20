@@ -3,9 +3,7 @@
 #[allow(unused_imports)]
 
 use std::fmt;
-
-use crate::modules::elevator_object::*;
-use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_STOP};
 use super::elevator_init::Elevator; 
 
 
@@ -34,18 +32,30 @@ impl Status{
 
 impl Elevator{
     pub fn print_status(&self){
-        println!("status:{}", self.status.as_str());
+        let true_status= self.status.lock().unwrap();
+        let clone_true_status = true_status.clone();
+        drop(true_status);
+
+        let cloned_true_status_as_str = clone_true_status.as_str();
+
+        println!("status:{}", cloned_true_status_as_str); //This line got angry if i shortened the rest
     }
-    
     pub fn set_status(&mut self, status: Status){
+        let true_status= self.status.lock().unwrap();
+        let clone_true_status = true_status.clone();
+        drop(true_status);
+
         match status{
             // Floors are read as u8 0 is hall up, 1 hall down, 2 cab
             Status::Moving => {
                 //HVIS DET ER EN ERROR MÅ VI SE OM DET VAR FORRIGE STATUS DA SKAL VI IKKE GJØRE NOE
-                match self.status{
+                match clone_true_status{
                 
                     Status::Moving | Status::Idle => {
-                        self.status = Status::Moving;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Moving;
+                        drop(true_status);
+
                         let first_item_in_queue = self.queue.first().unwrap();
                         if first_item_in_queue.floor < self.current_floor {
                             self.direction = -1;
@@ -56,8 +66,14 @@ impl Elevator{
                     }
 
                     Status::Stop =>{
-                        self.status = Status::Stop;
-                        
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Stop;
+                        drop(true_status);
+                    }
+                    Status::DoorOpen=>{
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::DoorOpen;
+                        drop(true_status);
                     }
                     _ =>{
                         //Do Something? 
@@ -69,25 +85,39 @@ impl Elevator{
             }
 
             Status::DoorOpen=> {
-                match self.status{
+                match clone_true_status{
                     Status::DoorOpen => {
-                        self.status = Status::Idle;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Idle;
+                        drop(true_status);
                     }
                     _ => {
-                        self.status = Status::DoorOpen;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::DoorOpen;
+                        drop(true_status);
+        
                     }
                 }
                 
             }
 
             Status::Idle => {
-                match self.status{
+                match clone_true_status{
                     Status::Stop =>{
-                        self.status = Status::Stop;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Stop;
+                        drop(true_status);
                         //Do Something? 
                     }
+                    Status::DoorOpen =>{
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::DoorOpen;
+                        drop(true_status);
+                    }
                     _ => {
-                        self.status = Status::Idle;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Idle;
+                        drop(true_status);
 
                         //SKRUR AV LYSET FOR DER DEN ER
                         if self.direction == -1{
@@ -107,20 +137,21 @@ impl Elevator{
 
             //From stop you can only swap out by calling stop again
             Status::Stop => {
-                match self.status{
+                match clone_true_status{
                     Status::Stop => {
-                        self.status = Status::Idle;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Idle;
+                        drop(true_status);
                     }
                     _ => {
                         // KILL ELEVATOR !?
-                        for f in 0..(self.num_floors) {
-                            for c in 0..3 {
-                                self.call_button_light(f, c, false);
-                            }
-                        }
+                        self.turn_off_lights();
 
                         self.motor_direction(DIRN_STOP);
-                        self.status = Status::Stop;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Stop;
+                        drop(true_status);
+
                         self.queue.clear();
                         self.print_status();
                     }
@@ -128,16 +159,20 @@ impl Elevator{
             }
 
             Status::Error => {
-                match self.status{
+                match clone_true_status{
                     Status::Error =>{
-                        self.status = Status::Idle;
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Idle;
+                        drop(true_status);
                     }
                     _ =>{
-
                         // KILL ELEVATOR !
-
                         self.motor_direction(DIRN_STOP);
-                        self.status = Status::Error;
+
+                        let mut true_status= self.status.lock().unwrap();
+                        *true_status = Status::Error;
+                        drop(true_status);
+
                         self.queue.clear();
                         self.print_status();
                         /*
@@ -149,5 +184,6 @@ impl Elevator{
                 
             }
         }
+        
     }
 }

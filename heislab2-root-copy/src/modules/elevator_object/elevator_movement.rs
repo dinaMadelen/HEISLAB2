@@ -19,31 +19,41 @@ use super::elevator_status_functions::Status;
 
 impl Elevator{
        // Set initial status
-       pub fn door_open_sequence(elevator: Arc<Mutex<Self>>) {
-        {
-            let mut elevator_locked = elevator.lock().unwrap();
-            elevator_locked.set_status(Status::DoorOpen);
-        } // Unlock the mutex immediately
+        pub fn try_close_door(&mut self) -> bool{
+            let status_clone = Arc::clone(&self.status); // ✅ Clone Arc so both threads can use it
 
-        let elevator_clone = Arc::clone(&elevator);
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(2)); // Simulate door open time
+            {
+                let mut status = status_clone.lock().unwrap();
+                *status = Status::DoorOpen;
+                println!("🚪 Doors opened.");
 
-            let mut elevator_locked = elevator_clone.lock().unwrap();
-            elevator_locked.set_status(Status::DoorOpen);
-            println!("Thread woke up! Doors closed.");
-            elevator_locked.go_next_floor();
+                thread::sleep(Duration::from_secs(1)); // Simulate door open time
+
+                *status = Status::Idle;
+                println!("🚪 Doors closed.");
+            } // ✅ Unlock Mutex after modifying
+            return true;
         });
-
-        // Main thread continues execution without waiting
-        }
         
+        return false;
+    }
+        
+
+    pub fn door_open_sequence(&mut self) {
+        self.try_close_door();
+        // Main thread continues execution without waiting
+    }
+    
     
 
 
-
     pub fn go_next_floor(&mut self) {
-        if (self.status == Status::Moving) | (self.status == Status::Idle){
+        let true_status= self.status.lock().unwrap();
+        let clone_true_status = true_status.clone();
+        drop(true_status);
+
+        if (clone_true_status == Status::Moving) | (clone_true_status == Status::Idle){
             if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
                 if next_floor > self.current_floor {
                     self.set_status(Status::Moving);
@@ -56,14 +66,12 @@ impl Elevator{
                     //self.current_floor -= 1;
                     
                 } else if next_floor == self.current_floor{
-                    self.set_status(Status::Idle);
                     self.motor_direction(DIRN_STOP);
                     self.turn_off_last_order_light();
                     self.queue.remove(0);
-                    self.door_open_sequence(Arc::clone(&self));
-
-            
+                    self.door_open_sequence();
                 }
+
             } else {
                 //self.set_status(Status::Idle);
                 self.motor_direction(DIRN_STOP);
@@ -72,4 +80,4 @@ impl Elevator{
             self.motor_direction(DIRN_STOP);
         }
     }
-}
+    }

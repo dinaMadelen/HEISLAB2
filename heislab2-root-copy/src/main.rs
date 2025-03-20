@@ -176,12 +176,15 @@ fn main() -> std::io::Result<()> {
                     elevator.add_to_queue(new_order);
                 }
                 */
-                
                 elevator.add_to_queue(new_order);
                 elevator.turn_on_queue_lights();
 
                 //Safety if elevator is idle to double check if its going to correct floor
-                if &elevator.status == &(Status::Idle){
+                let true_status= elevator.status.lock().unwrap();
+                let clone_true_status = true_status.clone();
+                drop(true_status);
+                
+                if clone_true_status == Status::Idle{
                     elevator.go_next_floor();
                 }
 
@@ -224,12 +227,10 @@ fn main() -> std::io::Result<()> {
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
-
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
-
                 //broadcast obstruction
-                
             },
+
             recv(peer_update_rx) -> a => {
                 let update = a.unwrap();
                 println!("{:#?}", update);

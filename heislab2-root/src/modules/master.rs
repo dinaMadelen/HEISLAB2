@@ -37,9 +37,7 @@ use crate::modules::system_status::SystemState;
 
 
 use serde::{Serialize, Deserialize};
-use std::net::UdpSocket;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
 
 static MY_ID:u8 = 0;
@@ -55,7 +53,6 @@ static mut FAILED_ORDERS: Option<Arc<Mutex<Vec<Order>>>> = None;
 
 /// A struct that holds all the active elevators aswell as all active lights
 pub struct Worldview{
-
     elevators: Vec<Elevator>,
     lights: Vec<u8>,
 }
@@ -77,11 +74,10 @@ pub enum Role{
 /// 
 /// # Arguments:
 /// 
-/// * `master` - &Elevator - A reference to the master `Elevator` initiating the order.
-/// * `elevator` - u8 - The ID of the elevator receiving the order.
-/// * `new_order` - Vec<Order> - floor number of the new order.
-/// * `socket` - &UdpSocket - refrence to sender socket.
-/// * `active_elevator` - &Vec<Elevator> - refrence to list of active elevators.
+///  * `elevator_id` - u8 - ID of the elevator that the order should be added too
+///  * `new_order` - Vec<&Order> - List of refrences to orders that should be added.
+///  * `state` - &mut SystemState - Mutable refrence to the state of the system.
+///  * `udp_handler` - &UdpHandler - refrence to the handler that should handle the sending
 /// 
 /// # Returns:
 ///
@@ -93,10 +89,10 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &mut SystemSta
     let max_timeout_ms = 300;
     let mut received_acks = Vec::new();
 
-    // 🔹 Lock `active_elevators`
+    // Lock active_elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
-    // 🔹 Find the elevator (copy the needed data)
+    // Find the elevator and copy the needed data
     let mut elevator_index = match active_elevators_locked.iter().position(|e| e.ID == elevator_id) {
         Some(index) => index,
         None => {
@@ -105,24 +101,25 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &mut SystemSta
         }
     };
 
-    // 🔹 Clone necessary data BEFORE dropping lock
+    // Clone necessary data before dropping mutex lock
     let mut elevator = active_elevators_locked[elevator_index].clone();
     
+    // Add new orders to elevator
     for order in new_order {
         elevator.queue.push(order.clone());
     }
 
+    // Inform rest of system that the order has been added
     let message = make_Udp_msg(MessageType::New_Order, &vec![elevator.clone()]);
-
     let mut missing_acks: Vec<u8> = active_elevators_locked.iter().map(|e| e.ID).collect();
-
     println!("Broadcasting new orders for elevator:{}", elevator.ID);
     udp_broadcast(&message);
 
+    // Release active_elevators
     drop(active_elevators_locked);
 
+    // Check if there are missing acks
     missing_acks.retain(|id| !received_acks.contains(id));
-
     if !missing_acks.is_empty() {
         while retries > 0 {
             println!("Remaining retries: {}", retries);
@@ -166,109 +163,6 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &mut SystemSta
     return false;
 }
 
-/* 
-pub fn give_order(elevator_id: u8, new_order: Vec<&Order>,state: &mut SystemState,udp_handler: &UdpHandler) -> bool {
-
-    let mut retries = 3;
-    let max_timeout_ms = 300;
-    let mut received_acks = Vec::new();
-
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-
-    let mut elevator = match active_elevators_locked.iter_mut().find(|e| e.ID == elevator_id) {
-        Some(e) => e,
-        None => {
-            println!("ERROR: Elevator ID {} not found in active elevators.", elevator_id);
-            return false;
-        }
-    };
-
-    for order in new_order {
-        elevator.queue.push(order.clone()); 
-    }
-
-    let message = make_Udp_msg(MessageType::New_Order, &vec![elevator.clone()]);
-    
-
-    let mut missing_acks: Vec<u8> = active_elevators_locked.iter().map(|e| e.ID).collect(); // https://doc.rust-lang.org/beta/std/iter/trait.Iterator.html
-
-    println!("Broadcasting new orders for elevator:{}", elevator.ID);
-
-    udp_broadcast(&message);
-
-    missing_acks.retain(|id| !received_acks.contains(id));
-
-    if !missing_acks.is_empty(){
-        drop(active_elevators_locked);
-        while retries > 0 {
-            
-            println!("Remaining retries: {}", retries);
-            retries -= 1;
-            let mut received_acks = Vec::new();
-
-            let start_time = std::time::Instant::now();
-
-            
-            while start_time.elapsed() < Duration::from_millis(max_timeout_ms){
-                if let Some(response) = udp_handler.receive(max_timeout_ms as u32, state) {
-                    if response.header.message_type == MessageType::Ack && response.header.checksum == message.header.checksum{
-                            received_acks.push(response.header.sender_id);
-                            
-                        }
-                }
-
-
-                // If all expected ACKs are received, return early
-                if missing_acks.is_empty(){
-                    println!("All elevators acknowledged order.");
-                    return true;
-                }                
-            }
-
-            
-            // Remove recived acks from missing list
-            missing_acks.retain(|id| !received_acks.contains(id));
-
-
-            // Send the order to all elevators where ack has not been recvied
-            for &elevator_id in &missing_acks {
-            let target_address = &elevator.inn_address;
-                udp_handler.send(&target_address, &message);
-            }
-            
-        }
-
-        if missing_acks.is_empty() {
-            println!("Successfully acknowledged by all elevators.");
-            return true;
-
-        } else {
-            println!("Missing acknowledgments.");
-        }
-    }
-
-    println!("Failed to deliver order after {} retries to {:?}.", retries, missing_acks[0]);
-    return false;
-}
-    */ 
-
-///remove_from_queue
-/// Broadcast order to remove one or more orders from a specific elevator
-///
-/// # Arguments:
-/// 
-/// * `slave_id` - u8 - ID of the elevator where the order/orders should be removed from.
-/// * `removed_orders` - Vec<u8> - Vector of orders that will be removed.
-/// 
-/// # Returns:
-///
-/// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
-///
-pub fn remove_from_queue(udp_handler: &UdpHandler, slave: &mut Elevator, removed_orders: &Vec<Elevator>,sent_messages:&mut Vec<UdpMsg>) -> bool {
-    !todo!("FIX");
-    let message = make_Udp_msg(MessageType::Remove_Order, &removed_orders);
-    return udp_handler.send(&slave.inn_address, &message);
-}
 
 
 /// correct_master_worldview
@@ -276,7 +170,6 @@ pub fn remove_from_queue(udp_handler: &UdpHandler, slave: &mut Elevator, removed
 /// 
 /// # Arguments:
 /// 
-/// * `master` - &Elevator - Refrence to master elevator.
 /// * `missing_orders` - Vec<Elevator> - List of elevators with errors in queues.
 /// * `active_elevators` - &mut Vec<Elevator> - Refrence to master elevator.
 /// 
@@ -316,24 +209,23 @@ pub fn correct_master_worldview(missing_orders:&mut Vec<Elevator>, active_elevat
 }
 
 
-
 /// generate_worldview
 /// Create worldview from list of active elevators
 /// finds active lights from orders of active elevators
 /// 
 /// # Arguments:
 /// 
-/// * `elevators` - &Vec<Elevator> - Refrence to list of active elevators
+/// * `active_elevators` - &Vec<Elevator> - Refrence to list of active elevators
 /// 
 /// # Returns:
 ///
 /// Returns - Worldview- Returns a worldview struct.
 ///
-pub fn generate_worldview(active_elevators: Vec<Elevator>) -> Worldview {
+pub fn generate_worldview(active_elevators: &Vec<Elevator>) -> Worldview {
 
     // Find active lights
     let mut lights = Vec::new();
-    for elevator in &active_elevators {
+    for elevator in active_elevators {
 
         for order in &elevator.queue {
             let floor = order.floor;
@@ -359,7 +251,7 @@ pub fn generate_worldview(active_elevators: Vec<Elevator>) -> Worldview {
 /// 
 /// # Arguments:
 /// 
-/// * `master` - &Elevator - Refrence to master elevator.
+/// * `active_elevators` - &Arc<Mutex<Vec<Elevator>>> - Refrence to list of active elevators(mutex, see SysState).
 /// 
 /// # Returns:
 ///
@@ -392,6 +284,8 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 /// 
 /// * `slave_id` - u8 - ID of the elevator that has failed.
 /// * `elevators` - &mut Vec<Elevator> - refrence to the vector containing the active elevators.
+/// * `state` - &mut SystemState - mutable refrence to the systemstate
+/// * `udp_handler` - refrence to the handler that should send message.
 /// 
 /// # Returns: 
 /// 
@@ -399,7 +293,7 @@ fn relinquish_master(master: &mut Elevator) -> bool {
 /// else returns `false`
 ///
 ///
-pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>,state: &mut SystemState, udp_handler: UdpHandler)  -> bool {
+pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>,state: &mut SystemState, udp_handler: &UdpHandler)  -> bool {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
@@ -423,23 +317,24 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Elevator>,state: &
 ///  
 /// # Arguments:
 /// 
-/// * `orders` - Vec<u8> - orders to be distributed.
-/// * `master` - refrence to master
-/// * `active_elevators` - &mut Vec<Elevator> - refrence to the vector containing the active elevators.
-/// * `socket` - &UdpSocket- socket
-/// * `FAILED_ORDERS` - list of orders that failed to distribute.
+/// * `orders` - &Vec<u8> - refrence to list of orders to be distributed.
+/// * `state` - mutable refrence to system state
+/// * `udp_handler` - &UdpHandler> - refrence to the handler that should send the order.
 /// 
 /// # Returns:
 /// 
-/// returns nothing.
+/// returns `true`, if successfull and `false` if failed.
 ///
 pub fn reassign_orders(orders: &Vec<Order>, state: &mut SystemState, udp_handler: &UdpHandler) -> bool {
     for order in orders {
         let mut assigned = false;
 
+        //Lock active elevators and copy, then release
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
         let mut elevators = active_elevators_locked.clone();
         drop(active_elevators_locked);
+
+        //Give order to best alternative
         for best_alternative in best_to_worst_elevator(&order, &elevators) {
             println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
@@ -479,7 +374,7 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &mut SystemState, udp_handler
 ///  
 /// # Arguments:
 /// 
-/// * `order` - u8 - the floor number.
+/// * `order` - &Order - refrence to the order.
 /// * `elevators` - &Vec<Elevator> - refrence to list of active elevators that the functions will sort.
 /// 
 /// # Returns:
@@ -509,6 +404,7 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Elevator>) -> Vec<u
                 // Penalty if moving away from the floor
                 score -= 10; 
             }
+
         // Idle elevators are prefered over busy elevators
         }else if elevator.status == Status::Idle { 
             score += 20;
@@ -535,10 +431,8 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Elevator>) -> Vec<u
 /// 
 /// # Arguments:
 /// 
-/// * `me` - &Elevator - refrence to this elevator.
-/// * `sender` - &Elevator - refrence to senders elevator .
-/// * `worldview` - &Worldview - .
-/// 
+/// * `stae` - &mut SystemState - mutable refrence to the systemstate.
+/// * `sender` - &u8 - refrence to the ID of the master it is comparing to.
 /// 
 /// # Returns:
 ///
@@ -546,8 +440,10 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Elevator>) -> Vec<u
 ///
 pub fn handle_multiple_masters(state: &mut SystemState, sender: &u8) -> bool {
 
+    // Lock active elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
 
+    // Confirm elevator is active
     let me = match active_elevators_locked.iter_mut().find(|e| e.ID == state.me_ID){
 
         Some(me_elevator) =>me_elevator,
@@ -561,14 +457,13 @@ pub fn handle_multiple_masters(state: &mut SystemState, sender: &u8) -> bool {
 
     let mut result = true;
     
-        // This is the master, no others found
+        //Master ID is my ID
     if me.role == Role::Master {
         result = false; 
 
         // Give away master role, simple solution, Kill program and reboot
     }else if sender < &me.ID{
         reboot_program();
-        result = true; // this never runs due to reboot, just here to stop warning
     } 
     return result; 
 

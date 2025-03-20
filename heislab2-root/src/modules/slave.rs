@@ -34,15 +34,10 @@ use crate::modules::system_status::SystemState;
 
 use std::net::{UdpSocket, SocketAddr};
 use std::thread::sleep;
-use std::time::{Instant, Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html
-use std::thread; // imported in elevator.rs, do i need it here?
+use std::time::{Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
-use std::sync::{Arc, Mutex};
 
-
-static MY_ID:u8 = 0;
-static MAX_FLOOR:u8 = 4;
 
 //-----------------------STRUCTS------------------------------------------------------------
 
@@ -55,7 +50,7 @@ static MAX_FLOOR:u8 = 4;
 /// 
 /// # Arguments:
 /// 
-/// * `slave` - &mut Elevator - &refrence to the elevator where the order should be addded.
+/// * `slave` - &mut Elevator - mutable refrence to the elevator where the order should be addded.
 /// * `new_order` - u8 - floor that should be added to the queue.
 /// * `socket` - &UdpSocket - socket of the sender.
 /// * `master_adress` - SocketAddr - adress where the master is expecting the ack.
@@ -65,15 +60,17 @@ static MAX_FLOOR:u8 = 4;
 ///
 /// Returns - bool- 'true' if order has been added to queue or the order already was in the queue and ackowledgement has been sent, if the acknowledgement failed it returns 'false' 
 ///
-pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket, master_address: SocketAddr, original_msg: &UdpMsg, udp_handler: &UdpHandler) -> bool {
+pub fn receive_order(slave: &mut Elevator, new_order: Order, master_address: SocketAddr, original_msg: &UdpMsg, udp_handler: &UdpHandler) -> bool {
     
+    // Add order 
     if !slave.queue.contains(&new_order) {
         slave.queue.push(new_order.clone());
         println!("{} added to elevator {}", new_order.floor, slave.ID);
-        return udp_ack(socket, master_address, original_msg, slave.ID, udp_handler);
+        return udp_ack(master_address, original_msg, slave.ID, udp_handler);
+        // Order already exists  
     }else{
         println!("{} already in queue for elevator {}", new_order.floor, slave.ID);
-        return udp_ack(socket, master_address, original_msg, slave.ID, udp_handler);
+        return udp_ack(master_address, original_msg, slave.ID, udp_handler);
     }
 }
 
@@ -82,8 +79,8 @@ pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket,
 /// 
 /// # Arguments:
 /// 
-/// * `slave_id` - u8 - ID of the elevator that completed the order.
-/// * `order` - u8 - floornumber of the completed order.
+/// * `completed_order` - Order - the order that was completed.
+/// * `status` - &SystemState - refrence to the system state.
 /// 
 /// # Returns:
 ///
@@ -91,8 +88,10 @@ pub fn receive_order(slave: &mut Elevator, new_order: Order, socket: &UdpSocket,
 ///
 pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
 
+    //Lock active elevators
     let active_elevators_locked = status.active_elevators.lock().unwrap();
 
+    // Send message with order to remove
     if let Some(elevator) = active_elevators_locked.iter().find(|e| e.ID == status.me_ID) {
         let mut remove_elevator = elevator.clone();
         remove_elevator.queue = vec![completed_order];
@@ -110,21 +109,22 @@ pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
 /// 
 /// # Arguments:
 /// 
-/// * `slave` - &mut Elevator - refrence to the elevator where the order should be removed from.
-/// * `order` - u8 - floor that should be removed from queue.
+/// * `slave` - &mut Elevator - mutable refrence to the elevator where the order should be removed from.
+/// * `order` - u8 - order that should be removed from queue.
 /// 
 /// # Returns:
 ///
 /// Returns - bool - returns 'true' if the order was successuly removed, returns 'false' if the floor couldnt be found in the queue.
 ///
-pub fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
+pub fn cancel_order(slave: &mut Elevator, order: Order) -> bool {
 
-    if let Some(index) = slave.queue.iter().position(|o| o.floor == order) {
+    //Remove order from queue
+    if let Some(index) = slave.queue.iter().position(|o| o.floor == order.floor) {
         slave.queue.remove(index);
-        println!("Order {} removed from queue of elevator {}", order, slave.ID);
+        println!("Order {} removed from queue of elevator {}", order.floor, slave.ID);
         return true;
     }
-    println!("Order {} couldnt be found in queue of elevator {}", order, slave.ID);
+    println!("Order {} couldnt be found in queue of elevator {}", order.floor, slave.ID);
     return false;
 }
 
@@ -135,20 +135,22 @@ pub fn cancel_order(slave: &mut Elevator, order: u8) -> bool {
 /// 
 /// # Arguments:
 /// 
-/// * `active_elevators` - &mut Vec<Elevator> - refrence to list of active elevatosrs.
-/// * `new_worldview` - &worlcview) - worldview struct.
+/// * `state` - &mut SystemState - mutable refrence to the systemstate.
+/// * `new_worldview` - &new_worldview) - refrence to list of elevators in the new worldview.
 /// 
 /// 
 /// # Returns:
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(state: &SystemState, new_worldview: &Vec<Elevator>) -> bool {
+pub fn update_from_worldview(state: &mut SystemState, new_worldview: &Vec<Elevator>) -> bool {
 
     let mut worldview_changed = false;
 
+    //Lock active elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
+    // Compare recived worldview to active elevators
     for wv_elevator in new_worldview{
         if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == wv_elevator.ID){
 
@@ -183,13 +185,16 @@ pub fn update_from_worldview(state: &SystemState, new_worldview: &Vec<Elevator>)
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `master_adress` - String - Adress of the master. // NEED TO FIX THIS 
+/// * `missing_orders` - &Vec<Elevator> - refrence to the worldview that has more orders than the new worldview 
+/// * `udp_handler` - &UdpHandler - refrence to the handler that that handles the sending.
+/// 
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - None - .
 ///
-pub fn notify_worldview_error(master_adress: String ,slave_id: u8, missing_orders: &Vec<Elevator>,udp_handler: &UdpHandler) {
+pub fn notify_worldview_error(master_adress: String , missing_orders: &Vec<Elevator>,udp_handler: &UdpHandler) {
 
     let message = make_Udp_msg(MessageType::Error_Worldview, missing_orders);
     let socket: SocketAddr = master_adress.parse().expect("invalid adress");
@@ -201,25 +206,29 @@ pub fn notify_worldview_error(master_adress: String ,slave_id: u8, missing_order
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * `me` - &mut Eelvator - mutable refrence to the elevators.
+/// * `state` - &mut SystemState - mutable refrence to the system state
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - bool - returns `true` if master is dead, repeats untill master is dead.
 ///
 pub fn check_master_failure(me:&mut Elevator, state: &mut SystemState) -> bool {
 
     loop{
+        //Wait 5sec
         sleep(Duration::from_millis(5000));
 
-        if  state.last_lifesign.elapsed() > Duration::from_millis(5000) {
-            println!("Master not broadcasting, electing new master");
+        //Lock and check for new life sign
+        let mut last_lifesign_locked = state.last_lifesign.lock().unwrap();
+        if  last_lifesign_locked.elapsed() > Duration::from_millis(5000) {
+            println!("No worldview recived from Master in last 5sec, electing new master");
+            drop(last_lifesign_locked);
             become_master(me,state);
             return true;
         }
+        drop(last_lifesign_locked);
     }    
-    println!("Master still alive");
-    return false;
 }
 
 
@@ -227,15 +236,16 @@ pub fn check_master_failure(me:&mut Elevator, state: &mut SystemState) -> bool {
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
-/// 
+/// * `me` - &mut Elevator - mutable refrence to this elevator.
+/// * `state` - &mut SystemState - mutable refrence to the system state.
+///  
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - None - .
 ///
 pub fn become_master(me: &mut Elevator,state: &mut SystemState){
 
-    sleep(Duration::from_millis((150*u64::from(me.ID))));
+    sleep(Duration::from_millis(150*u64::from(me.ID)));
     if check_master_failure(me, state){
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
         if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.ID == state.master_ID) {
@@ -259,11 +269,11 @@ pub fn become_master(me: &mut Elevator,state: &mut SystemState){
 /// 
 /// # Arguments:
 /// 
-/// * `` -  - .
+/// * None
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - None - .
 ///
 pub fn reboot_program(){
 

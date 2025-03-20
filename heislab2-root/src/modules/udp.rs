@@ -40,24 +40,25 @@
 
 #[allow(unused_imports)]
 #[allow(unused_variables)]
+#[allow(non_camel_case_types)]
 
 //----------------------------------------------Imports
 use std::net::{SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
                                        //use std::sync::{Arc, Mutex};          // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
-use bincode; use sha2::digest::Update;
+use bincode; 
 // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
-use std::time::Duration; // https://doc.rust-lang.org/std/time/struct.Duration.html
-use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
+use std::time::{Duration,Instant}; // https://doc.rust-lang.org/std/time/struct.Duration.html
+// use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};
 use std::net::{Ipv4Addr,IpAddr};
 
+
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::Elevator;
-use crate::modules::slave;
-use crate::modules::master::{Worldview,handle_multiple_masters,Role,reassign_orders,correct_master_worldview,generate_worldview};
+use crate::modules::master::{handle_multiple_masters,Role,correct_master_worldview,generate_worldview};
 use crate::modules::slave::update_from_worldview;
 use crate::modules::system_status::SystemState;
 
@@ -88,15 +89,15 @@ pub enum MessageType {
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
 //UDP Header
 pub struct UdpHeader {
-    pub sender_id: u8,            // ID of the sender of the message.
+    pub sender_id: u8,             // ID of the sender of the message.
     pub message_type: MessageType, // ID for what kind of message it is, e.g. Button press, or Update queue.
-    pub checksum: Vec<u8>,        // Hash of data to check message integrity.
+    pub checksum: Vec<u8>,         // Hash of data to check message integrity.
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
                                                 //UDP Message Struct
 pub struct UdpMsg {
-    pub header: UdpHeader, // Header struct containing information about the message itself
+    pub header: UdpHeader,       // Header struct containing information about the message itself
     pub data: Vec<Elevator>,     // Data so be sent.
 }
 
@@ -110,15 +111,6 @@ pub struct UdpHandler {
 
 
 impl UdpHandler {
-
-    /// Creates a new UDP handler with a bound sockets
-    pub fn new(me: Elevator) -> Self {
-        let sender_socket = UdpSocket::bind(me.out_address).expect("Could not bind UDP socket");
-        sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
-        let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
-        receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
-        return UdpHandler{sender_socket,receiver_socket};
-    }
 
     /// Sends a UDP message
     pub fn send(&self, target_address: &SocketAddr, msg: &UdpMsg) -> bool {
@@ -140,17 +132,16 @@ impl UdpHandler {
     /// 
     /// # Arguments:
     /// 
-    /// * `socket` - &UdpSocket - what socket we are reading from.
-    /// * `max_wait` - u32 - maximum waittime in milliscounds.
-    /// * `slave` - &Elevator - Refrence to elevator.
-    /// * `me` - &Elevator  - Refrence to this elevator.
-    /// * `worldview` - &mut Worldview - refrence to worldview.
+    /// * `max_wait` - u32 - maximum wait time in milliscounds.
+    /// * `state` - &mut SystemState  - mutable refrence to systemstate.
     /// 
     /// # Returns:
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
     pub fn receive(&self, max_wait: u32, state:&mut SystemState) -> Option<UdpMsg> {
+
+        //Set socket from udp.handler
         self.receiver_socket
             .set_read_timeout(Some(Duration::from_millis(max_wait as u64)))
             .expect(&format!("Failed to set read timeout of {} ms", max_wait));
@@ -166,14 +157,14 @@ impl UdpHandler {
 
                     match msg.header.message_type{
                         MessageType::Worldview => {handle_worldview(state, &msg);},
-                        MessageType::Ack => {handle_ack(&msg, &mut &state.sent_messages);},
-                        MessageType::Nak => {handle_nak(&msg, &mut &state.sent_messages, &self.sender_socket, &sender, &self);},
-                        MessageType::New_Order => {handle_new_order(&msg, &self.sender_socket, &sender, state, &self);},
+                        MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
+                        MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
+                        MessageType::New_Order => {handle_new_order(&msg, &sender, state, &self);},
                         MessageType::New_Master => {handle_new_master(&msg, &state.active_elevators);},
                         MessageType::New_Online => {handle_new_online(&msg, state);},
                         MessageType::Error_Worldview => {handle_error_worldview(&msg, &state.active_elevators);},
-                        MessageType::Error_Offline => {handle_error_offline(&msg, &self.sender_socket, state, &self);},
-                        MessageType::Order_Complete => {handle_remove_order(&msg, &state.active_elevators, &state.failed_orders);},
+                        MessageType::Error_Offline => {handle_error_offline(&msg, state, &self);},
+                        MessageType::Order_Complete => {handle_remove_order(&msg, &mut state.active_elevators, &mut state.failed_orders);},
                         _ => println!("Unreadable message received from {}", sender),
                     }
                         return Some(msg);
@@ -190,18 +181,26 @@ impl UdpHandler {
     }
 }
 
+/// Creates a new UDP handler with a bound sockets based on this elevator
+pub fn init_udp_handler(me: Elevator) -> UdpHandler {
+    let sender_socket = UdpSocket::bind(me.out_address).expect("Could not bind UDP socket");
+    sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
+    let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
+    receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
+    return UdpHandler{sender_socket,receiver_socket};
+}
+
 ///make_Udp_msg
 /// 
 /// # Arguments:
 /// 
-/// * `elevator` - crate::modules::elevator::Elevator - . Sender
 /// * `message_type` - MessageType - what kind of message, check enum MessageType
 /// * `message` - Vec<Elevator> The message to be sendt
 /// 
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -UdpMsg- The message that has been generated.
 ///
 pub fn make_Udp_msg(message_type: MessageType, message: &Vec<Elevator>) -> UdpMsg {
     let hash = calc_checksum(&message);
@@ -224,22 +223,27 @@ pub fn make_Udp_msg(message_type: MessageType, message: &Vec<Elevator>) -> UdpMs
 /// handle_worldview
 /// # Arguments:
 /// 
-/// * `slave` - &Elevator - referance to elevator.
-/// * `worldview` - &mut Worldview - current worldview.
+/// * `state` - &mut SystemState - mutable refrence to system state.
 /// * `msg` - UdpMsg - Recived message.
 /// 
 /// # Returns:
 ///
-/// Returns - NONE - .
+/// Returns - None - .
 ///
 pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
     println!("Updating worldview...");
+
+    //Update last lifesign
+    let mut last_lifesign_locked = state.last_lifesign.lock().unwrap();
+    *last_lifesign_locked = Instant::now();
+    drop(last_lifesign_locked);
+    
     update_from_worldview(state, &msg.data);
     let active_elevators: Vec<Elevator> = {
         let active_elevators_locked = state.active_elevators.lock().unwrap();
         active_elevators_locked.clone() 
     };  
-    generate_worldview(active_elevators);
+    generate_worldview(&active_elevators);
     handle_multiple_masters(state, &msg.header.sender_id);
 }
 
@@ -248,13 +252,13 @@ pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
 /// # Arguments:
 /// 
 /// * `msg` - UdpMsg - Recived message .
-/// * `sent_messages` &mut Vec<UdpMsg>-  -.
+/// * `sent_messages` &mut Arc<Mutex<Vec<UdpMsg>>>-  -.
 /// 
 /// # Returns:
 ///
-/// Returns -NONE- .
+/// Returns -None- .
 ///
-pub fn handle_ack(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>) {
+pub fn handle_ack(msg: &UdpMsg, sent_messages: &mut Arc<Mutex<Vec<UdpMsg>>>) {
     println!("Received ACK from ID: {}", msg.header.sender_id);
 
     let mut sent_messages_locked = sent_messages.lock().unwrap();
@@ -275,16 +279,15 @@ pub fn handle_ack(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>) {
 /// # Arguments:
 /// 
 /// * `msg` - UdpMsg - .The recived message
-/// * `sent_messages` - &Vec<UdpMsg> - List of messages waiting for responses
-/// * `socket` -&UdpSocket  - Sending scokcet.
-/// * `target_adress` - SocketAddr - reciver adress .
-/// 
+/// * `sent_messages` - &Arc<Mutex<Vec<UdpMsg>>> - List of messages waiting for responses
+/// * `target_adress` - &SocketAddr - refrence to reciver adress .
+/// * `udp_handler` - &UdpHandler - refrence to the handler sending the message
 /// 
 /// # Returns:
 ///
 /// Returns - - .
 ///
-pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, socket: &UdpSocket, target_address: &SocketAddr,udp_handler: &UdpHandler) {
+pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, target_address: &SocketAddr,udp_handler: &UdpHandler) {
     println!("Received NAK from ID: {}", msg.header.sender_id);
 
     // Check if this NAK matches sent message
@@ -303,24 +306,28 @@ pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, socket:
 /// handle_new_order
 /// # Arguments:
 /// 
-/// * `slave` - &mut Elevator - refrence to elevator.
-/// * `msg` - UdpMsg - recived message.
-/// * `socket` - &udpSocket - sending socket.
-/// * `sender_adress` - &SocketAdress - reciving adress.
+/// * `msg` - &UdpMsg - refrence to recived message.
+/// * `sender_adress` - &SocketAdress - Reciving adress.
+/// * `state` - &mut SystemState - Mutable refrence to systemstate
+/// * `udp_handler` - &UdpHandler - refrence to handler, sending message.
+/// 
 /// 
 /// # Returns:
 ///
 /// Returns -None- .
 ///
 
-pub fn handle_new_order(msg: &UdpMsg, socket: &UdpSocket, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler) {
+pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler) {
     println!("New order received ID: {}", msg.header.sender_id);
 
+    // Take the first elevator in the list (THERE SHOULD ONLY BE ONE IN THE LIST)
     if let Some(elevator)=msg.data.first(){
         let elevator_id = elevator.ID;
 
+        //Lock active elevators
         let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
 
+        //Find elevator with mathcing ID and update queue
         if let Some(update_elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == elevator_id){
             for order in &elevator.queue {
                 if !update_elevator.queue.contains(&order){
@@ -331,7 +338,8 @@ pub fn handle_new_order(msg: &UdpMsg, socket: &UdpSocket, sender_address: &Socke
                 }
             }
         }
-        udp_ack(socket, *sender_address, &msg, elevator.ID, udp_handler);
+        //Send Ack to sender
+        udp_ack(*sender_address, &msg, elevator.ID, udp_handler);
     }else{
         println!("ERROR: Failed to find elevator");
     }
@@ -343,11 +351,11 @@ pub fn handle_new_order(msg: &UdpMsg, socket: &UdpSocket, sender_address: &Socke
 /// # Arguments:
 /// 
 /// * `msg` - UdpMsg - recived message.
-/// * `active_elevators` - &mut Vec<elevators> - Vector of active elevators.
+/// * `active_elevators` - &Arc<Mutex<Vec<Elevator>>> - Vector of active elevators.
 /// 
 /// # Returns:
 ///
-/// Returns -NONE- .
+/// Returns -None- .
 ///
 pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
@@ -374,16 +382,17 @@ pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator
 /// Adds a new online elevator to the active elevators vector.
 /// # Arguments:
 /// 
-/// * `msg` - `UdpMsg` - Message received containing the elevator ID.
-/// * `active_elevators` - `&mut Vec<Elevator>` - List of currently active elevators.
+/// * `msg` - `&UdpMsg` - Message received containing the elevator ID.
+/// * `state` - `&mut System State>` - mutable refrence to systemstate.
 /// 
 /// # Returns:
 ///
 /// Returns `true` if the elevator was added or already in the vector, otherwise `false`.
 ///
-pub fn handle_new_online(msg: &UdpMsg, state:&mut SystemState) -> bool {
+pub fn handle_new_online(msg: &UdpMsg, state: &mut SystemState) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
+    //Lock active elevaotrs
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
     // Check if elevator is already active
@@ -391,52 +400,54 @@ pub fn handle_new_online(msg: &UdpMsg, state:&mut SystemState) -> bool {
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
     }
-    drop(active_elevators_locked);
+    //Release active elevators
+    drop(active_elevators_locked); 
 
     // Find address
     let addr = if let Some(elevator) = msg.data.first() {
-        elevator.inn_address.clone()
+        elevator.inn_address
     } else {
         println!("Error: No elevator data received.");
         return false;
     };
 
-    //Dummy values, maybe crate a config file
-    let NUM_FLOOR = 4; // find the global variable and replace this
-    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
-    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
-    let id=1;
+    // Find the matching elevator in msg.data
+    if let Some(elevator) = msg.data.iter().find(|e| e.ID == msg.header.sender_id) {
+        let new_elevator = Elevator {
+            inn_address: elevator.inn_address,
+            out_address: elevator.out_address,
+            num_floors: elevator.num_floors,
+            ID: elevator.ID,
+            current_floor: elevator.current_floor,
+            queue: elevator.queue.clone(),
+            status: elevator.status.clone(),
+            direction: elevator.direction.clone(),
+            role: elevator.role.clone(),
+        };
 
-    // Create a new elevator instance using the provided init function
+        // Lock again and add the new elevator
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+        active_elevators_locked.push(new_elevator);
+        drop(active_elevators_locked); 
 
+        println!("Added new elevator ID {} at address {}.", msg.header.sender_id, addr);
+        return true;
+    }
 
-    let new_elevator = match Elevator::init(&inn_addr, &out_addr, NUM_FLOOR, id, state) {
-        Ok(elevator) => elevator,
-        Err(e) => {
-            println!("Failed to initialize new elevator {}: {}", msg.header.sender_id, e);
-            return false;
-        }
-    };
-
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-    active_elevators_locked.push(new_elevator);
-    drop(active_elevators_locked);
-    println!("Added new elevator ID {} at address {}.", msg.header.sender_id, addr);
-    return true;
-    
+    println!("Error: Elevator ID {} not found in message data.", msg.header.sender_id);
+    return false;
 }
 
 
 /// handle_error_worldview
 /// # Arguments:
 /// 
-/// * `msg` - UdpMsg - .
-/// * `worldview` - &mut Worldview - .
-/// * `active_elevators` - &Vec<Elevator> - .
+/// * `msg` - &UdpMsg - refrence to UDP message.
+/// * `active_elevators` - &Arc<Mutex<Vec<Elevator>>> - List of active elevators .
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns -None- .
 ///
 pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
@@ -455,28 +466,33 @@ pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Ele
 /// handle_error_offline
 /// # Arguments:
 /// 
-/// * `msg` - UdpMsg - .
-/// * `active_elevators` -  - .
-/// * `active_elevators` -  - .
+/// * `msg` - &UdpMsg - refrence to UDP message.
+/// * `state` - &mut SystemState - mutable refrence to the system state.
+/// * `udp_handler` - &UdpHandler - refrence to the handler sending the message.
 /// 
 /// # Returns:
 ///
-/// Returns - - .
+/// Returns - None - .
 ///
-pub fn handle_error_offline(msg: &UdpMsg, socket: &UdpSocket,state: &mut SystemState ,udp_handler: &UdpHandler) {
+pub fn handle_error_offline(msg: &UdpMsg,state: &mut SystemState ,udp_handler: &UdpHandler) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Elevator> = None;
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
+    // Check if active elevators contains, retain keeps only elements that return true
     active_elevators_locked.retain(|e| {
         if e.ID == msg.header.sender_id {
             removed_elevator = Some(e.clone());
-            false  // Removing the elevator
+            //Remove this elevator
+            return false;  
         } else {
-            true  // Keeping the elevator
+            //Keep this elevator
+            return true; 
         }
     });
+
+    //Release active elevators
     drop(active_elevators_locked);
 
     // Check if the elevator was removed
@@ -496,44 +512,44 @@ pub fn handle_error_offline(msg: &UdpMsg, socket: &UdpSocket,state: &mut SystemS
 /// handle_error_offline
 /// # Arguments:
 /// 
-/// * `msg` - UdpMsg - The UDP message that was recivec.
-/// * `active_elevators` - &mut Vec<Elevator> - List of active elevators.
+/// * `msg` - &UdpMsg - refrence to the UDP message that was recivecd.
+/// * `active_elevators` - &mut Arc<Mutex<Vec<Elevator>>> - List of active elevators.
+/// * `&mut failed_orders` - &mut Arc<Mutex<Vec<Order>>> - list of orders that couldnt be distributed.
 /// 
 /// # Returns:
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevator>>>,failed_orders: &Arc<Mutex<Vec<Order>>>) {
-    println!("Removing order from ID: {}", msg.header.sender_id);
+pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &mut Arc<Mutex<Vec<Elevator>>>,failed_orders: &mut Arc<Mutex<Vec<Order>>>) {
+    
+    //Find ID of elevaotr
+    if let Some(elevator_from_msg) = msg.data.first() {
+        let remove_id = elevator_from_msg.ID;
 
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+        println!("Removing order from ID: {}", remove_id);
 
-    if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == msg.header.sender_id) {
-        
-        
-        if let Some(elevator_from_msg) = msg.data.first() {
-            
-            
+        //Lock active elevators
+        let mut active_elevators_locked = active_elevators.lock().unwrap();
+
+        //Check for correct elevator in active elevators
+        if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.ID == remove_id) {
+    
             if let Some(order) = elevator_from_msg.queue.first() {
-                
-                
+                    
                 if let Some(index) = elevator.queue.iter().position(|o| o == order) {
                     elevator.queue.remove(index);
                     println!("Order {:?} removed from elevator ID: {}", order, elevator.ID);
                 } else {
-                    println!("ERROR: Elevator ID:{} does not have order {:?}", elevator.ID, order);
-                }
-                
+                    println!("ERROR: Elevator ID:{} does not have order {:?}", elevator.ID, order); 
+                }               
+                    
             } else {
-                println!("ERROR: No orders found in the received elevator.");
+                    println!("ERROR: No orders found in the received elevator.");
             }
 
         } else {
             println!("ERROR: No elevator data found in the message.");
         }
-
-    } else {
-        println!("ERROR: Elevator ID:{} is not in active elevators.", msg.header.sender_id);
     }
 }
 
@@ -544,7 +560,7 @@ pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Elevat
 /// 
 /// # Arguments:
 /// 
-/// * `msg` - &UdpMsg - .
+/// * `msg` - &UdpMsg - refrence to message
 /// 
 /// # Returns:
 ///
@@ -581,7 +597,7 @@ pub fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 /// 
 /// # Arguments:
 /// 
-/// * `data` &Vec<>-  - .
+/// * `data` - &Vec<elevator> - refrence to list of elevators.
 /// 
 /// # Returns:
 ///
@@ -600,7 +616,7 @@ pub fn calc_checksum(data: &Vec<Elevator>) -> Vec<u8> {
 /// 
 /// # Arguments:
 /// 
-/// * `&UdpMsg` - &UdpMsg - .
+/// * `msg` - &UdpMsg - refrence to message.
 /// 
 /// # Returns:
 ///
@@ -610,6 +626,8 @@ pub fn comp_checksum(msg: &UdpMsg) -> bool {
     return calc_checksum(&msg.data) == msg.header.checksum;
 }
 
+
+//-------------------------MOVE TO HANDLER STRUCT
 ///udp_ack
 ///ACK, Responds to original messag with ACK, checksum of original message is used as data to ensure which message it is responding to.
 /// 
@@ -619,12 +637,13 @@ pub fn comp_checksum(msg: &UdpMsg) -> bool {
 /// * `target_adress` - SocketAddr - .
 /// * `original_msg` - &UdpMsg - .
 /// * `sender_id` - u8 - .
+/// * `udp_handler` - &UdpHandler -
 /// 
 /// # Returns:
 ///
 /// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
-pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
+pub fn udp_ack(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
 
     let ack_msg = UdpMsg {
@@ -639,22 +658,22 @@ pub fn udp_ack(socket: &UdpSocket, target_address: SocketAddr, original_msg: &Ud
     return udp_handler.send(&target_address, &ack_msg);
 }
 
-
+//------------------------MOVE TO HANDLER STRUCT
 /// udp_nak
 ///NAK, Responds to original messag with NAK, checksum of original message is used as data to ensure which message it is responding to.
 /// 
 /// # Arguments:
 /// 
-/// * `socket` - &UdpSocket - .
 /// * `target_adress` - SocketAddr - .
 /// * `original_msg` - &UdpMsg - .
 /// * `sender_id` - u8 - .
+/// * `udp_handler` -&UdpHandler- 
 ///  
 /// # Returns:
 ///
 /// Returns - bool - returns 'true' if succsessful and 'false' if not.
 ///
-pub fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
+pub fn udp_nak(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
 
     let nak_msg = UdpMsg {
@@ -669,36 +688,6 @@ pub fn udp_nak(socket: &UdpSocket, target_address: SocketAddr, original_msg: &Ud
     return udp_handler.send(&target_address, &nak_msg);
 }
 
-/* 
-
-///udp_send
-///Sending UDP message.
-/// 
-/// # Arguments:
-/// 
-/// * `socket` - &UdpSocket - .
-/// * `target_adress` - SocketAddr -
-/// * `msg` - &UdpMsg - . .
-/// 
-/// # Returns:
-///
-/// Returns - bool - returns 'true' if sucsessfull and 'false' if not .
-///
-pub fn udp_send(socket: &UdpSocket, target_adress: SocketAddr, msg: &UdpMsg) -> bool {
-    let data = serialize(msg);
-    match socket.send_to(&data, target_adress) {
-        Ok(_) => {
-            println!("Message sent to: {}", target_adress);
-            return true;
-        }
-        Err(e) => {
-            eprintln!("Error sending message: {}", e);
-            return false;
-        }
-    }
-}
-
-*/
 
 ///udp_broadcast
 ///Broadcast
@@ -712,7 +701,7 @@ pub fn udp_send(socket: &UdpSocket, target_adress: SocketAddr, msg: &UdpMsg) -> 
 /// Returns - None - .
 ///
 pub fn udp_broadcast(msg: &UdpMsg) -> bool {
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket, broadcast");
+    let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket for broadcast");
     socket
         .set_broadcast(true)
         .expect("failed to activate broadcast");

@@ -110,12 +110,25 @@ impl IoChannels {
         }
     }
 
+    /// Handle call button rx message 
     fn handle_call_rx_msg(msg: CallButtonMsg, elevator: &Elevator) -> () {
-        
+
     }
-    fn handle_stop_rx_msg(msg: StopButtonMsg, elevator: &Elevator) -> () {}
-    fn handle_floor_rx_msg(msg: FloorSensorMsg, elevator: &Elevator) -> () {}
-    fn handle_obstruction_rx_msg(msg: ObstructionMsg, elevator: &Elevator) -> () {}
+
+    /// Handle stop button rx message 
+    fn handle_stop_rx_msg(msg: StopButtonMsg, elevator: &Elevator) -> () {
+
+    }
+
+    /// Handle floor sensor rx message 
+    fn handle_floor_rx_msg(msg: FloorSensorMsg, elevator: &Elevator) -> () {
+
+    }
+
+    /// Handle obstruction sensor rx message 
+    fn handle_obstruction_rx_msg(msg: ObstructionMsg, elevator: &Elevator) -> () {
+
+    }
 
 
 }

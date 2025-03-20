@@ -1,7 +1,12 @@
+//---------
+// Imports
+//---------
+// public crates
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
 
+// our crates
 use heislab2_root::modules::elevator_object::*;
 use alias_lib::{HALL_DOWN, HALL_UP, CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 use elevator_init::Elevator;
@@ -11,10 +16,9 @@ use master::master::*;
 use slave::slave::*;
 use udp::udp::*;
 use udp::message_type;
-
+use heislab2_root::modules::io::*;
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
-
 
 fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;

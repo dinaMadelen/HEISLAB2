@@ -35,7 +35,6 @@ pub mod modules{
 
     pub mod io {
         pub mod io_init;
-        pub mod io_loop;
     }
 
 }

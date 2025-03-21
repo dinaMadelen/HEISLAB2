@@ -92,7 +92,7 @@ fn main() -> std::io::Result<()> {
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
     let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
     let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
-    
+
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
@@ -107,7 +107,10 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    
+    let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
+    let msg = make_udp_msg(cab.id, MessageType::NewOnline, &*system_state_active_elevators);
+    udp_broadcast(&msg);
+
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {

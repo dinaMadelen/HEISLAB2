@@ -9,12 +9,13 @@ use serde::{Deserialize, Serialize};
 use local_ip_address::local_ip;
 
 pub use crate::modules::system_status::SystemState;
-pub use crate::modules::elevator_object::*;
 pub use crate::modules::master::master::Role;
-pub use crate::modules::elevator_object::elevator_status_functions::Status;
+pub use super::elevator_status_functions::Status;
 pub use crate::modules::order_object::order_init::Order;
-pub use crate::modules::cab::elevator_init::Elevator;
-pub use super::elevator_object::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+
+pub use crate::modules::elevator_object::*;
+pub use elevator_init::Elevator;
+pub use alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 
 
 //-------------- GLOBALS/and CONSTANTS
@@ -29,7 +30,7 @@ pub struct Cab {
     pub id: u8,                   // ID for this spesific elevaotr
     pub current_floor: u8,        // Which floor the elevator was last registerd at      
     pub queue: Vec<Order>,        // The current queue the elevator is servicing
-    pub status: Arc<Mutex<Status>>,          // Current status of the elevator
+    pub status: Status,          // Current status of the elevator
     pub direction: i8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
 }

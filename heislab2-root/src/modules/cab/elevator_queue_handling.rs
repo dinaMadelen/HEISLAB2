@@ -5,7 +5,7 @@
 use crate::modules::elevator_object::*;
 use crate::modules::order_object::order_init::Order;
 
-use crate::modules::cab::Cab; 
+use super::cab::Cab; 
 
 impl Cab{
     pub fn add_to_queue(&mut self, order:Order) {
@@ -17,7 +17,6 @@ impl Cab{
             self.print_status();
         }
     }
-    
     //DENNE MÅ ENDRES
     pub fn sort_queue(&self) -> Vec<Order> {
         //todo!("MAKE SORT QUEUE ACTUALLY SORT QUEUE");

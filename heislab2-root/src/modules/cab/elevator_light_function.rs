@@ -1,5 +1,7 @@
 
-use super::elevator_init::Elevator; 
+use crate::modules::elevator_object::elevator_init::Elevator; 
+use super::cab::Cab;
+
 
 impl Cab{
     pub fn turn_on_queue_lights(&mut self, elevator:Elevator){

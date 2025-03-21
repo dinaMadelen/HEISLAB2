@@ -62,12 +62,6 @@ fn main() -> std::io::Result<()> {
     }
 
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
-
-    let (status_tx, status_rx) = cbc::unbounded::<Status>();
-    let (req_status_tx, req_status_rx) = cbc::unbounded::<bool>();
-
-    let (queue_tx, queue_rx) = cbc::unbounded::<Vec<Order>>();
-    let (req_queue_tx, req_queue_rx) = cbc::unbounded::<bool>();
     
 
     loop {
@@ -75,6 +69,7 @@ fn main() -> std::io::Result<()> {
             recv(door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
+                    cab.set_status(Status::DoorOpen,elevator.clone())
                     elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
                 }
             },

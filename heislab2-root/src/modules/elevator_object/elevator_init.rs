@@ -19,9 +19,6 @@ pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP
 pub struct Elevator {
     pub socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
-    pub id: u8,
-    pub queue:Vec<Order>,
-    pub status: Arc<Mutex<Status>>,
     
 }
 
@@ -33,9 +30,6 @@ impl Elevator {
         Ok(Self {
             socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
             num_floors,
-            id: 0,
-            queue: Vec::new(),
-            status: Arc::new(Mutex::new(Status::Idle)),
         })
     }
 

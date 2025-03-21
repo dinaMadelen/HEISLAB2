@@ -90,8 +90,9 @@ fn main() -> std::io::Result<()> {
     }
 
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
+    let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
+    let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
     
-
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------

@@ -23,19 +23,16 @@ use super::cab::Cab;
                 println!("🚪 Doors opened.");
  
                 thread::sleep(Duration::from_secs(1));
-                 /*loop{
-                     cbc::select!{
-                         recv(obstruction_rx)-> a=> {
-                             let obstruction = a.unwrap();
-                             if obstruction{
-                                 thread::sleep(Duration::from_secs(1));
-                             } else{
-                                 break;
-                             }
-                         }
-                     }
-                 }*/
-
+                /* 
+                cbc::select!{
+                    recv(obstruction_rx)-> a=> {
+                        let obstruction = a.unwrap();
+                        if obstruction{
+                            thread::sleep(Duration::from_secs(1));
+                        }
+                    }
+                }
+                */
                 println!("🚪 Doors closed.");
  
                 door_tx.send(true).unwrap();

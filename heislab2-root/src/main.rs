@@ -20,17 +20,15 @@ use heislab2_root::modules::slave::slave;
 
 use heislab2_root::modules::udp::udp::{MessageType, UdpHeader, UdpMsg};
 
-
-// THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
-
 fn main() -> std::io::Result<()> {
-    //Dummy Variables
+    //--------------INIT ELEVATOR------------
     let elev_num_floors = 4;
-
-
     let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+
     println!("Elevator started:\n{:#?}", elevator);
-    
+    //--------------INIT ELEVATOR FINISH------------
+
+    // --------------INIT CAB---------------
     let mut system_state = SystemState {
         me_id: 1,  // Example ID for this elevator
         master_id: 0, // Example master ID
@@ -39,17 +37,23 @@ fn main() -> std::io::Result<()> {
         failed_orders: Arc::new(Mutex::new(Vec::new())), // Empty list of failed orders
         sent_messages: Arc::new(Mutex::new(Vec::new())), // Empty list of sent messages
     };
+
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
     let num_floors = 10;
     let set_id = 1; // Assign ID matching state.me_id for local IP assignment
 
     let mut cab = Cab::init(&inn_addr, &out_addr, num_floors, set_id, &mut system_state)?;
+
+    println!("Cab initialized:\n{:#?}", elevator);
+
+    // --------------INIT CAB FINISH---------------
     //---------------------------------------
     //Create Mutex for elevators
     //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
     //---------------------------------------
 
+    // --------------INIT CHANNELS---------------
     let poll_period = Duration::from_millis(25);
 
     let (call_button_tx, call_button_rx) = cbc::unbounded::<poll::CallButton>();
@@ -76,14 +80,20 @@ fn main() -> std::io::Result<()> {
         spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
     }
 
-    let dirn = DIRN_DOWN;
+    let (door_tx, door_rx) = cbc::unbounded::<bool>();
 
+    // --------------INIT CHANNELS FINISHED---------------
+
+    // --------------INIT RECIEVER THREAD------------------
+    // -------------INIT RECIEVER FINISHED-----------------
+    
+
+    let dirn = DIRN_DOWN;
 
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
 
-    let (door_tx, door_rx) = cbc::unbounded::<bool>();
     
 
     loop {
@@ -110,7 +120,7 @@ fn main() -> std::io::Result<()> {
                     elevator.add_to_queue(new_order);
                 }
                 */
-                make_Udp_msg(cab.id, MessageType::New_Order, );
+                //make_udp_msg(cab.id, MessageType::NewOrder, );
                 cab.add_to_queue(new_order);
                 cab.turn_on_queue_lights(elevator.clone());
 
@@ -139,23 +149,14 @@ fn main() -> std::io::Result<()> {
                 println!("Stop button: {:#?}", stop);
                 
                 cab.set_status(Status::Stop, elevator.clone());
-
+                cab.turn_off_lights(elevator.clone());
                 //broadcast current floor, stop and current queue - this might be redistributed
-
-                //turn of lights
-                for f in 0..elev_num_floors {
-                    for c in 0..3 {
-                        elevator.call_button_light(f, c, false);
-                    }
-                }
-
             },
 
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
-
                 //broadcast obstruction
             },
 

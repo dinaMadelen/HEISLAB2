@@ -258,7 +258,6 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
 pub fn master_worldview(state:&mut SystemState) -> bool{
-
     let active_elevators_locked = state.active_elevators.lock().unwrap();
     let message = make_udp_msg(state.me_id,MessageType::Worldview, &active_elevators_locked); 
     return udp_broadcast(&message);

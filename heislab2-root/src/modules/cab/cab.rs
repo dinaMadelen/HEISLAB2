@@ -4,7 +4,6 @@
 
 use std::io::*;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
-use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use local_ip_address::local_ip;
 
@@ -70,7 +69,7 @@ impl Cab {
                 id: set_id,
                 current_floor: 1,
                 queue: Vec::new(),
-                status: Arc::new(Mutex::new(Status::Idle)),
+                status: Status::Idle,
                 direction: 0,
                 role: Role::Slave,
             });

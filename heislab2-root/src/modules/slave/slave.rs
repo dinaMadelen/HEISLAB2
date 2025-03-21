@@ -26,7 +26,7 @@
 
 //-----------------------IMPORTS------------------------------------------------------------
 
-use crate::modules::cab::Cab; //Import for cab struct
+use crate::modules::cab::cab::Cab; //Import for cab struct
 use crate::modules::udp::udp::{UdpMsg, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master::master::Role;

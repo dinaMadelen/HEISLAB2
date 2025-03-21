@@ -17,8 +17,6 @@ use super::cab::Cab;
     impl Cab{
         // Set initial status
         pub fn try_close_door(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) -> bool{
-       
-
         elevator.door_light(true);
         self.set_status(Status::DoorOpen, elevator.clone());
         thread::spawn(move || {
@@ -46,7 +44,6 @@ use super::cab::Cab;
             return true;
         });
 
-        elevator.door_light(false);
         return false;
 
     }

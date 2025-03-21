@@ -20,10 +20,9 @@ pub struct Elevator {
     pub socket: Arc<Mutex<TcpStream>>,
     pub num_floors: u8,
     pub id: u8,
-    pub current_floor:u8,
     pub queue:Vec<Order>,
     pub status: Arc<Mutex<Status>>,
-    pub direction: i8,
+    
 }
 
 
@@ -35,10 +34,8 @@ impl Elevator {
             socket: Arc::new(Mutex::new(TcpStream::connect(addr)?)),
             num_floors,
             id: 0,
-            current_floor: 1,
             queue: Vec::new(),
             status: Arc::new(Mutex::new(Status::Idle)),
-            direction: 0,
         })
     }
 

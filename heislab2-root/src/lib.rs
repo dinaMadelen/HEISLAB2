@@ -13,7 +13,9 @@ pub mod modules{
     pub mod order_object{
         pub mod order_init;
     }
-    /* 
+    pub mod cab;
+    pub mod system_status;
+    
     pub mod master{
         pub mod master;
         pub mod master_test;
@@ -33,6 +35,6 @@ pub mod modules{
 
     pub mod io {
         pub mod io_init;
-    }*/
+    }
 
 }

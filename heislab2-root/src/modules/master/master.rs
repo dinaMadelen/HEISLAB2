@@ -28,7 +28,7 @@
 #[allow(unused_variables)]
 
 //-----------------------IMPORTS------------------------------------------------------------
-use crate::modules::udp::udp::{UdpMsg,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
+use crate::modules::udp::udp::{UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::cab::elevator_status_functions::Status;
 use crate::modules::cab::cab::Cab;
 use crate::modules::slave::slave::reboot_program;
@@ -108,7 +108,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &mut SystemSta
     }
 
     // Inform rest of system that the order has been added
-    let message = make_udp_msg(state.me_id,MessageType::NewOrder, &vec![elevator.clone()]);
+    let message = make_udp_msg(state.me_id,MessageType::NewOrder, UdpData::Cabs(vec![elevator.clone()]));
     let mut missing_acks: Vec<u8> = active_elevators_locked.iter().map(|e| e.id).collect();
     println!("Broadcasting new orders for elevator:{}", elevator.id);
     udp_broadcast(&message);
@@ -259,7 +259,8 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 ///
 pub fn master_worldview(state:&mut SystemState) -> bool{
     let active_elevators_locked = state.active_elevators.lock().unwrap();
-    let message = make_udp_msg(state.me_id,MessageType::Worldview, &active_elevators_locked); 
+    let cloned_elevators= active_elevators_locked.clone();
+    let message = make_udp_msg(state.me_id,MessageType::Worldview, UdpData::Cabs(cloned_elevators)); 
     return udp_broadcast(&message);
 }
 

@@ -27,7 +27,7 @@
 //-----------------------IMPORTS------------------------------------------------------------
 
 use crate::modules::cab::cab::Cab; //Import for cab struct
-use crate::modules::udp::udp::{UdpMsg, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
+use crate::modules::udp::udp::{UdpMsg, UdpData, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
@@ -96,7 +96,7 @@ pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
         let mut remove_elevator = elevator.clone();
         remove_elevator.queue = vec![completed_order];
 
-        let message = make_udp_msg(status.me_id,MessageType::OrderComplete, &vec![remove_elevator]);
+        let message = make_udp_msg(status.me_id,MessageType::OrderComplete, UdpData::Cab(remove_elevator.clone()));
         return udp_broadcast(&message);
 
     }else{
@@ -197,7 +197,7 @@ pub fn update_from_worldview(state: &mut SystemState, new_worldview: &Vec<Cab>) 
 /// Returns - None - .
 ///
 pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_orders: &Vec<Cab>,udp_handler: &UdpHandler) {
-    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, missing_orders);
+    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, UdpData::Cabs(missing_orders.clone()));
     let socket: SocketAddr = master_adress.parse().expect("invalid adress");
     udp_handler.send(&socket, &message);
 }
@@ -257,7 +257,7 @@ pub fn become_master(me: &mut Cab, state: &mut SystemState){
             new_master.role = Role::Master;
             println!("New master (ID: {}).", new_master.id);
 
-            let message = make_udp_msg(me.id,MessageType::NewMaster, &vec![new_master.clone()]);
+            let message = make_udp_msg(me.id,MessageType::NewMaster, UdpData::Cab(new_master.clone()));
             udp_broadcast(&message);
         } else {
             println!("ERROR: New master is not an active elevator")
@@ -281,4 +281,42 @@ pub fn reboot_program(){
         .spawn()
         .expect("Failed to restart program, Restart program manually");
     exit(0); // Kill myself
+}
+
+
+pub fn send_new_online(state: &SystemState) -> bool {
+    // Lock 
+    let active_elevators_locked = state.active_elevators.lock().unwrap();
+
+    //Find this elevator in systemstate
+    if let Some(this_elevator) = active_elevators_locked.iter().find(|e| e.id == state.me_id) {
+        // Create UdpMsg
+        let data = UdpData::Cab(this_elevator.clone());
+        let msg = make_udp_msg(this_elevator.id, MessageType::NewOnline, data);
+
+        // Broadcast the message to notify others that this elevator is online
+        return udp_broadcast(&msg);
+    } 
+    return false;
+}
+
+pub fn send_error_offline(state: &SystemState) -> bool {
+    // Lock 
+    let active_elevators = state.active_elevators.lock().unwrap();
+
+    //Find this elevator in systemstate
+    if let Some(my_elevator) = active_elevators.iter().find(|e| e.id == state.me_id) {
+        // Create UdpMsg
+        let data = UdpData::Cab(my_elevator.clone());
+        let msg = make_udp_msg(my_elevator.id, MessageType::ErrorOffline, data);
+
+        // Broadcast the message to notify others that this elevator is going offline
+        return udp_broadcast(&msg);
+    } else {
+        println!(
+            "ERROR: Elevator with ID {} not found in active_elevators. Cannot send ErrorOffline.",
+            state.me_id
+        );
+        return false;
+    }
 }

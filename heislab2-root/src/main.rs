@@ -96,8 +96,7 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
-    spawn(move || 
-    );
+
     // -------------INIT RECIEVER FINISHED-----------------
 
 
@@ -129,7 +128,8 @@ fn main() -> std::io::Result<()> {
                 {   
                     //Broadcast new request
                     let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
-                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, &*system_state_active_elevators);
+                    let cloned_active_elevators = system_state_active_elevators.clone();
+                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Cabs(cloned_active_elevators));
                     udp_broadcast(&msg);
 
                     drop(system_state_active_elevators);

@@ -60,6 +60,11 @@ use crate::modules::cab::cab::Cab;
 use crate::modules::master::master::{handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
 use crate::modules::slave::slave::update_from_worldview;
 
+pub use crate::modules::elevator_object::*;
+pub use elevator_init::Elevator;
+pub use alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+
+
 //----------------------------------------------Enum
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum MessageType {
@@ -77,6 +82,7 @@ pub enum MessageType {
     RequestResend,
     OrderComplete,
     RemoveOrder,
+    NewRequest,
 }
 
 //----------------------------------------------Structs
@@ -159,6 +165,7 @@ impl UdpHandler {
                         MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
                         MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},
                         MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},
+                        MessageType::NewRequest => {handle_new_request(&msg, &sender, state, &self);},
                         _ => println!("Unreadable message received from {}", sender),
                     }
                         return Some(msg);
@@ -174,7 +181,22 @@ impl UdpHandler {
         }
     }
 }
+pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
+    //Uses only the first element in the elevator vec?
+    
 
+        //Lock active elevators
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
+        //Find elevator with mathcing ID and update queue
+        if let Some(sender) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
+            let order = &sender.queue.first().unwrap();
+            if (*(*order)).order_type == HALL_DOWN||(*(*order)).order_type == HALL_UP{
+                sender.queue.remove(1);
+            };
+            
+        }        
+            
+}
 /// Creates a new UDP handler with a bound sockets based on this elevator
 pub fn init_udp_handler(me: Cab) -> UdpHandler {
 

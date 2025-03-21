@@ -11,14 +11,17 @@ use heislab2_root::modules::system_status::SystemState;
 
 use heislab2_root::modules::cab::*;
 use cab::Cab;
+use cab::Role;
 use elevator_status_functions::Status;
+
+
 use heislab2_root::modules::order_object::order_init::Order;
 
+use heislab2_root::modules::master::master::*;
+use heislab2_root::modules::slave::slave::*;
 
-use heislab2_root::modules::master::master;
-use heislab2_root::modules::slave::slave;
 
-use heislab2_root::modules::udp::udp::{MessageType, UdpHeader, UdpMsg};
+use heislab2_root::modules::udp::udp::*;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
@@ -48,6 +51,12 @@ fn main() -> std::io::Result<()> {
     println!("Cab initialized:\n{:#?}", elevator);
 
     // --------------INIT CAB FINISH---------------
+    //---------------INIT UDP HANDLER-------------------
+    let mut udphandler = init_udp_handler(cab.clone());
+
+    //-------------INIT UDP HANDLER FINISH-----------------
+
+
     //---------------------------------------
     //Create Mutex for elevators
     //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
@@ -86,7 +95,7 @@ fn main() -> std::io::Result<()> {
 
     // --------------INIT RECIEVER THREAD------------------
     // -------------INIT RECIEVER FINISHED-----------------
-    
+
 
     let dirn = DIRN_DOWN;
 
@@ -95,7 +104,7 @@ fn main() -> std::io::Result<()> {
     }
 
     
-
+    // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
             recv(door_rx) -> a => {
@@ -111,16 +120,30 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 //Make new order and add that order to elevators queue
-                let new_order = Order::init(call_button.floor,call_button.call);
-                
                 //broadcast addition, but since order is in own cab the others taking over will not help
-                /*
-                make_Udp_msg(elevator, message_type::New_Order); //Broadcasts the new order so others can update wv
-                if call_button.call == CAB{
-                    elevator.add_to_queue(new_order);
+                let new_order = Order::init(call_button.floor, call_button.call);
+                {   
+                    //Broadcast new request
+                    let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
+                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, &*system_state_active_elevators);
+                    udp_broadcast(&msg);
+
+                    drop(system_state_active_elevators);
+                    // IF MASTER SORT ELEVATORS AND GIVE ORDER
+                    if cab.role==Role::Master{
+                        let system_state_active_elevators = system_state.active_elevators.lock().unwrap();
+                        let best_elevator_vec = best_to_worst_elevator(&new_order,&*system_state_active_elevators);
+                        drop(system_state_active_elevators);
+
+                        //Give order and broadcast new worldview
+                        if let Some(best_elevator) = best_elevator_vec.first() { 
+                            give_order(*best_elevator,vec![&new_order], &mut system_state, &udphandler);
+                            master_worldview(&mut system_state);
+                        }
+                    }
                 }
-                */
-                //make_udp_msg(cab.id, MessageType::NewOrder, );
+                
+
                 cab.add_to_queue(new_order);
                 cab.turn_on_queue_lights(elevator.clone());
 
@@ -133,7 +156,6 @@ fn main() -> std::io::Result<()> {
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
-
                 //update current floor status
                 cab.current_floor = floor;
                 /*

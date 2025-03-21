@@ -4,7 +4,7 @@
 
 use std::io::*;
 use std::fmt;
-use std::net::{TcpStream}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
+use std::net::TcpStream; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
 use std::sync::{Arc, Mutex};
 
 pub use crate::modules::system_status::SystemState;

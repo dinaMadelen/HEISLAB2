@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
 
-use std::sync::*;
 use std::time::Duration;
 use std::thread;
 use crossbeam_channel as cbc;

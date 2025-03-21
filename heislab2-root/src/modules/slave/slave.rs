@@ -32,9 +32,9 @@ use crate::modules::order_object::order_init::Order;
 use crate::modules::master::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
 
-use std::net::{SocketAddr};
+use std::net::SocketAddr;
 use std::thread::sleep;
-use std::time::{Duration}; //https://doc.rust-lang.org/std/time/struct.Instant.html
+use std::time::Duration; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
 
@@ -98,6 +98,7 @@ pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
 
         let message = make_udp_msg(status.me_id,MessageType::OrderComplete, &vec![remove_elevator]);
         return udp_broadcast(&message);
+
     }else{
         println!("Error:Elevator  {} is missing from active", status.me_id);
         return false;
@@ -196,7 +197,6 @@ pub fn update_from_worldview(state: &mut SystemState, new_worldview: &Vec<Cab>) 
 /// Returns - None - .
 ///
 pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_orders: &Vec<Cab>,udp_handler: &UdpHandler) {
-
     let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, missing_orders);
     let socket: SocketAddr = master_adress.parse().expect("invalid adress");
     udp_handler.send(&socket, &message);
@@ -277,7 +277,6 @@ pub fn become_master(me: &mut Cab, state: &mut SystemState){
 /// Returns - None - .
 ///
 pub fn reboot_program(){
-
     Command::new(env::current_exe().expect("Failed to find path to program"))
         .spawn()
         .expect("Failed to restart program, Restart program manually");

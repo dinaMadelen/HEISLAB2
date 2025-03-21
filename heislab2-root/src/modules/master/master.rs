@@ -31,7 +31,7 @@
 use crate::modules::udp::udp::{UdpMsg,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::cab::elevator_status_functions::Status;
 use crate::modules::cab::cab::Cab;
-use crate::modules::slave::slave::{reboot_program};
+use crate::modules::slave::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
 

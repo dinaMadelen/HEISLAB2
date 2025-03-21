@@ -1,16 +1,24 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-//use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
 use heislab2_root::modules::elevator_object::*;
 use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
+use heislab2_root::modules::system_status::SystemState;
+
+use heislab2_root::modules::cab::*;
+use cab::Cab;
 use elevator_status_functions::Status;
 use heislab2_root::modules::order_object::order_init::Order;
+
+
 use heislab2_root::modules::master::master;
 use heislab2_root::modules::slave::slave;
-use heislab2_root::modules::udp::udp;
+
+use heislab2_root::modules::udp::udp::{MessageType, UdpHeader, UdpMsg};
 
 
 // THIS IS SUPPOSED TO BE A SINGLE ELEVATOR MAIN THAT CAN RUN IN ONE THREAD
@@ -22,7 +30,21 @@ fn main() -> std::io::Result<()> {
 
     let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
     println!("Elevator started:\n{:#?}", elevator);
- 
+    
+    let mut system_state = SystemState {
+        me_id: 1,  // Example ID for this elevator
+        master_id: 0, // Example master ID
+        last_lifesign: Arc::new(Mutex::new(Instant::now())), // Set the initial timestamp
+        active_elevators: Arc::new(Mutex::new(Vec::new())), // Empty list of active elevators
+        failed_orders: Arc::new(Mutex::new(Vec::new())), // Empty list of failed orders
+        sent_messages: Arc::new(Mutex::new(Vec::new())), // Empty list of sent messages
+    };
+    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
+    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
+    let num_floors = 10;
+    let set_id = 1; // Assign ID matching state.me_id for local IP assignment
+
+    let mut cab = Cab::init(&inn_addr, &out_addr, num_floors, set_id, &mut system_state)?;
     //---------------------------------------
     //Create Mutex for elevators
     //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
@@ -69,8 +91,9 @@ fn main() -> std::io::Result<()> {
             recv(door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
-                    cab.set_status(Status::DoorOpen,elevator.clone())
-                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                    cab.set_status(Status::DoorOpen,elevator.clone());
+                    cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    elevator.door_light(false);
                 }
             },
 
@@ -83,21 +106,17 @@ fn main() -> std::io::Result<()> {
                 //broadcast addition, but since order is in own cab the others taking over will not help
                 /*
                 make_Udp_msg(elevator, message_type::New_Order); //Broadcasts the new order so others can update wv
-
                 if call_button.call == CAB{
                     elevator.add_to_queue(new_order);
                 }
                 */
-                elevator.add_to_queue(new_order);
-                elevator.turn_on_queue_lights();
+                make_Udp_msg(cab.id, MessageType::New_Order, );
+                cab.add_to_queue(new_order);
+                cab.turn_on_queue_lights(elevator.clone());
 
                 //Safety if elevator is idle to double check if its going to correct floor
-                let true_status= elevator.status.lock().unwrap();
-                let clone_true_status = true_status.clone();
-                drop(true_status);
-
-                if clone_true_status == Status::Idle{
-                    elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                if cab.status == Status::Idle{
+                    cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 }  
             },
 
@@ -106,13 +125,11 @@ fn main() -> std::io::Result<()> {
                 println!("Floor: {:#?}", floor);
 
                 //update current floor status
-                elevator.current_floor = floor;
+                cab.current_floor = floor;
                 /*
                 make_Udp_msg(elevator,message_type::Wordview) //guess this is the ping form
                 */
-                
-                //keep following current route
-                elevator.go_next_floor(door_tx.clone(),obstruction_rx.clone());
+                cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 
             },
 
@@ -121,7 +138,7 @@ fn main() -> std::io::Result<()> {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
                 
-                elevator.set_status(Status::Stop);
+                cab.set_status(Status::Stop, elevator.clone());
 
                 //broadcast current floor, stop and current queue - this might be redistributed
 

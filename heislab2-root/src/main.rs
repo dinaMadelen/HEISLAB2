@@ -90,10 +90,13 @@ fn main() -> std::io::Result<()> {
     }
 
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
+    
 
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
+    spawn(move || 
+    );
     // -------------INIT RECIEVER FINISHED-----------------
 
 
@@ -143,8 +146,6 @@ fn main() -> std::io::Result<()> {
                     }
                 }
                 
-
-                cab.add_to_queue(new_order);
                 cab.turn_on_queue_lights(elevator.clone());
 
                 //Safety if elevator is idle to double check if its going to correct floor

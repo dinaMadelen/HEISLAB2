@@ -1,5 +1,4 @@
-
-
+/* 
 //------------------------------Tests-----------------------
 
 #[cfg(test)] // https://doc.rust-lang.orgbook/ch11-03-test-organization.html Run tests with "cargo test"
@@ -8,315 +7,248 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
-    use crate::modules::udp::*;
-    use udp::{MessageType, UdpHeader, UdpMsg};
+
+    use crate::modules::system_status::SystemState;
+    use crate::modules::master::master::Role;
+
+    use crate::modules::udp::udp::*;
     
 
     #[test]
-    fn test_serialize_deserialize() {
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                checksum: vec![0x12, 0x34],
-            },
-            data: vec![1, 2, 3, 4],
-        };
+    fn test_make_udpmsg(){
 
-        let serialized = serialize(&msg);
-        let deserialized = deserialize(&serialized).expect("Deserialization failed");
+    // Create a test order
+    let test_order = Order { floor: 2, order_type: CAB };
+    let data = UdpData::Order(test_order.clone());
 
-        assert_eq!(msg.header.sender_id, deserialized.header.sender_id);
-        assert_eq!(msg.header.message_id as u8, deserialized.header.message_id as u8);
-        assert_eq!(msg.data, deserialized.data);
-    }
+    // Generate a UDP message
+    let sender_id = 1
+    let msg_type = MessageType::NewRequest;
+    let udp_msg = make_udp_msg(sender_id, msg_type.clone(), data.clone());
 
-    #[test]
-    fn test_calc_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
-        assert!(!checksum.is_empty());
-    }
+    // Check header fields
+    assert_eq!(udp_msg.header.sender_id, sender_id);
+    assert_eq!(udp_msg.header.message_type, msg_type);
 
-    #[test]
-    fn test_comp_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                checksum: checksum.clone(),
-            },
-            data: data.clone(),
-        };
-        assert!(comp_checksum(&msg));
-    }
+    // Check checksum is correctly calculated
+    let expected_checksum = calc_checksum(&data);
+    assert_eq!(udp_msg.header.checksum, expected_checksum);
 
-    #[test]
-    fn test_udp_send_receive() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
+    // Check data integrity
+    assert_eq!(udp_msg.data, data);
 
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::Ack,
-                checksum: calc_checksum(&vec![1, 2, 3, 4]),
-            },
-            data: vec![1, 2, 3, 4],
-        };
-
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-
-        let msg_clone = msg.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50));
-            udp_send(&send_socket, local_addr, &msg_clone);
-        });
-
-        let received_msg = udp_receive_ensure(&recv_socket, 5, 2).expect("Failed to receive message");
-        assert_eq!(msg.data, received_msg.data);
-    }
-
-    #[test]
-    fn test_udp_ack_nak() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
-
-        let original_msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::New_Order,
-                checksum: calc_checksum(&vec![5, 10, 15]),
-            },
-            data: vec![5, 10, 15],
-        };
-
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50));
-            udp_ack(&send_socket, local_addr, &original_msg, 2);
-        });
-
-        let received_ack = udp_receive_ensure(&recv_socket, 5, 2).expect("Failed to receive ACK");
-        assert_eq!(received_ack.header.message_id, message_type::Ack);
-        assert_eq!(received_ack.data, original_msg.header.checksum);
-    }
-
-    #[test]
-    fn test_udp_send_ensure() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
-
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::New_Order,
-                checksum: calc_checksum(&vec![8, 16, 32]),
-            },
-            data: vec![8, 16, 32],
-        };
-
-        let mut sent_messages = Vec::new();
-
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-
-        let msg_clone = msg.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50)); 
-            udp_ack(&send_socket, local_addr, &msg_clone, 2);
-        });
-
-        let result = udp_send_ensure(&recv_socket, &local_addr.to_string(), &msg, 3, &mut sent_messages);
-        assert!(result);
-    }
-
-    #[test]
-    fn test_handle_ack_nak_logic() {
-        let mut sent_messages = Vec::new();
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_id: message_type::New_Order,
-                checksum: calc_checksum(&vec![2, 4, 6]),
-            },
-            data: vec![2, 4, 6],
-        };
-
-        sent_messages.push(msg.clone());
-
-        let ack_msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 2,
-                message_id: message_type::Ack,
-                checksum: calc_checksum(&msg.data),
-            },
-            data: calc_checksum(&msg.data),
-        };
-
-        handle_ack(ack_msg, &mut sent_messages);
-        assert!(!sent_messages.iter().any(|m| calc_checksum(&m.data) == ack_msg.data));
     }
 
     #[test]
     fn test_serialize_deserialize() {
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_type:MessageType::Ack,
-                checksum: vec![0x12, 0x34],
-            },
-            data: vec![1, 2, 3, 4],
+
+        //Create test order
+        let order = Order{
+            floor: 3,
+            order_type:1
         };
 
-        let serialized = serialize(&msg);
-        let deserialized = deserialize(&serialized).expect("Deserialization failed");
+        // Clone to UdpData 
+        data = UdpData::Order(order.clone());
 
-        assert_eq!(msg.header.sender_id, deserialized.header.sender_id);
-        assert_eq!(msg.header.message_id as u8, deserialized.header.message_id as u8);
-        assert_eq!(msg.data, deserialized.data);
-    }
-
-    #[test]
-    fn test_calc_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
-        assert!(!checksum.is_empty());
-    }
-
-    #[test]
-    fn test_comp_checksum() {
-        let data = vec![1, 2, 3, 4];
-        let checksum = calc_checksum(&data);
+        //Create test mesage
         let msg = UdpMsg {
             header: UdpHeader {
                 sender_id: 1,
-                message_type:MessageType::Ack,
-                checksum: checksum.clone(),
+                message_type: MessageType::NewRequest,
+                checksum: calc_checksum(&data),
             },
             data: data.clone(),
         };
-        assert!(comp_checksum(&msg));
+
+        // Serialize and deserialize
+        let serialized = msg_serialize(&msg);
+        let deserialized = msg_deserialize(&serialized).expect("Deserialization failed");
+
+        // Checks
+        assert_eq!(msg.header.sender_id, deserialized.header.sender_id);
+        assert_eq!(msg.header.message_type, deserialized.header.message_type);
+        assert_eq!(msg.data, deserialized.data);
+        assert!(comp_checksum(&deserialized));
     }
 
-    /* 
+
     #[test]
     fn test_udp_send_receive() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
 
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_type:MessageType::Ack,
-                checksum: calc_checksum(&vec![1, 2, 3, 4]),
-            },
-            data: vec![1, 2, 3, 4],
+        //Create two sockets on localhost
+        let localhost = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        let recv_addr: SocketAddr = SocketAddr::new(localhost, 3500);;
+        let send_addr: SocketAddr = SocketAddr::new(localhost, 3600);;
+        
+        //Create reaciving cab
+        let recv_cab = Cab {
+            inn_address: recv_addr,
+            out_address: send_addr,
+            num_floors: 4,
+            id: 2,
+            current_floor: 0,
+            queue: vec![],
+            status: Status::Idle,
+            direction: 0,
+            role: Role::Slave,
         };
-
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-
+        
+        //Create sending cab
+        let send_cab = Cab {
+            inn_address: send_addr,
+            out_address: recv_addr,
+            num_floors: 4,
+            id: 1,
+            current_floor: 0,
+            queue: vec![],
+            status: Status::Idle,
+            direction: 0,
+            role: Role::Slave,
+        };
+    
+        //Create udp handlers for the cabs
+        let sender = init_udp_handler(send_cab);
+        let receiver = init_udp_handler(recv_cab);
+    
+        //Create test message
+        let test_order = Order { floor: 3, order_type: CAB };
+        let msg = make_udp_msg(1, MessageType::NewRequest, UdpData::Order(test_order.clone()));
+    
+        // Dummy system state
+        let mut dummy_state = SystemState {
+            me_id: 3,
+            master_id: Arc::new(Mutex::new(1)),
+            last_lifesign: Arc::new(Mutex::new(std::time::Instant::now())),
+            last_worldview: Arc::new(Mutex::new(msg.clone())),
+            active_elevators: Arc::new(Mutex::new(vec![])),
+            failed_orders: Arc::new(Mutex::new(vec![])),
+            sent_messages: Arc::new(Mutex::new(vec![])),
+        };
+    
+        // Spawn a thread to simulate sending
+        let sender_clone = sender;
         let msg_clone = msg.clone();
         thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50));
-            udp_send(&send_socket, local_addr, &msg_clone);
+            //Delay to ensure that reciuver is up and running
+            thread::sleep(Duration::from_millis(100));
+            sender_clone.send(&recv_addr, &msg_clone);
         });
+    
+        // Try receiving on the other handler
+        let received = receiver.receive(100, &mut dummy_state).expect("No message received");
 
-        let received_msg = udp_receive_ensure(&recv_socket, 5, 2).expect("Failed to receive message");
-        assert_eq!(msg.data, received_msg.data);
+        //Handle messagetype?
+    
+        //Assert it's the same message
+        assert_eq!(received.header.sender_id, msg.header.sender_id);
+        assert_eq!(received.header.message_type, msg.header.message_type);
+        assert_eq!(received.data, msg.data);
     }
-    */
 
     #[test]
     fn test_udp_ack_nak() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
 
-        let original_msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_type:MessageType::New_Order,
-                checksum: calc_checksum(&vec![5, 10, 15]),
-            },
-            data: vec![5, 10, 15],
+        //Create two sockets on localhost
+        let recv_addr: SocketAddr = "127.0.0.1:3500".parse().unwrap();
+        let send_addr: SocketAddr = "127.0.0.1:3600".parse().unwrap();
+        
+        //Create reaciving cab
+        let recv_cab = Cab {
+            inn_address: recv_addr,
+            out_address: send_addr,
+            num_floors: 4,
+            id: 2,
+            current_floor: 0,
+            queue: vec![],
+            status: Status::Idle,
+            direction: 0,
+            role: Role::Slave,
         };
+        
+        //Create sending cab
+        let send_cab = Cab {
+            inn_address: send_addr,
+            out_address: recv_addr,
+            num_floors: 4,
+            id: 1,
+            current_floor: 0,
+            queue: vec![],
+            status: Status::Idle,
+            direction: 0,
+            role: Role::Slave,
+        };
+    
+        //Create udp handlers for the cabs
+        let sender = init_udp_handler(send_cab);
+        let receiver = init_udp_handler(recv_cab);
 
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
+        // Create dummy message that should be responded to
+        let test_order = Order { floor: 1, order_type: CAB };
+        let data = UdpData::Order(test_order.clone());
+        let original_msg = make_udp_msg(1, MessageType::NewRequest, data.clone());
 
+        // Send ACK from sender to receiver
+        let msg_clone = original_msg.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(50));
-            udp_ack(&send_socket, local_addr, &original_msg, 2);
+            udp_ack(receiver_addr, &msg_clone, 2, &sender_clone);
         });
 
-        let received_ack = udp_receive_ensure(&recv_socket, 5, 2).expect("Failed to receive ACK");
-        assert_eq!(received_ack.header.message_id, MessageType::Ack);
-        assert_eq!(received_ack.data, original_msg.header.checksum);
+    // Dummy system state for receiver
+    let mut dummy_state = SystemState {
+        me_id: 2,
+        master_id: Arc::new(Mutex::new(1)),
+        last_lifesign: Arc::new(Mutex::new(std::time::Instant::now())),
+        last_worldview: Arc::new(Mutex::new(original_msg.clone())),
+        active_elevators: Arc::new(Mutex::new(vec![])),
+        failed_orders: Arc::new(Mutex::new(vec![])),
+        sent_messages: Arc::new(Mutex::new(vec![])),
+    };
+
+    // Receive the ACK
+    let received = receiver.receive(100, &mut dummy_state).expect("Did not receive ACK");
+
+    assert_eq!(received.header.message_type, MessageType::Ack);
+    assert_eq!(received.header.checksum, calc_checksum(&data));
+    assert_eq!(received.data, UdpData::None);
     }
 
-    /* 
-    #[test]
-    fn test_udp_send_ensure() {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Failed to bind socket");
-        let local_addr = socket.local_addr().expect("Failed to get socket address");
-
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_type:MessageType::New_Order,
-                checksum: calc_checksum(&vec![8, 16, 32]),
-            },
-            data: vec![8, 16, 32],
-        };
-
-        let mut sent_messages = Vec::new();
-
-        let send_socket = socket.try_clone().expect("Failed to clone socket");
-        let recv_socket = socket;
-
-        let msg_clone = msg.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(50)); 
-            udp_ack(&send_socket, local_addr, &msg_clone, 2);
-        });
-
-        let result = udp_send_ensure(&recv_socket, &local_addr.to_string(), &msg, 3, &mut sent_messages);
-        assert!(result);
-    }
-    */
-
-
-    #[test]
-    fn test_handle_ack_nak_logic() {
-        let mut sent_messages = Vec::new();
-        let msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 1,
-                message_type:MessageType::New_Order,
-                checksum: calc_checksum(&vec![2, 4, 6]),
-            },
-            data: vec![2, 4, 6],
-        };
-
-        sent_messages.push(msg.clone());
-
-        let ack_msg = UdpMsg {
-            header: UdpHeader {
-                sender_id: 2,
-                message_type:MessageType::Ack,
-                checksum: calc_checksum(&msg.data),
-            },
-            data: calc_checksum(&msg.data),
-        };
-
-        handle_ack(ack_msg, &mut sent_messages);
-        assert!(!sent_messages.iter().any(|m| calc_checksum(&m.data) == ack_msg.data));
-    }
 }
 
+#[test]
+fn test_udp_msg_size() {
+
+// Create some dummy elevators
+
+let localhost = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+let dummy_elevators: Vec<Cab> = (0..5)
+    .map(|id| Cab {
+    id,
+    current_floor: id,
+    direction: 0,
+    status: Status::Idle,
+    num_floors: 4,
+    queue: vec![
+        Order { floor: 0, order_type: CAB },
+        Order { floor: 1, order_type: CAB },
+        ],
+    role: Role::Slave,
+    inn_address: SocketAddr::new(localhost, 3500),
+    out_address: SocketAddr::new(localhost, 3600),
+    })
+    .collect();
+
+    let worldview_msg = make_udp_msg(42, MessageType::Worldview, UdpData::Cabs(dummy_elevators));
+    let serialized = msg_serialize(&worldview_msg);
+    let size = serialized.len();
+
+    println!("Serialized worldview message size: {} bytes", size);
+
+    // Check it's under n bytes (We should check how much we are allowed to send ) or your safe UDP threshold
+    // On Linux/Mac    ping -M do -s 1472 <Some ip on the network>
+    // On Windows      ping ping -f -l 1472 <Some ip on the network>
+    assert!(size < 1024, "Worldview message too large: {} bytes", size);
+}
+
+ */

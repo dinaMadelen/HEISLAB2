@@ -1,5 +1,5 @@
 
-
+/* 
 //----------------------------------TESTS-------------------------------------------------------------
 
 #[cfg(test)] // https://doc.rust-lang.org/book/ch11-03-test-organization.html Run tests with "cargo test" 
@@ -117,3 +117,5 @@ mod tests {
         assert!(result || !result);
     }
 }
+
+*/

@@ -18,8 +18,8 @@
 //! - 'make_udp_msg'  Formats a UDP message.
 //! - 'udp_receive'   Categorizes the recived message and handels accordingly.
 //! - 'handle_"Message_type"' handels each spesific mesesage type.
-//! - 'serialize'     serializes UDP messages for transmission.           
-//! - 'deserialize'    deserializes transmitted udp messages.
+//! - 'msg_serialize'     serializes UDP messages for transmission.           
+//! - 'msg_deserialize'    deserializes transmitted udp messages.
 //! - 'calc_checksum'  calculates checksum to ensure message integrity.
 //! - 'comp_checksum'  compares checksum of recived message to the calculated checksum.
 //! - 'udp_send'       sending of udp messages without requirement for acknowledment.
@@ -43,7 +43,7 @@
 #[allow(non_camel_case_types)]
 
 //----------------------------------------------Imports
-use std::net::{SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
+use std::net::{IpAddr,SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
                                        //use std::sync::{Arc, Mutex};          // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
@@ -124,7 +124,7 @@ impl UdpHandler {
 
     /// Sends a UDP message
     pub fn send(&self, target_address: &SocketAddr, msg: &UdpMsg) -> bool {
-        let data = serialize(msg);
+        let data = msg_serialize(msg);
         match self.sender_socket.send_to(&data, target_address) {
             Ok(_) => {
                 println!("Message sent to: {}", target_address);
@@ -160,9 +160,21 @@ impl UdpHandler {
 
         match self.receiver_socket.recv_from(&mut buffer) {
             Ok((size, sender)) => {
+
+                //Check that the sender is from the same subnet, we dont want any outside messages
+                let local_ip = self.receiver_socket.local_addr().unwrap().ip();
+                let sender_ip = sender.ip();
+                if !same_subnet(local_ip, sender_ip) {
+                    println!(
+                        "Message from rejected {}(sender not in same subnet)",
+                        sender_ip
+                    );
+                    return None;
+                }
+
                 println!("Received message of size {} from {}", size, sender);
 
-                if let Some(msg) = deserialize(&buffer[..size]) {
+                if let Some(msg) = msg_deserialize(&buffer[..size]) {
                     println!("Message type: {:?}", msg.header.message_type);
 
                     match msg.header.message_type{
@@ -604,7 +616,7 @@ pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &mut Arc<Mutex<Vec<Ca
 
 
 
-/// serialize
+/// msg_serialize
 /// Split UdpMsg into bytes for easier transmission
 /// 
 /// # Arguments:
@@ -615,7 +627,7 @@ pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &mut Arc<Mutex<Vec<Ca
 ///
 /// Returns - Vec<u8>- a string of the serialized message.
 ///
-pub fn serialize(msg: &UdpMsg) -> Vec<u8> {
+pub fn msg_serialize(msg: &UdpMsg) -> Vec<u8> {
     let serialized_msg = bincode::serialize(msg).expect("Failed to serialize message");
     return serialized_msg;
 }
@@ -627,11 +639,10 @@ pub fn serialize(msg: &UdpMsg) -> Vec<u8> {
 /// 
 /// * `buffer` - &[u8] - refrence to the buffer containing the serialized message.
 /// 
-/// # Returns:
-///
+/// # Returns: 
 /// Returns - Option<UdpMsg>- .returns either the deserialized message or none
 ///
-pub fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
+pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
     match bincode::deserialize::<UdpMsg>(buffer) {
         Ok(msg) => {
             if data_valid_for_type(&msg) {
@@ -790,7 +801,7 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
         .set_broadcast(true)
         .expect("failed to activate broadcast");
 
-    let msg = serialize(msg);
+    let msg = msg_serialize(msg);
     let target_address = "255.255.255.255;20000";
 
     match socket.send_to(&msg, target_address) {
@@ -804,7 +815,26 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
         }
     }
     return false;
-}   
+}  
+
+
+//Check if the subnet (not full ip) matches.
+pub fn same_subnet(local: IpAddr, remote: IpAddr) -> bool {
+
+    match (local, remote) {
+        // Check that both are IPv4
+        (IpAddr::V4(local_ip), IpAddr::V4(remote_ip)) => {
+            //Split IP adress into array of bytes
+            let local = local_ip.octets();
+            let remote = remote_ip.octets();
+            
+            // Check that each byte in the subnet matches its corresponding byte in the other adress
+            return local[0] == remote[0] && local[1] == remote[1] && local[2] == remote[2];
+        }
+        _ => return false
+    }
+}
+
 
 
 /* 

@@ -191,23 +191,22 @@ impl UdpHandler {
         }
     }
 }
-pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
-    //Uses only the first element in the elevator vec?
-    
 
-        //Lock active elevators
-        let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
-        //Find elevator with mathcing ID and update queue
-        if let Some(sender) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
-            let order = &sender.queue.first().unwrap();
-            if (*(*order)).order_type == HALL_DOWN||(*(*order)).order_type == HALL_UP{
-                sender.queue.remove(1);
-            };
+pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
+    //Lock active elevators
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
+    //Find elevator with mathcing ID and update queue
+    if let Some(sender) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
+        let order = &sender.queue.first().unwrap();
+        if (*(*order)).order_type == HALL_DOWN||(*(*order)).order_type == HALL_UP{
+            sender.queue.remove(1);
+        };
             
 
-        }        
+    }        
             
 }
+
 /// Creates a new UDP handler with a bound sockets based on this elevator
 pub fn init_udp_handler(me: Cab) -> UdpHandler {
 
@@ -259,10 +258,14 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
     println!("Updating worldview...");
 
-    //Update last lifesign
+    //Update last lifesign and last worldview
     let mut last_lifesign_locked = state.last_lifesign.lock().unwrap();
     *last_lifesign_locked = Instant::now();
     drop(last_lifesign_locked);
+
+    let mut new_worldview = state.last_worldview.lock().unwrap();
+    *new_worldview = msg.clone();
+    drop(new_worldview);
     
     let elevators = if let UdpData::Cabs(elevator) = &msg.data{
         elevator
@@ -659,7 +662,7 @@ pub fn deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 /// 
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
-        (MessageType::NewOrder, UdpData::Cab(_)) => true,
+        (MessageType::NewOrder, UdpData::Cabs(_)) => true,
         (MessageType::Worldview, UdpData::Cabs(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,

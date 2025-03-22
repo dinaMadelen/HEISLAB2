@@ -25,8 +25,21 @@ use heislab2_root::modules::udp::udp::*;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
+
+// Check boot function in system Init
+
     let elev_num_floors = 4;
     let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+
+    //Dummy message to have an empty message in current worldview 
+    let boot_worldview =  UdpMsg {
+        header: UdpHeader {
+            sender_id: 0,
+            message_type: MessageType::Worldview,
+            checksum: vec![0],
+        },
+        data: UdpData::None,
+    };
 
     println!("Elevator started:\n{:#?}", elevator);
     //--------------INIT ELEVATOR FINISH------------
@@ -34,12 +47,17 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CAB---------------
     let mut system_state = SystemState {
         me_id: 1,  // Example ID for this elevator
-        master_id: 0, // Example master ID
+        master_id:  Arc::new(Mutex::new(0)), // master ID
         last_lifesign: Arc::new(Mutex::new(Instant::now())), // Set the initial timestamp
+        last_worldview: Arc::new(Mutex::new(boot_worldview)),
         active_elevators: Arc::new(Mutex::new(Vec::new())), // Empty list of active elevators
         failed_orders: Arc::new(Mutex::new(Vec::new())), // Empty list of failed orders
         sent_messages: Arc::new(Mutex::new(Vec::new())), // Empty list of sent messages
     };
+
+    //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
+    //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
+
 
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
@@ -107,8 +125,10 @@ fn main() -> std::io::Result<()> {
     }
 
     let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
-    let msg = make_udp_msg(cab.id, MessageType::NewOnline, &*system_state_active_elevators);
+    let msg = make_udp_msg(cab.id, MessageType::NewOnline, UdpData::Cabs(system_state_active_elevators.clone()));
+    drop(system_state_active_elevators);
     udp_broadcast(&msg);
+    
 
     // ------------------ MAIN LOOP ---------------------
     loop {

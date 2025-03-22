@@ -216,19 +216,32 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_ord
 ///
 pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
 
+
     loop{
+
+        //Check if this is the master.
+        let master_id_locked = state.master_id.lock().unwrap();
+        if state.me_id == *master_id_locked{
+            //i am the master, no need to continue checking
+            return false
+        }
+        drop(master_id_locked);
+    
+
         //Wait 5sec
         sleep(Duration::from_millis(5000));
 
-        //Lock and check for new life sign
+        //Get time of last lifesign
         let last_lifesign_locked = state.last_lifesign.lock().unwrap();
-        if  last_lifesign_locked.elapsed() > Duration::from_millis(5000) {
-            println!("No worldview recived from Master in last 5sec, electing new master");
-            drop(last_lifesign_locked);
-            become_master(me,state);
-            return true;
-        }
+        let last_lifesign = last_lifesign_locked.clone();
         drop(last_lifesign_locked);
+
+        //Check age of new lifesign
+        if  last_lifesign.elapsed() > Duration::from_millis(5000) {
+            println!("No worldview recived from Master in last 5sec, electing new master");
+            set_new_master(me,state)
+        }
+        
     }    
 }
 
@@ -244,12 +257,21 @@ pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
 ///
 /// Returns - None - .
 ///
-pub fn become_master(me: &mut Cab, state: &mut SystemState){
+pub fn set_new_master(me: &mut Cab, state: &mut SystemState){
 
     sleep(Duration::from_millis(150*u64::from(me.id)));
-    if check_master_failure(me, state){
+    let last_lifesign_locked = state.last_lifesign.lock().unwrap();
+    if last_lifesign_locked.elapsed() > Duration::from_millis(5000){
+        //Set myself as master
+        
+        //Find master id
+        let master_id_locked = state.master_id.lock().unwrap();
+        let master_id=master_id_locked.clone();
+        drop(master_id_locked);
+
+        //Find current master
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-        if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.id == state.master_id) {
+        if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.id == master_id) {
             old_master.role = Role::Slave;
             println!("Old master (ID: {}) set to Slave.", old_master.id);
         }
@@ -262,6 +284,15 @@ pub fn become_master(me: &mut Cab, state: &mut SystemState){
         } else {
             println!("ERROR: New master is not an active elevator")
         }
+    }else{
+
+        //Someone sendt worldview, and became the new master
+        let last_worldview_locked=state.last_worldview.lock().unwrap();
+        let last_worldview=last_worldview_locked.clone();
+        drop(last_worldview_locked);
+        let mut master_id_locked=state.master_id.lock().unwrap();
+        *master_id_locked=last_worldview.header.sender_id;
+        drop(master_id_locked)
     }    
     
 }

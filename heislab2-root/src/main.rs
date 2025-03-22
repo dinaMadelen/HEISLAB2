@@ -173,7 +173,7 @@ fn main() -> std::io::Result<()> {
                 cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
 
                 //SEND ACK
-                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
+                let msg = make_udp_msg(state.id, MessageType::Ack, UdpData::None);
                 udp_broadcast(&msg);
             },
             */

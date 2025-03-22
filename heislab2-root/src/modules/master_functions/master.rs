@@ -34,7 +34,7 @@ use crate::modules::cab_object::cab::Cab;
 use crate::modules::slave_functions::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
-
+use crossbeam_channel as cbc;
 
 
 use serde::{Serialize, Deserialize};
@@ -82,14 +82,15 @@ pub enum Role{
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
 /// 
-pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
+pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler,order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     let mut retries = 3;
     let max_timeout_ms = 300;
     let received_acks = Vec::new();
+    println!("Give order entered");
 
     // Lock active_elevators
     let active_elevators_locked = state.active_elevators.lock().unwrap();
-
+    println!("If im here its not a deadlock");
     // Find the elevator and copy the needed data
     let elevator_index = match active_elevators_locked.iter().position(|e| e.id == elevator_id) {
         Some(index) => index,
@@ -101,6 +102,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 
     // Clone necessary data before dropping mutex lock
     let mut elevator = active_elevators_locked[elevator_index].clone();
+    
     
     // Add new orders to elevator
     for order in new_order {
@@ -127,7 +129,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
             let start_time = std::time::Instant::now();
 
             while start_time.elapsed() < Duration::from_millis(max_timeout_ms) { 
-                if let Some(response) = udp_handler.receive(max_timeout_ms as u32, state) { // WE SHOULD MOVE THIS OUT, WE ONLY HAVE ONE THREAD THAT I CONSTANTLY LISTENING
+                if let Some(response) = udp_handler.receive(max_timeout_ms as u32, state, order_update_tx.clone()) { // WE SHOULD MOVE THIS OUT, WE ONLY HAVE ONE THREAD THAT I CONSTANTLY LISTENING
                     if response.header.message_type == MessageType::Ack && response.header.checksum == message.header.checksum {
                         received_acks.push(response.header.sender_id);
                     }
@@ -293,7 +295,7 @@ fn relinquish_master(master: &mut Cab) -> bool {
 /// else returns `false`
 ///
 ///
-pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<SystemState>, udp_handler: &UdpHandler)  -> bool {
+pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>)  -> bool {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
@@ -302,7 +304,7 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
         // Have to use clone to not take ownership of the queue variable(problem compiling)
         let orders: Vec<Order> = elevators[index].queue.clone();
         elevators.remove(index);
-        reassign_orders(&orders, state, &udp_handler);
+        reassign_orders(&orders, state, &udp_handler, order_update_tx.clone());
         return true;
     } else {
         println!("Error: cant find Elevator with ID {}", slave_id);
@@ -325,7 +327,7 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 /// 
 /// returns `true`, if successfull and `false` if failed.
 ///
-pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
+pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     for order in orders {
         let mut assigned = false;
 
@@ -338,7 +340,7 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handle
         for best_alternative in best_to_worst_elevator(&order, &elevators) {
             println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
-            if give_order(best_alternative, vec![&order],state,udp_handler) {
+            if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
                 println!("Order {} successfully reassigned to elevator {}", order.floor, best_alternative);
                 assigned = true;
                 break; 

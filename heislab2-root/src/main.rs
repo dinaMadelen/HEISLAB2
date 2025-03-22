@@ -55,7 +55,7 @@ fn main() -> std::io::Result<()> {
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
-
+    println!("me id is {}",system_state.me_id);
     //Make free cab
     let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
 
@@ -117,10 +117,18 @@ fn main() -> std::io::Result<()> {
 
     // --------------INIT RECIEVER THREAD------------------
     let mut system_state_clone = Arc::clone(&system_state);
+    
+    // -------------------SET MASTER ID------------------
+    let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+    let mut cab_clone = active_elevators_locked.get_mut(0).unwrap().clone();
+    drop(active_elevators_locked);
+
+    set_new_master(&mut cab_clone, &system_state);
+    // -------------------SET MASTER ID FINISHED------------------
 
     spawn(move||
         loop{
-            udphandler.receive(5, &system_state_clone);
+            udphandler.receive(5, &system_state_clone, order_update_tx.clone());
         }
     );
     // -------------INIT RECIEVER FINISHED-----------------
@@ -135,12 +143,16 @@ fn main() -> std::io::Result<()> {
     let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
     drop(active_elevators_locked);
+    
+    let master_id_clone = system_state.master_id.lock().unwrap().clone();
+    println!("The master is assigned as: {}",master_id_clone);
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-
     udp_broadcast(&msg);
+
     
-    //ASSUMPTION -- all system state changes are handled by reciever fnction?
+
+
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
@@ -166,17 +178,19 @@ fn main() -> std::io::Result<()> {
                 let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
                 udp_broadcast(&msg);
             },
-
+            */
             recv(order_update_rx) -> a => {
 
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
-                cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
-
+                println!("ORDER UPDATED!");
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
+                drop(active_elevators_locked);
                 //SEND ACK
-                let msg = make_udp_msg(state.id, MessageType::Ack, UdpData::None);
+                let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None);
                 udp_broadcast(&msg);
             },
-            */
+            
             recv(door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
@@ -230,6 +244,7 @@ fn main() -> std::io::Result<()> {
 
                 //cab.turn_on_queue_lights(elevator.clone());
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                
                 //Safety if elevator is idle to double check if its going to correct floor
                 if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());

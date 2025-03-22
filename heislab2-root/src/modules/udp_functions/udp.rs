@@ -54,12 +54,14 @@ use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Ad
 use std::time::{Duration,Instant}; // https://doc.rust-lang.org/std/time/struct.Duration.html
 // use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};
+use crossbeam_channel as cbc;
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
+use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
 use crate::modules::slave_functions::slave::update_from_worldview;
+
 
 pub use crate::modules::elevator_object::*;
 pub use elevator_init::Elevator;
@@ -152,7 +154,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn receive(&self, max_wait: u32, state: &Arc<SystemState>) -> Option<UdpMsg> {
+    pub fn receive(&self, max_wait: u32, state: &Arc<SystemState>, order_update_tx: cbc::Sender<Vec<Order>>) -> Option<UdpMsg> {
 
         //Lock socket from udp.handler
         let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
@@ -181,6 +183,7 @@ impl UdpHandler {
         let sender_ip = sender.ip();
 
         //Check that the sender is from the same subnet, we dont want any outside messages
+        //UNCOMMENT THIS
         /* 
         if !same_subnet(local_ip, sender_ip) {
             println!("Message from rejected {}(sender not in same subnet)",sender_ip);
@@ -197,13 +200,14 @@ impl UdpHandler {
                 /*MessageType::Worldview => {handle_worldview(state, &msg);},
                 MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
                 MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
-                MessageType::NewOrder => {handle_new_order(&msg, &sender, &mut state, &self);},
+                */MessageType::NewOrder => {handle_new_order(&msg, &sender, state, &self);},/* 
                 MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
                 MessageType::NewOnline => {handle_new_online(&msg, &mut state);},
                 MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
                 MessageType::ErrorOffline => {handle_error_offline(&msg, &mut state, &self);},
                 MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},*/
-                MessageType::NewRequest => {println!("MOTOOK MELDING");}/*{handle_new_request(&msg, &sender,state, &self);}*/,
+                MessageType::NewRequest => {println!("MOTOOK MELDING");
+                handle_new_request(&msg, &sender,state, &self,order_update_tx);},
                 _ => println!("Unreadable message received from {}", sender),
             }
             return Some(msg);
@@ -218,52 +222,60 @@ impl UdpHandler {
 
 //NEW_REQUEST
 
-pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
+pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<SystemState>,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>){
 
     // Find order in message
     let new_order = if let UdpData::Order(order) = &msg.data{
         order.clone()
     }else{
-        println!("Couldnt read NewRequest message")
+        println!("Couldnt read NewRequest message");
         return;
     };
 
-    println!("New request recived Floor:{}, Type{}",new_order.floor,new_order.type);
+    println!("New request recived Floor:{}, Type{}",new_order.floor,new_order.order_type);
 
     //Lock list of all orders
     let mut all_orders_locked = state.all_orders.lock().unwrap(); 
-    all_orders.push(new_order.clone());
-    drop(all_orders); // This one sounds scary
+    
+    all_orders_locked.push(new_order.clone());
+    drop(all_orders_locked); // This one sounds scary
 
     //Check if this elevator is master 
-    let is_master = state.me_id == *state.master_id.lock().unwrap();
+    let master_id_clone = state.master_id.lock().unwrap().clone();
+    let is_master = state.me_id == master_id_clone;
 
     //Lock active_elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-
+    
     //IF New Request is CAB order
     if new_order.order_type == CAB{
-        if let Some(sender_elevator) = active_elevators.iter_mut().find(|e| e.id == msg.header.sender_id){
-            let mut message_elevator = sender_elevator.clone();
-            message_elevator.queue = new_order.clone();
+        if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
+            sender_elevator.queue.push(new_order.clone());
             
-            
+            println!("Entered call type cab");
             if is_master{
-                let new_msg = make_udp(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone()));
-                give_order(); //-------------------------------------------------------------------------------------------------Fix
+                let new_msg = make_udp_msg(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone()));
+                //MÅ DROPPE ACTIVE ELEVATORS FOR Å KUNNE KJØRE GIVE ORDER! Fører til deadlock ------------------------------------------------------
+                give_order(sender_elevator.id,vec![&new_order], &state, &udp_handler, order_update_tx.clone()); //-------------------------------------------------------------------------------------------------Fix
                 println!("Added CAB order to elevator ID:{}", sender_elevator.id);
+                order_update_tx.send(vec![new_order.clone()]).unwrap();
             }
+            
         }else{
-            println!("Elevator with NewRequest CAB is not active ID:{}", msg.sender_id)
+            println!("Elevator with NewRequest CAB is not active ID:{}", msg.header.sender_id)
         }    
     
     }else {
-
+        
         if is_master{
-            let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked)
-            println!("Assigning new hallcall to {}", best_elevators.first().id)
-            give_order()//---------------------------------------------------------------------------------------------------------->Fix
+            let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked);
+            
+            drop(active_elevators_locked);
+            println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
+            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//---------------------------------------------------------------------------------------------------------->Fix
+            order_update_tx.send(vec![new_order.clone()]).unwrap();
         }
+        
     }
 }
 
@@ -428,7 +440,7 @@ pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, target_
 /// Returns -None- .
 ///
 
-pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler) -> bool {
+pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<SystemState>,udp_handler: &UdpHandler) -> bool {
     println!("New order received ID: {}", msg.header.sender_id);
 
     let elevator = if let UdpData::Cab(cab) = &msg.data {
@@ -584,7 +596,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab
 ///
 /// Returns - None - .
 ///
-pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: &UdpHandler) {
+pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Cab> = None;
@@ -613,7 +625,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: 
         let orders = offline_elevator.queue.clone();
         println!("Reassigning orders, if any: {:?}", orders);
         let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
-        reassign_orders(&order_ids, state ,udp_handler);
+        reassign_orders(&order_ids, state ,udp_handler, order_update_tx);
     } else {
         println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
     }

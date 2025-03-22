@@ -37,7 +37,7 @@ use std::thread::sleep;
 use std::time::Duration; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
-
+use std::sync::{Mutex,Arc};
 
 //-----------------------STRUCTS------------------------------------------------------------
 
@@ -214,7 +214,7 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_ord
 ///
 /// Returns - bool - returns `true` if master is dead, repeats untill master is dead.
 ///
-pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
+pub fn check_master_failure(me:&mut Cab, state: &Arc<SystemState>) -> bool {
 
 
     loop{
@@ -257,19 +257,20 @@ pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
 ///
 /// Returns - None - .
 ///
-pub fn set_new_master(me: &mut Cab, state: &mut SystemState){
+pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
 
     sleep(Duration::from_millis(150*u64::from(me.id)));
+    println!("Entered set new master");
     let last_lifesign_locked = state.last_lifesign.lock().unwrap();
     if last_lifesign_locked.elapsed() > Duration::from_millis(5000){
         //Set myself as master
-        
+    
         //Find master id
         let master_id_locked = state.master_id.lock().unwrap();
         let master_id=master_id_locked.clone();
         drop(master_id_locked);
-
-        //Find current master
+        
+        //This causes deadlock since calling the cab already requires locking the mutex
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
         if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.id == master_id) {
             old_master.role = Role::Slave;
@@ -277,15 +278,21 @@ pub fn set_new_master(me: &mut Cab, state: &mut SystemState){
         }
         if let Some(new_master) = active_elevators_locked.iter_mut().find(|e|e.id == state.me_id){
             new_master.role = Role::Master;
+            {
+                let mut master_id_locked = state.master_id.lock().unwrap();
+                *master_id_locked = state.me_id;
+            }
+            
             println!("New master (ID: {}).", new_master.id);
-
             let message = make_udp_msg(me.id,MessageType::NewMaster, UdpData::Cab(new_master.clone()));
             udp_broadcast(&message);
+            drop(active_elevators_locked);
         } else {
-            println!("ERROR: New master is not an active elevator")
+            println!("ERROR: New master is not an active elevator");
         }
+        
     }else{
-
+        
         //Someone sendt worldview, and became the new master
         let last_worldview_locked=state.last_worldview.lock().unwrap();
         let last_worldview=last_worldview_locked.clone();

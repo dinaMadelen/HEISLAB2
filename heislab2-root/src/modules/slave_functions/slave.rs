@@ -219,6 +219,8 @@ pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
 
     loop{
 
+        //Wait 5sec
+        sleep(Duration::from_millis(5000));
         //Check if this is the master.
         let master_id_locked = state.master_id.lock().unwrap();
         if state.me_id == *master_id_locked{
@@ -228,8 +230,6 @@ pub fn check_master_failure(me:&mut Cab, state: &mut SystemState) -> bool {
         drop(master_id_locked);
     
 
-        //Wait 5sec
-        sleep(Duration::from_millis(5000));
 
         //Get time of last lifesign
         let last_lifesign_locked = state.last_lifesign.lock().unwrap();

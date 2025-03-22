@@ -82,7 +82,7 @@ pub enum Role{
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
 /// 
-pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &mut SystemState, udp_handler: &UdpHandler) -> bool {
+pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
     let mut retries = 3;
     let max_timeout_ms = 300;
     let received_acks = Vec::new();
@@ -257,7 +257,7 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(state:&mut SystemState) -> bool{
+pub fn master_worldview(state:&Arc<SystemState>) -> bool{
     let active_elevators_locked = state.active_elevators.lock().unwrap();
     let cloned_elevators= active_elevators_locked.clone();
     let message = make_udp_msg(state.me_id,MessageType::Worldview, UdpData::Cabs(cloned_elevators)); 
@@ -293,7 +293,7 @@ fn relinquish_master(master: &mut Cab) -> bool {
 /// else returns `false`
 ///
 ///
-pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &mut SystemState, udp_handler: &UdpHandler)  -> bool {
+pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<SystemState>, udp_handler: &UdpHandler)  -> bool {
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
@@ -325,7 +325,7 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &mut S
 /// 
 /// returns `true`, if successfull and `false` if failed.
 ///
-pub fn reassign_orders(orders: &Vec<Order>, state: &mut SystemState, udp_handler: &UdpHandler) -> bool {
+pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
     for order in orders {
         let mut assigned = false;
 
@@ -348,7 +348,7 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &mut SystemState, udp_handler
         }
         
         
-        let mut failed_orders_locked = state.failed_orders.lock().unwrap();
+        let mut failed_orders_locked = state.all_orders.lock().unwrap();
 
         // If no elevator accepted the order, store it for retry
         if !assigned {
@@ -358,7 +358,7 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &mut SystemState, udp_handler
         }
     }
 
-    let failed_orders_locked = state.failed_orders.lock().unwrap();
+    let failed_orders_locked = state.all_orders.lock().unwrap();
 
     if failed_orders_locked.is_empty() {
         println!("All failed orders are redistributed");

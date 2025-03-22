@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![warn(unused_variables)]
 #[allow(unused_imports)]
+use std::sync::{Arc, Mutex};
 
 use std::io::*;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
@@ -37,7 +38,7 @@ pub struct Cab {
 
 impl Cab {
   
-    pub fn init(inn_addr: &SocketAddr, out_addr: &SocketAddr, num_floors: u8, set_id: u8,state:&mut SystemState) -> std::io::Result<Cab> {
+    pub fn init(inn_addr: &SocketAddr, out_addr: &SocketAddr, num_floors: u8, set_id: u8,state:&Arc<SystemState>) -> std::io::Result<Cab> {
         let inport = 3500;
         let outport = 3600;
 

@@ -23,7 +23,7 @@ use system_init::*;
 
 
 use heislab2_root::modules::udp_functions::udp::*;
-use udp::UdpData;
+use udp_functions::udp::UdpData;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
@@ -47,7 +47,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR FINISH------------
 
     // --------------INIT CAB---------------
-    let mut system_state = boot();
+    let mut system_state = Arc::new(boot());
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
@@ -56,7 +56,7 @@ fn main() -> std::io::Result<()> {
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
 
-    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &mut system_state)?;
+    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
 
     println!("Cab initialized:\n{:#?}", elevator);
 
@@ -105,12 +105,13 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
+    let mut system_state_clone = Arc::clone(&system_state);
+
     spawn(move||
         loop{
-            udphandler.receive(5, &mut system_state);
-        } );
-
-
+            udphandler.receive(5, &system_state_clone);
+        }
+    );
     // -------------INIT RECIEVER FINISHED-----------------
 
 
@@ -144,23 +145,27 @@ fn main() -> std::io::Result<()> {
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
                     //Broadcast new request
-                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
+                    /*let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Order(new_order.clone()));*/
                     udp_broadcast(&msg);
 
                     // IF MASTER SORT ELEVATORS AND GIVE ORDER
-                    if cab.role==Role::Master{
+                    if new_order.order_type == CAB{
+                        cab.add_to_queue(new_order);
+
+                    } else if cab.role==Role::Master{
                         let system_state_active_elevators = system_state.active_elevators.lock().unwrap();
                         let best_elevator_vec = best_to_worst_elevator(&new_order,&*system_state_active_elevators);
                         drop(system_state_active_elevators);
-
+                        
                         //Give order and broadcast new worldview
                         if let Some(best_elevator) = best_elevator_vec.first() { 
-                            give_order(*best_elevator,vec![&new_order], &mut system_state, &udphandler);
-                            master_worldview(&mut system_state);
+                            give_order(*best_elevator,vec![&new_order], &system_state, &udphandler);
+                            master_worldview(&system_state);
                         }
                     }
+
                 }
-                
+
                 cab.turn_on_queue_lights(elevator.clone());
 
                 //Safety if elevator is idle to double check if its going to correct floor
@@ -185,7 +190,7 @@ fn main() -> std::io::Result<()> {
             recv(stop_button_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
-                
+
                 cab.set_status(Status::Stop, elevator.clone());
                 cab.turn_off_lights(elevator.clone());
                 //broadcast current floor, stop and current queue - this might be redistributed

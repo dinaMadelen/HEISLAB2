@@ -43,7 +43,8 @@
 #[allow(non_camel_case_types)]
 
 //----------------------------------------------Imports
-use std::net::{IpAddr,SocketAddr, UdpSocket}; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
+use std::net::{IpAddr,SocketAddr, UdpSocket};
+use std::ops::DerefMut; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
                                        //use std::sync::{Arc, Mutex};          // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
@@ -100,11 +101,10 @@ pub struct UdpMsg {
     pub header: UdpHeader,       // Header struct containing information about the message itself
     pub data: UdpData,        // Data so be sent.
 }
-
-
+#[derive (Clone, Debug)]
 pub struct UdpHandler {
-    sender_socket: UdpSocket,
-    receiver_socket: UdpSocket,
+    sender_socket: Arc<Mutex<UdpSocket>>,
+    receiver_socket: Arc<Mutex<UdpSocket>>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
@@ -149,7 +149,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn receive(&self, max_wait: u32, state:&mut SystemState) -> Option<UdpMsg> {
+    pub fn receive(&self, max_wait: u32, state: &Arc<SystemState>) -> Option<UdpMsg> {
 
         //Set socket from udp.handler
         self.receiver_socket
@@ -178,16 +178,16 @@ impl UdpHandler {
                     println!("Message type: {:?}", msg.header.message_type);
 
                     match msg.header.message_type{
-                        MessageType::Worldview => {handle_worldview(state, &msg);},
+                        /*MessageType::Worldview => {handle_worldview(state, &msg);},
                         MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
                         MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
-                        MessageType::NewOrder => {handle_new_order(&msg, &sender, state, &self);},
+                        MessageType::NewOrder => {handle_new_order(&msg, &sender, &mut state, &self);},
                         MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
-                        MessageType::NewOnline => {handle_new_online(&msg, state);},
+                        MessageType::NewOnline => {handle_new_online(&msg, &mut state);},
                         MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
-                        MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},
-                        MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},
-                        MessageType::NewRequest => {handle_new_request(&msg, &sender, state, &self);},
+                        MessageType::ErrorOffline => {handle_error_offline(&msg, &mut state, &self);},
+                        MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},*/
+                        MessageType::NewRequest => {println!("MOTOOK MELDING");}/*{handle_new_request(&msg, &sender,state, &self);}*/,
                         _ => println!("Unreadable message received from {}", sender),
                     }
                         return Some(msg);
@@ -204,19 +204,23 @@ impl UdpHandler {
     }
 }
 
+//NEW_REQUEST
+
 pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
     //Lock active elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
     //Find elevator with mathcing ID and update queue
+
+    //IF ROLE IS MASTER --> GIVE ORDER
+
+    // ELSE ROLE IS SLAVE --> IF CAB REQUEST ADD TO STATE.active elevators that elevators queue + add to state.active_orders
+    //                        IF HALL REQUEST ADD TO STATE.active_orders
     if let Some(sender) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
         let order = &sender.queue.first().unwrap();
         if (*(*order)).order_type == HALL_DOWN||(*(*order)).order_type == HALL_UP{
             sender.queue.remove(1);
         };
-            
-
-    }        
-            
+    }
 }
 
 /// Creates a new UDP handler with a bound sockets based on this elevator
@@ -529,7 +533,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab
 ///
 /// Returns - None - .
 ///
-pub fn handle_error_offline(msg: &UdpMsg,state: &mut SystemState ,udp_handler: &UdpHandler) {
+pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: &UdpHandler) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Cab> = None;

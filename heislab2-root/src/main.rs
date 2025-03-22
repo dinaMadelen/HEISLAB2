@@ -16,12 +16,14 @@ use cab::Role;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
 
+
 use master_functions::master::*;
 use slave_functions::slave::*;
 use system_init::*;
 
 
 use heislab2_root::modules::udp_functions::udp::*;
+use udp::UdpData;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
@@ -64,7 +66,6 @@ fn main() -> std::io::Result<()> {
 
     //-------------INIT UDP HANDLER FINISH-----------------
 
-
     //---------------------------------------
     //Create Mutex for elevators
     //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
@@ -104,6 +105,11 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
+    spawn(move||
+        loop{
+            udphandler.receive(5, &mut system_state);
+        } );
+
 
     // -------------INIT RECIEVER FINISHED-----------------
 
@@ -114,9 +120,7 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
-    let msg = make_udp_msg(cab.id, MessageType::NewOnline, UdpData::Cabs(system_state_active_elevators.clone()));
-    drop(system_state_active_elevators);
+    let msg = make_udp_msg(cab.id, MessageType::NewOnline, UdpData::Cab(cab.clone()));
     udp_broadcast(&msg);
     
 
@@ -140,12 +144,9 @@ fn main() -> std::io::Result<()> {
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
                     //Broadcast new request
-                    let system_state_active_elevators = system_state.active_elevators.lock().unwrap(); // Lock the mutex
-                    let cloned_active_elevators = system_state_active_elevators.clone();
-                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Cabs(cloned_active_elevators));
+                    let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     udp_broadcast(&msg);
 
-                    drop(system_state_active_elevators);
                     // IF MASTER SORT ELEVATORS AND GIVE ORDER
                     if cab.role==Role::Master{
                         let system_state_active_elevators = system_state.active_elevators.lock().unwrap();

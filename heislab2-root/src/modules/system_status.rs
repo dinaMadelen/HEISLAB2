@@ -5,6 +5,7 @@ use crate::modules::udp_functions::udp::UdpMsg;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+#[derive(Clone, Debug)]
 pub struct SystemState {
     pub me_id : u8,
     pub master_id: Arc<Mutex<u8>>,

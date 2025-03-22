@@ -213,19 +213,51 @@ impl UdpHandler {
 //NEW_REQUEST
 
 pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut SystemState,udp_handler: &UdpHandler){
-    //Lock active elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
-    //Find elevator with mathcing ID and update queue
 
-    //IF ROLE IS MASTER --> GIVE ORDER
+    // Find order in message
+    let new_order = if let UdpData::Order(order) = &msg.data{
+        order.clone()
+    }else{
+        println!("Couldnt read NewRequest message")
+        return;
+    };
 
-    // ELSE ROLE IS SLAVE --> IF CAB REQUEST ADD TO STATE.active elevators that elevators queue + add to state.active_orders
-    //                        IF HALL REQUEST ADD TO STATE.active_orders
-    if let Some(sender) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
-        let order = &sender.queue.first().unwrap();
-        if (*(*order)).order_type == HALL_DOWN||(*(*order)).order_type == HALL_UP{
-            sender.queue.remove(1);
-        };
+    println!("New request recived Floor:{}, Type{}",new_order.floor,new_order.type);
+
+    //Lock list of all orders
+    let mut all_orders_locked = state.all_orders.lock().unwrap(); 
+    all_orders.push(new_order.clone());
+    drop(all_orders); // This one sounds scary
+
+    //Check if this elevator is master 
+    let is_master = state.me_id == *state.master_id.lock().unwrap();
+
+    //Lock active_elevators
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+
+    //IF New Request is CAB order
+    if new_order.order_type == CAB{
+        if let Some(sender_elevator) = active_elevators.iter_mut().find(|e| e.id == msg.header.sender_id){
+            let mut message_elevator = sender_elevator.clone();
+            message_elevator.queue = new_order.clone();
+            
+            
+            if is_master{
+                let new_msg = make_udp(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone()));
+                give_order(); //-------------------------------------------------------------------------------------------------Fix
+                println!("Added CAB order to elevator ID:{}", sender_elevator.id);
+            }
+        }else{
+            println!("Elevator with NewRequest CAB is not active ID:{}", msg.sender_id)
+        }    
+    
+    }else {
+
+        if is_master{
+            let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked)
+            println!("Assigning new hallcall to {}", best_elevators.first().id)
+            give_order()//---------------------------------------------------------------------------------------------------------->Fix
+        }
     }
 }
 
@@ -427,8 +459,6 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut S
 ///
 pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab>>>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
-
-    
 
     // Set current master's role to Slave
     let mut active_elevators_locked = active_elevators.lock().unwrap();

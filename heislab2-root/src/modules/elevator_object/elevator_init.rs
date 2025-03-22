@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 pub use crate::modules::system_status::SystemState;
 pub use crate::modules::elevator_object::*;
-pub use crate::modules::master::master::Role;
+pub use crate::modules::master_functions::master::Role;
 pub use crate::modules::order_object::order_init::Order;
 pub use super::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
 

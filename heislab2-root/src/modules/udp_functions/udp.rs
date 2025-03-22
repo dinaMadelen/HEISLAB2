@@ -56,9 +56,9 @@ use std::sync::{Mutex,Arc};
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
-use crate::modules::cab::cab::Cab;
-use crate::modules::master::master::{handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
-use crate::modules::slave::slave::update_from_worldview;
+use crate::modules::cab_object::cab::Cab;
+use crate::modules::master_functions::master::{handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
+use crate::modules::slave_functions::slave::update_from_worldview;
 
 pub use crate::modules::elevator_object::*;
 pub use elevator_init::Elevator;

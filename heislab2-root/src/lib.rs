@@ -10,7 +10,7 @@ pub mod modules{
         pub mod order_init;
     }
 
-    pub mod cab{
+    pub mod cab_object{
         pub mod cab;
         pub mod elevator_movement;
         pub mod elevator_queue_handling;
@@ -20,17 +20,17 @@ pub mod modules{
 
     pub mod system_status;
     
-    pub mod master{
+    pub mod master_functions{
         pub mod master;
         pub mod master_test;
     }
 
-    pub mod slave{
+    pub mod slave_functions{
         pub mod slave;
         pub mod slave_test;
     }
 
-    pub mod udp{
+    pub mod udp_functions{
         pub mod udp;
         pub mod udp_test;
     }

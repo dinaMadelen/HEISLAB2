@@ -9,7 +9,7 @@ use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use heislab2_root::modules::system_status::SystemState;
 
-use heislab2_root::modules::cab::*;
+use heislab2_root::modules::cab_object::*;
 use cab::Cab;
 use cab::Role;
 use elevator_status_functions::Status;
@@ -17,11 +17,11 @@ use elevator_status_functions::Status;
 
 use heislab2_root::modules::order_object::order_init::Order;
 
-use heislab2_root::modules::master::master::*;
-use heislab2_root::modules::slave::slave::*;
+use heislab2_root::modules::master_functions::master::*;
+use heislab2_root::modules::slave_functions::slave::*;
 
 
-use heislab2_root::modules::udp::udp::*;
+use heislab2_root::modules::udp_functions::udp::*;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------

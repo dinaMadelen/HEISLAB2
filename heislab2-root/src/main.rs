@@ -56,15 +56,24 @@ fn main() -> std::io::Result<()> {
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
 
+    //Make free cab
     let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
+
+    //---------------INIT UDP HANDLER-------------------
+    let mut udphandler = init_udp_handler(cab.clone());
+    //-------------INIT UDP HANDLER FINISH-----------------
+
+    //Lock free cab into captivity:(
+    let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+    active_elevators_locked.push(cab);
+    drop(active_elevators_locked);
+
+
 
     println!("Cab initialized:\n{:#?}", elevator);
 
     // --------------INIT CAB FINISH---------------
-    //---------------INIT UDP HANDLER-------------------
-    let mut udphandler = init_udp_handler(cab.clone());
-
-    //-------------INIT UDP HANDLER FINISH-----------------
+    
 
     //---------------------------------------
     //Create Mutex for elevators
@@ -101,7 +110,9 @@ fn main() -> std::io::Result<()> {
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
     let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
     let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
-
+    let (world_view_update_tx, world_view_update_rx) = cbc::unbounded::<Vec<Cab>>();
+    let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
+    let (recieve_request_tx, recieve_request_rx) = cbc::unbounded::<Order>();
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
@@ -121,19 +132,68 @@ fn main() -> std::io::Result<()> {
         elevator.motor_direction(dirn);
     }
 
-    let msg = make_udp_msg(cab.id, MessageType::NewOnline, UdpData::Cab(cab.clone()));
+    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+    drop(active_elevators_locked);
+
+    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+
     udp_broadcast(&msg);
     
-
+    //ASSUMPTION -- all system state changes are handled by reciever fnction?
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
+            /* 
+            recv(world_view_update_rx) -> a => {
+                let world_view = a.unwrap();
+                //Add to own wv then ack
+                
+                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
+                udp_broadcast(&msg);
+            },
+            recv(light_update_rx) -> a => {
+                //Send Ack
+                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
+                udp_broadcast(&msg);
+
+                //Turn onn all lights in own queue
+                cab.turn_on_queue_lights(elevator.clone());
+            },
+            recv(recieve_request_rx) -> a => {
+                //UPDATE OWN SET OF ALL ORDERS
+                //CHECK IF HANDLED IN HANDLER
+                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
+                udp_broadcast(&msg);
+            },
+
+            recv(order_update_rx) -> a => {
+
+                //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
+                cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+
+                //SEND ACK
+                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
+                udp_broadcast(&msg);
+            },
+            */
             recv(door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
-                    cab.set_status(Status::DoorOpen,elevator.clone());
-                    cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                    active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    drop(active_elevators_locked);
                     elevator.door_light(false);
+
+                    //Should add cab to systemstatevec and then broadcast new state
+
+                    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                    drop(active_elevators_locked);
+
+                    let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
+                    udp_broadcast(&msg);
                 }
             },
 
@@ -145,13 +205,15 @@ fn main() -> std::io::Result<()> {
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
                     //Broadcast new request
-                    /*let msg = make_udp_msg(cab.id, MessageType::NewRequest, UdpData::Order(new_order.clone()));*/
+                    let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     udp_broadcast(&msg);
 
                     // IF MASTER SORT ELEVATORS AND GIVE ORDER
+                    /* 
                     if new_order.order_type == CAB{
-                        cab.add_to_queue(new_order);
-
+                        let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                        active_elevators_locked.get_mut(0).unwrap().add_to_queue(new_order);
+                        drop(active_elevators_locked);
                     } else if cab.role==Role::Master{
                         let system_state_active_elevators = system_state.active_elevators.lock().unwrap();
                         let best_elevator_vec = best_to_worst_elevator(&new_order,&*system_state_active_elevators);
@@ -162,27 +224,39 @@ fn main() -> std::io::Result<()> {
                             give_order(*best_elevator,vec![&new_order], &system_state, &udphandler);
                             master_worldview(&system_state);
                         }
-                    }
+                    }*/
 
                 }
 
-                cab.turn_on_queue_lights(elevator.clone());
-
+                //cab.turn_on_queue_lights(elevator.clone());
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 //Safety if elevator is idle to double check if its going to correct floor
-                if cab.status == Status::Idle{
-                    cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
-                }  
+                if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                } 
+                drop(active_elevators_locked);
             },
 
             recv(floor_sensor_rx) -> a => {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 //update current floor status
-                cab.current_floor = floor;
-                /*
-                make_Udp_msg(elevator,message_type::Wordview) //guess this is the ping form
-                */
-                cab.go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                active_elevators_locked.get_mut(0).unwrap().current_floor = floor;
+                drop(active_elevators_locked);
+
+                //Should add cab to systemstatevec and then broadcast new state
+                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                drop(active_elevators_locked);
+
+                let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
+                udp_broadcast(&msg);
+                
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                drop(active_elevators_locked);
                 
             },
 
@@ -190,9 +264,22 @@ fn main() -> std::io::Result<()> {
             recv(stop_button_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                active_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
+                drop(active_elevators_locked);
 
-                cab.set_status(Status::Stop, elevator.clone());
-                cab.turn_off_lights(elevator.clone());
+                //Should add cab to systemstatevec and then broadcast new state of stopped
+                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                drop(active_elevators_locked);
+
+                let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
+                udp_broadcast(&msg);
+
+                //WHO CONTROLS THE LIGHTS
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                active_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
+                drop(active_elevators_locked);
                 //broadcast current floor, stop and current queue - this might be redistributed
             },
 

@@ -164,6 +164,10 @@ impl UdpHandler {
         // Receive data
         let (size, sender) = match sock.recv_from(&mut buffer) {
             Ok(res) => res,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                // Ignore the error if it's just a timeout
+                return None;
+            }
             Err(e) => {
                 println!("Failed to receive message: {}", e);
                 return None;

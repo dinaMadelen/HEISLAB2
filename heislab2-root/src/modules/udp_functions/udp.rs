@@ -164,6 +164,10 @@ impl UdpHandler {
         // Receive data
         let (size, sender) = match sock.recv_from(&mut buffer) {
             Ok(res) => res,
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                // Ignore the error if it's just a timeout
+                return None;
+            }
             Err(e) => {
                 println!("Failed to receive message: {}", e);
                 return None;
@@ -177,10 +181,12 @@ impl UdpHandler {
         let sender_ip = sender.ip();
 
         //Check that the sender is from the same subnet, we dont want any outside messages
+        /* 
         if !same_subnet(local_ip, sender_ip) {
             println!("Message from rejected {}(sender not in same subnet)",sender_ip);
             return None;
         }
+        */
 
         println!("Received message of size {} from {}", size, sender);
 
@@ -265,7 +271,12 @@ pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &mut
 pub fn init_udp_handler(me: Cab) -> UdpHandler {
 
     let sender_socket = UdpSocket::bind(me.out_address).expect("Could not bind UDP socket");
-    let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
+    /*let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
+    */
+    //Linjen under er det som jeg har tullet med som burde settes tilbake
+    let receiver_socket = UdpSocket::bind("0.0.0.0:20000").expect("Could not bind UDP receiver socket");
+    
+    
     sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
     receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
 
@@ -846,7 +857,7 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
         .expect("failed to activate broadcast");
 
     let msg = msg_serialize(msg);
-    let target_address = "255.255.255.255;20000";
+    let target_address = "255.255.255.255:20000";
 
     match socket.send_to(&msg, target_address) {
         Ok(_) => {

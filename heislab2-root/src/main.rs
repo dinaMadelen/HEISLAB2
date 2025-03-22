@@ -7,18 +7,18 @@ use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use heislab2_root::modules::elevator_object::*;
 use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
-use heislab2_root::modules::system_status::SystemState;
+use heislab2_root::modules::*;
+use system_status::SystemState;
 
-use heislab2_root::modules::cab_object::*;
+use cab_object::*;
 use cab::Cab;
 use cab::Role;
 use elevator_status_functions::Status;
+use order_object::order_init::Order;
 
-
-use heislab2_root::modules::order_object::order_init::Order;
-
-use heislab2_root::modules::master_functions::master::*;
-use heislab2_root::modules::slave_functions::slave::*;
+use master_functions::master::*;
+use slave_functions::slave::*;
+use system_init::*;
 
 
 use heislab2_root::modules::udp_functions::udp::*;
@@ -45,26 +45,16 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR FINISH------------
 
     // --------------INIT CAB---------------
-    let mut system_state = SystemState {
-        me_id: 1,  // Example ID for this elevator
-        master_id:  Arc::new(Mutex::new(0)), // master ID
-        last_lifesign: Arc::new(Mutex::new(Instant::now())), // Set the initial timestamp
-        last_worldview: Arc::new(Mutex::new(boot_worldview)),
-        active_elevators: Arc::new(Mutex::new(Vec::new())), // Empty list of active elevators
-        failed_orders: Arc::new(Mutex::new(Vec::new())), // Empty list of failed orders
-        sent_messages: Arc::new(Mutex::new(Vec::new())), // Empty list of sent messages
-    };
+    let mut system_state = boot();
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
 
-
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
-    let num_floors = 10;
-    let set_id = 1; // Assign ID matching state.me_id for local IP assignment
+    let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
 
-    let mut cab = Cab::init(&inn_addr, &out_addr, num_floors, set_id, &mut system_state)?;
+    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &mut system_state)?;
 
     println!("Cab initialized:\n{:#?}", elevator);
 

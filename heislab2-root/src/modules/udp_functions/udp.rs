@@ -124,8 +124,11 @@ impl UdpHandler {
 
     /// Sends a UDP message
     pub fn send(&self, target_address: &SocketAddr, msg: &UdpMsg) -> bool {
+
         let data = msg_serialize(msg);
-        match self.sender_socket.send_to(&data, target_address) {
+        let sock = self.sender_socket.lock().expect("Faild to lock socket for sending");
+
+        match sock.send_to(&data, target_address) {
             Ok(_) => {
                 println!("Message sent to: {}", target_address);
                 return true;
@@ -134,7 +137,7 @@ impl UdpHandler {
                 eprintln!("Error sending message: {}", e);
                 return false;
             }
-        }
+        };
     }
 
 
@@ -151,56 +154,59 @@ impl UdpHandler {
     ///
     pub fn receive(&self, max_wait: u32, state: &Arc<SystemState>) -> Option<UdpMsg> {
 
-        //Set socket from udp.handler
-        self.receiver_socket
-            .set_read_timeout(Some(Duration::from_millis(max_wait as u64)))
-            .expect(&format!("Failed to set read timeout of {} ms", max_wait));
+        //Lock socket from udp.handler
+        let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
 
+        //Set timeout for reciving messages (How long are you willing to wait)
+        sock.set_read_timeout(Some(Duration::from_millis(max_wait as u64))).expect("Failed to set timeout for socket");
         let mut buffer = [0; 1024];
 
-        match self.receiver_socket.recv_from(&mut buffer) {
-            Ok((size, sender)) => {
-
-                //Check that the sender is from the same subnet, we dont want any outside messages
-                let local_ip = self.receiver_socket.local_addr().unwrap().ip();
-                let sender_ip = sender.ip();
-                if !same_subnet(local_ip, sender_ip) {
-                    println!(
-                        "Message from rejected {}(sender not in same subnet)",
-                        sender_ip
-                    );
-                    return None;
-                }
-
-                println!("Received message of size {} from {}", size, sender);
-
-                if let Some(msg) = msg_deserialize(&buffer[..size]) {
-                    println!("Message type: {:?}", msg.header.message_type);
-
-                    match msg.header.message_type{
-                        /*MessageType::Worldview => {handle_worldview(state, &msg);},
-                        MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
-                        MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
-                        MessageType::NewOrder => {handle_new_order(&msg, &sender, &mut state, &self);},
-                        MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
-                        MessageType::NewOnline => {handle_new_online(&msg, &mut state);},
-                        MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
-                        MessageType::ErrorOffline => {handle_error_offline(&msg, &mut state, &self);},
-                        MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},*/
-                        MessageType::NewRequest => {println!("MOTOOK MELDING");}/*{handle_new_request(&msg, &sender,state, &self);}*/,
-                        _ => println!("Unreadable message received from {}", sender),
-                    }
-                        return Some(msg);
-                } else {
-                    println!("Failed to deserialize message from {}", sender);
-                    return None;
-                }
-            }
+        // Receive data
+        let (size, sender) = match sock.recv_from(&mut buffer) {
+            Ok(res) => res,
             Err(e) => {
                 println!("Failed to receive message: {}", e);
                 return None;
             }
+        };
+
+        let local_ip = sock.local_addr().expect("Failed to get local address").ip();
+        drop(sock); 
+        
+
+        let sender_ip = sender.ip();
+
+        //Check that the sender is from the same subnet, we dont want any outside messages
+        if !same_subnet(local_ip, sender_ip) {
+            println!("Message from rejected {}(sender not in same subnet)",sender_ip);
+            return None;
         }
+
+        println!("Received message of size {} from {}", size, sender);
+
+        if let Some(msg) = msg_deserialize(&buffer[..size]) {
+            println!("Message type: {:?}", msg.header.message_type);
+
+            match msg.header.message_type{
+                /*MessageType::Worldview => {handle_worldview(state, &msg);},
+                MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
+                MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
+                MessageType::NewOrder => {handle_new_order(&msg, &sender, &mut state, &self);},
+                MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
+                MessageType::NewOnline => {handle_new_online(&msg, &mut state);},
+                MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
+                MessageType::ErrorOffline => {handle_error_offline(&msg, &mut state, &self);},
+                MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},*/
+                MessageType::NewRequest => {println!("MOTOOK MELDING");}/*{handle_new_request(&msg, &sender,state, &self);}*/,
+                _ => println!("Unreadable message received from {}", sender),
+            }
+            return Some(msg);
+        } else {
+            println!("Failed to deserialize message from {}", sender);
+            return None;
+        }
+            
+        
     }
 }
 
@@ -230,6 +236,10 @@ pub fn init_udp_handler(me: Cab) -> UdpHandler {
     let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
     sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
     receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
+
+    //Turn sockets into mutexes
+    let sender_socket = Arc::new(Mutex::new(sender_socket));
+    let receiver_socket = Arc::new(Mutex::new(receiver_socket));
     return UdpHandler{sender_socket,receiver_socket};
 }
 

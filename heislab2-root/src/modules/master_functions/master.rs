@@ -179,7 +179,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, active_elevators: &Arc<Mutex<Vec<Cab>>>) -> bool {
+pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, state: &Arc<SystemState>) -> bool {
     println!("Correcting worldview for master");
 
     let mut changes_made = false;
@@ -190,7 +190,7 @@ pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, active_elevators: 
     }
 
     // Compare active elevators to missing orders list
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
     for missing_elevator in missing_orders.iter_mut() {
         if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
@@ -440,7 +440,7 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 ///
 /// Returns - Some(bool) - returns false if the ID is its own, returns true if it keeps the master if the ID is higher than the sender, reboots if it is lower.
 ///
-pub fn handle_multiple_masters(state: &mut SystemState, sender: &u8) -> bool {
+pub fn handle_multiple_masters(state: &Arc<SystemState>, sender: &u8) -> bool {
 
     // Lock active elevators
     let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 

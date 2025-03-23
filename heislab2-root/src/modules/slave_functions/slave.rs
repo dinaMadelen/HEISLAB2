@@ -144,7 +144,7 @@ pub fn cancel_order(slave: &mut Cab, order: Order) -> bool {
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(state: &mut SystemState, new_worldview: &Vec<Cab>) -> bool {
+pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>) -> bool {
 
     let mut worldview_changed = false;
 

@@ -197,17 +197,18 @@ impl UdpHandler {
             println!("Message type: {:?}", msg.header.message_type);
 
             match msg.header.message_type{
-                /*MessageType::Worldview => {handle_worldview(state, &msg);},
-                MessageType::Ack => {handle_ack(&msg, &mut state.sent_messages);},
-                MessageType::Nak => {handle_nak(&msg, &mut state.sent_messages, &sender, &self);},
-                */MessageType::NewOrder => {handle_new_order(&msg, &sender, state, &self);},/* 
-                MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
-                MessageType::NewOnline => {handle_new_online(&msg, &mut state);},
-                MessageType::ErrorWorldview => {handle_error_worldview(&msg, &state.active_elevators);},
-                MessageType::ErrorOffline => {handle_error_offline(&msg, &mut state, &self);},
-                MessageType::OrderComplete => {handle_remove_order(&msg, &mut state.active_elevators);},*/
+                MessageType::Worldview => {handle_worldview(state, &msg);},
+                MessageType::Ack => {handle_ack(&msg, state);},
+                MessageType::Nak => {handle_nak(&msg, state, &sender, &self);},
+                MessageType::NewOrder => {handle_new_order(&msg, &sender, state, &self);},
+                MessageType::NewOnline => {handle_new_online(&msg, state);},
+                MessageType::ErrorWorldview => {handle_error_worldview(&msg, state);},
+                //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
+                MessageType::OrderComplete => {handle_remove_order(&msg, state);},
                 MessageType::NewRequest => {println!("MOTOOK MELDING");
                 handle_new_request(&msg, &sender,state, &self,order_update_tx);},
+                MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
+                
                 _ => println!("Unreadable message received from {}", sender),
             }
             return Some(msg);
@@ -336,7 +337,7 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 ///
 /// Returns - None - .
 ///
-pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
+pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview
@@ -378,10 +379,10 @@ pub fn handle_worldview(state: &mut SystemState, msg: &UdpMsg) {
 ///
 /// Returns -None- .
 ///
-pub fn handle_ack(msg: &UdpMsg, sent_messages: &mut Arc<Mutex<Vec<UdpMsg>>>) {
+pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
     println!("Received ACK from ID: {}", msg.header.sender_id);
 
-    let mut sent_messages_locked = sent_messages.lock().unwrap();
+    let mut sent_messages_locked = state.sent_messages.lock().unwrap();
 
     // Check if this ACK matches sent message
 
@@ -410,11 +411,11 @@ pub fn handle_ack(msg: &UdpMsg, sent_messages: &mut Arc<Mutex<Vec<UdpMsg>>>) {
 ///
 /// Returns - - .
 ///
-pub fn handle_nak(msg: &UdpMsg, sent_messages: &Arc<Mutex<Vec<UdpMsg>>>, target_address: &SocketAddr,udp_handler: &UdpHandler) {
+pub fn handle_nak(msg: &UdpMsg, state: &Arc<SystemState>, target_address: &SocketAddr,udp_handler: &UdpHandler) {
     println!("Received NAK from ID: {}", msg.header.sender_id);
 
     // Check if this NAK matches sent message
-    let sent_messages_locked = sent_messages.lock().unwrap();
+    let sent_messages_locked = state.sent_messages.lock().unwrap();
     if let Some(index) = sent_messages_locked.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
         println!("NAK matches message with checksum: {:?}. Resending...", msg.header.checksum);
         // Resend the message                udp_handler.send(target_address, &sent_messages_locked[index]);
@@ -512,7 +513,7 @@ pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab>>>) 
 ///
 /// Returns `true` if the elevator was added or already in the vector, otherwise `false`.
 ///
-pub fn handle_new_online(msg: &UdpMsg, state: &mut SystemState) -> bool {
+pub fn handle_new_online(msg: &UdpMsg, state: &Arc<SystemState>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     //Lock active elevaotrs
@@ -566,7 +567,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: &mut SystemState) -> bool {
 ///
 /// Returns -None- .
 ///
-pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab>>>) {
+pub fn handle_error_worldview(msg: &UdpMsg, state: &Arc<SystemState>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
@@ -578,7 +579,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab
     };
 
     // Compare and correct worldview based on received data
-    if correct_master_worldview(&mut missing_orders, active_elevators) {
+    if correct_master_worldview(&mut missing_orders, state) {
         println!("Worldview corrected based on report from ID: {}", msg.header.sender_id);
     } else {
         println!("ERROR: Failed to correct worldview");
@@ -642,7 +643,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: 
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &mut Arc<Mutex<Vec<Cab>>>) {
+pub fn handle_remove_order(msg: &UdpMsg, state: &Arc<SystemState>) {
 
     let elevator_from_msg = if let UdpData::Cab(cab) = &msg.data {
         cab
@@ -658,7 +659,7 @@ pub fn handle_remove_order(msg: &UdpMsg, active_elevators: &mut Arc<Mutex<Vec<Ca
     println!("Removing order from ID: {}", remove_id);
 
     //Lock active elevators
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
 
     //Check for correct elevator in active elevators
     if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == remove_id) {

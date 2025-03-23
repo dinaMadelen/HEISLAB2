@@ -17,7 +17,7 @@ pub fn boot() -> SystemState {
     let (me_id_value, default_master_id) = load_config();
 
     //Just a dummy/filler message
-    let mut starting_udpmsg =  UdpMsg {
+    let starting_udpmsg =  UdpMsg {
         header: UdpHeader {
             sender_id: 0,
             message_type: MessageType::Worldview,

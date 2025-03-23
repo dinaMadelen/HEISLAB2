@@ -12,6 +12,7 @@ pub struct SystemState {
     pub last_lifesign: Arc<Mutex<Instant>>,
     pub last_worldview: Arc<Mutex<UdpMsg>>,
     pub active_elevators: Arc<Mutex<Vec<Cab>>>,
+    pub dead_elevators: Arc<Mutex<Vec<Cab>>>,
     pub all_orders: Arc<Mutex<Vec<Order>>>,
     pub sent_messages: Arc<Mutex<Vec<UdpMsg>>>,
 

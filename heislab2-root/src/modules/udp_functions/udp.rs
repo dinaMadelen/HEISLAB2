@@ -86,6 +86,7 @@ pub enum MessageType {
     OrderComplete,
     RemoveOrder,
     NewRequest,
+    ImAlive,
 }
 
 //----------------------------------------------Structs
@@ -208,7 +209,7 @@ impl UdpHandler {
                 MessageType::NewRequest => {println!("MOTOOK MELDING");
                 handle_new_request(&msg, &sender,state, &self,order_update_tx);},
                 MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
-                
+                MessageType::ImAlive => {handle_im_alive(&msg, state)},
                 _ => println!("Unreadable message received from {}", sender),
             }
             return Some(msg);
@@ -221,8 +222,32 @@ impl UdpHandler {
     }
 }
 
-//NEW_REQUEST
+pub fn handle_im_alive(msg: &UdpMsg, state: &Arc<SystemState>){
+    //Extract updated cab from message
+    let updated_cab = if let UdpData::Cab(cab) = &msg.data{
+        cab.clone()
+    }else{
+        println!("Couldnt read ImAlive message");
+        return;
+    };
 
+    //Replace the old cab struct with the updated cab struct
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
+        println!("Updating alive elevator");
+        sender_elevator.merge_with(&updated_cab); 
+
+    } else {
+        println!("Sender elevator not in active elevators");
+        //Send a NewOnline message with that cab
+        active_elevators_locked.push(updated_cab);
+        
+    }
+
+}
+
+
+//NEW_REQUEST
 pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<SystemState>,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>){
 
     // Find order in message
@@ -745,6 +770,7 @@ fn data_valid_for_type(msg: &UdpMsg) -> bool {
         (MessageType::Worldview, UdpData::Cabs(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,
+        (MessageType::ImAlive, UdpData::Cab(_)) => true,
         (MessageType::ErrorWorldview, UdpData::Cabs(_)) => true,
         (MessageType::ErrorOffline, UdpData::Cab(_)) => true,
         (MessageType::NewMaster, UdpData::Cab(_)) => true,

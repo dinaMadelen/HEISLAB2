@@ -139,4 +139,14 @@ impl Cab{
         }
         
     }
+
+    pub fn merge_with(&mut self, other: &Cab) {
+        // Keep inn_address, out_address, num_floors, and id (these don’t change)
+        self.current_floor = other.current_floor;
+        self.queue = other.queue.clone();
+        self.status = other.status.clone();
+        self.direction = other.direction;
+        self.role = other.role.clone();
+    }
+    
 }

@@ -36,6 +36,7 @@ pub fn boot() -> SystemState {
         last_lifesign: Arc::new(Mutex::new(old_lifesign)), 
         last_worldview: Arc::new(Mutex::new(starting_udpmsg)),
         active_elevators: Arc::new(Mutex::new(Vec::new())),
+        dead_elevators: Arc::new(Mutex::new(Vec::new())),
         all_orders: Arc::new(Mutex::new(Vec::new())),
         sent_messages: Arc::new(Mutex::new(Vec::new())),
     }

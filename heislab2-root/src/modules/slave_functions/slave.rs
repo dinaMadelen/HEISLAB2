@@ -37,7 +37,7 @@ use std::thread::sleep;
 use std::time::Duration; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function
-use std::sync::{Mutex,Arc};
+use std::sync::Arc;
 
 //-----------------------STRUCTS------------------------------------------------------------
 

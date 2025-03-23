@@ -2,7 +2,7 @@
 
 use std::env;                               //https://doc.rust-lang.org/std/env/index.html
 use std::fs::File;                          //https://doc.rust-lang.org/std/fs/struct.File.html
-use std::io::{BufRead, BufReader, Write};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
+use std::io::{BufRead, BufReader};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
 use std::path::PathBuf;                     //https://doc.rust-lang.org/std/path/struct.PathBuf.html
 
 use std::sync::{Mutex,Arc};
@@ -36,6 +36,7 @@ pub fn boot() -> SystemState {
         last_lifesign: Arc::new(Mutex::new(old_lifesign)), 
         last_worldview: Arc::new(Mutex::new(starting_udpmsg)),
         active_elevators: Arc::new(Mutex::new(Vec::new())),
+        dead_elevators: Arc::new(Mutex::new(Vec::new())),
         all_orders: Arc::new(Mutex::new(Vec::new())),
         sent_messages: Arc::new(Mutex::new(Vec::new())),
     }

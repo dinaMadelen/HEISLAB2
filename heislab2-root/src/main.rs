@@ -1,23 +1,19 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
 use heislab2_root::modules::elevator_object::*;
 use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use heislab2_root::modules::*;
-use system_status::SystemState;
+
 
 use cab_object::*;
 use cab::Cab;
-use cab::Role;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
-
-
-use master_functions::master::*;
 use slave_functions::slave::*;
 use system_init::*;
 
@@ -28,10 +24,10 @@ use udp_functions::udp::UdpData;
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
 
-// Check boot function in system Init
+    // Check boot function in system Init
 
     let elev_num_floors = 4;
-    let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -44,10 +40,11 @@ fn main() -> std::io::Result<()> {
     };
 
     println!("Elevator started:\n{:#?}", elevator);
+
     //--------------INIT ELEVATOR FINISH------------
 
     // --------------INIT CAB---------------
-    let mut system_state = Arc::new(boot());
+    let system_state = Arc::new(boot());
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
@@ -57,10 +54,10 @@ fn main() -> std::io::Result<()> {
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
     println!("me id is {}",system_state.me_id);
     //Make free cab
-    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
+    let cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
 
     //---------------INIT UDP HANDLER-------------------
-    let mut udphandler = init_udp_handler(cab.clone());
+    let udphandler = init_udp_handler(cab.clone());
     //-------------INIT UDP HANDLER FINISH-----------------
 
     //Lock free cab into captivity:(
@@ -108,27 +105,30 @@ fn main() -> std::io::Result<()> {
     }
 
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
-    let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
+    
     let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
-    let (world_view_update_tx, world_view_update_rx) = cbc::unbounded::<Vec<Cab>>();
+    /*let (world_view_update_tx, world_view_update_rx) = cbc::unbounded::<Vec<Cab>>();
+    let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
     let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
     let (recieve_request_tx, recieve_request_rx) = cbc::unbounded::<Order>();
+    */
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
-    let mut system_state_clone = Arc::clone(&system_state);
+    let system_state_clone = Arc::clone(&system_state);
     
     // -------------------SET MASTER ID------------------
     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
     let mut cab_clone = active_elevators_locked.get_mut(0).unwrap().clone();
     drop(active_elevators_locked);
 
+
     set_new_master(&mut cab_clone, &system_state);
     // -------------------SET MASTER ID FINISHED------------------
 
     spawn(move||
         loop{
-            udphandler.receive(5, &system_state_clone, order_update_tx.clone());
+            udphandler.receive(60000, &system_state_clone, order_update_tx.clone());
         }
     );
     // -------------INIT RECIEVER FINISHED-----------------
@@ -182,10 +182,12 @@ fn main() -> std::io::Result<()> {
             recv(order_update_rx) -> a => {
 
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
+                //Mulig denne er for tidlig
                 println!("ORDER UPDATED!");
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 drop(active_elevators_locked);
+
                 //SEND ACK
                 let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None);
                 udp_broadcast(&msg);
@@ -201,12 +203,11 @@ fn main() -> std::io::Result<()> {
                     elevator.door_light(false);
 
                     //Should add cab to systemstatevec and then broadcast new state
-
                     let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
 
-                    let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
+                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                     udp_broadcast(&msg);
                 }
             },
@@ -260,18 +261,19 @@ fn main() -> std::io::Result<()> {
                 active_elevators_locked.get_mut(0).unwrap().current_floor = floor;
                 drop(active_elevators_locked);
 
-                //Should add cab to systemstatevec and then broadcast new state
-                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-                drop(active_elevators_locked);
-
-                let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
-                udp_broadcast(&msg);
-                
+                //Do stuff
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 drop(active_elevators_locked);
+
+                //Broadcast new state
+                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                drop(active_elevators_locked);
+
+                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                udp_broadcast(&msg);
                 
             },
 
@@ -288,7 +290,7 @@ fn main() -> std::io::Result<()> {
                 let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                 drop(active_elevators_locked);
 
-                let msg = make_udp_msg(system_state.me_id, MessageType::Worldview, UdpData::Cab(cab_clone));
+                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                 udp_broadcast(&msg);
 
                 //WHO CONTROLS THE LIGHTS
@@ -302,6 +304,14 @@ fn main() -> std::io::Result<()> {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
+
+                //Should add cab to systemstatevec and then broadcast new state of stopped
+                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                drop(active_elevators_locked);
+
+                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                udp_broadcast(&msg);
                 //broadcast obstruction
             },
 

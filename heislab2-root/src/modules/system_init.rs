@@ -1,28 +1,32 @@
 
 
-use std::env;                               //https://doc.rust-lang.org/std/env/index.html
-use std::fs::File;                          //https://doc.rust-lang.org/std/fs/struct.File.html
-use std::io::{BufWriter, Write, BufRead, BufReader};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
-use std::path::PathBuf;                     //https://doc.rust-lang.org/std/path/struct.PathBuf.html
+use std::env;                                           //https://doc.rust-lang.org/std/env/index.html
+use std::fs::File;                                      //https://doc.rust-lang.org/std/fs/struct.File.html
+use std::io::{BufWriter, Write, BufRead, BufReader};    //https://doc.rust-lang.org/std/io/trait.BufRead.html
+use std::path::PathBuf;                                 //https://doc.rust-lang.org/std/path/struct.PathBuf.html
 use std::sync::{Mutex,Arc};
 use std::time::{Duration,Instant};
 
 use crate::modules::system_status::SystemState;
 use crate::modules::udp_functions::udp::{UdpMsg,UdpHeader,UdpData,MessageType};
+use crate::modules::udp_functions::udp::calc_checksum;
 
 pub fn boot() -> SystemState {
 
     //Get config from "boot.txt"
     let (me_id_value, default_master_id) = load_config();
 
+
     //Just a dummy/filler message
+    let dummy_data = UdpData::Checksum(1);
+    let checksum=calc_checksum(&dummy_data);
     let starting_udpmsg =  UdpMsg {
         header: UdpHeader {
             sender_id: 0,
             message_type: MessageType::Worldview,
-            checksum: 0,
+            checksum: checksum,
         },
-        data: UdpData::None,
+        data:  dummy_data,
     };
 
     // Set an old lifesign, this will trigger update of master

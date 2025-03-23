@@ -112,11 +112,11 @@ pub struct UdpHandler {
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
 pub enum UdpData {
+    Checksum(u32),
     Cabs(Vec<Cab>),
     Cab(Cab),
     Orders(Vec<Order>),
     Order(Order),
-    None,
 }
 
 
@@ -133,7 +133,7 @@ impl UdpHandler {
 
         match sock.send_to(&data, target_address) {
             Ok(_) => {
-                println!("Message sent to: {}", target_address);
+                println!("Message type:{:?} sent to: {}", msg.header.message_type, target_address);
                 return true;
             }
             Err(e) => {
@@ -148,13 +148,26 @@ impl UdpHandler {
         let mut retries = max_retries;
 
         // Add check for acks
-        let confirmation = WaitingConfirmation {message_hash: message.header.checksum, responded_ids: vec![],   all_confirmed: false,};
+        let confirmation = WaitingConfirmation {message_hash: message.header.checksum, responded_ids: vec![state.me_id],   all_confirmed: false,};
         let mut sent_messages_locked = state.sent_messages.lock().unwrap();
         sent_messages_locked.push(confirmation);
         drop(sent_messages_locked);
 
 
         udp_broadcast(message);
+
+        let active_elevators_locked = state.active_elevators.lock().unwrap();
+        if active_elevators_locked.len() == 1 && active_elevators_locked[0].id == state.me_id {
+
+            //Mark message as recvied 
+            let mut sent_messages_locked = state.sent_messages.lock().unwrap();
+            if let Some(entry) = sent_messages_locked.iter_mut().find(|m| m.message_hash == message.header.checksum) {
+                entry.all_confirmed = true;
+            }
+            println!("This is the only elevator in system, skipping ACK wait.");
+        }
+        drop(active_elevators_locked);
+        
 
         // Check if there are missing acks
         if !confirm_recived(message, state) {
@@ -187,6 +200,7 @@ impl UdpHandler {
                 
                 drop(sent_messages_locked);
                 drop(active_elevators_locked);
+
     
                 if confirm_recived(&message, state){
                     println!("Successfully acknowledged by all elevators.");
@@ -485,16 +499,21 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
 pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
     
     let sender_id = msg.header.sender_id;
-    let checksum = msg.header.checksum;
+    let original_checksum = if let UdpData::Checksum(original_checksum) = &msg.data {
+        *original_checksum
+    } else {
+        println!("Expected UdpData as Checksum in message, got somthing else");
+        return;
+    };
 
     //Lock mutex for messages awaiting response
     let mut sent_messages_locked = state.sent_messages.lock().unwrap();
 
-    if let Some(waiting) = sent_messages_locked.iter_mut().find(|e| e.message_hash == checksum){
+    if let Some(waiting) = sent_messages_locked.iter_mut().find(|e| e.message_hash == original_checksum){
         // Add sender id if not in responded
         if !waiting.responded_ids.contains(&sender_id){
             waiting.responded_ids.push(sender_id);
-            println!("Added Ack from:{} for checksum:{}", sender_id, checksum);
+            println!("Added Ack from:{:?} for checksum: {:?}", sender_id, original_checksum);
         }
 
         // Variable to control if all elevators have acked
@@ -515,14 +534,14 @@ pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
 
         if all_confirmed{
             waiting.all_confirmed = true;
-            println!("Added Ack from:{} for checksum:{}", sender_id, checksum);
+            println!("Added Ack from:{:?} for checksum:{:?}", sender_id, original_checksum);
         }
 
-        println!("All elevators have confirmed reciving message with checksum{}",checksum);
+        println!("All elevators have confirmed reciving message with checksum: {:?}",original_checksum);
         
     }else {
 
-    println!("Checksum: {} not found in list waiting for confirmation, sender was {}", checksum, sender_id);
+    println!("Checksum: {:?} not found in list waiting for confirmation, sender was {:?}", original_checksum, sender_id);
     };
 
 }
@@ -544,12 +563,19 @@ pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
 pub fn handle_nak(msg: &UdpMsg, state: &Arc<SystemState>, target_address: &SocketAddr,udp_handler: &UdpHandler) {
     println!("Received NAK from ID: {}", msg.header.sender_id);
 
+    let original_checksum = if let UdpData::Checksum(original_checksum) = &msg.data {
+        *original_checksum
+    } else {
+        println!("Expected UdpData as Checksum in message, got somthing else");
+        return;
+    };
+
     // Check if this NAK matches sent message
     let sent_messages_locked = state.sent_messages.lock().unwrap();
-    if let Some(waiting_response) = sent_messages_locked.iter().position(|m| m.message_hash == msg.header.checksum) {
-        println!("NAK matches message with checksum: {:?}", msg.header.checksum);
+    if let Some(waiting_response) = sent_messages_locked.iter().position(|m| m.message_hash == original_checksum) {
+        println!("NAK matches message with checksum: {:?}", original_checksum);
     } else {
-        println!("ERROR: Received NAK with unknown checksum {:?}", msg.header.checksum);
+        println!("ERROR: Received NAK with unknown checksum {:?}", original_checksum);
     }
 
 }
@@ -597,6 +623,11 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<S
         }
     }
     //Send Ack to sender
+
+    let msg1 = UdpData::Checksum(1234);
+    let encoded = bincode::serialize(&msg1).unwrap();
+    println!("Sender enum tag: {}", encoded[0]); // Should be 0
+
     return udp_ack(*sender_address, &msg, elevator.id, udp_handler);
 }
 
@@ -842,16 +873,17 @@ pub fn msg_serialize(msg: &UdpMsg) -> Vec<u8> {
 pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
     match bincode::deserialize::<UdpMsg>(buffer) {
         Ok(msg) => {
+            println!("Deserialized msg type: {:?},Deserialized msg data: {:?}", msg.header.message_type, msg.data);
             if data_valid_for_type(&msg) {
-                Some(msg)
+                return Some(msg);
             } else {
-                println!("Invalid data for message type");
-                None
+                println!("Invalid data messagetype");
+                return None;
             }
         }
         Err(e) => {
             println!("Failed to deserialize message: {}", e);
-            None
+            return None;
         }
     }
 }
@@ -870,7 +902,7 @@ pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 /// 
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
-        (MessageType::NewOrder, UdpData::Cabs(_)) => true,
+        (MessageType::NewOrder, UdpData::Cab(_)) => true,
         (MessageType::Worldview, UdpData::Cabs(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,
@@ -879,8 +911,8 @@ fn data_valid_for_type(msg: &UdpMsg) -> bool {
         (MessageType::ErrorOffline, UdpData::Cab(_)) => true,
         (MessageType::NewMaster, UdpData::Cab(_)) => true,
         (MessageType::NewOnline, UdpData::Cab(_)) => true,
-        (MessageType::Ack, UdpData::None) => true,
-        (MessageType::Nak, UdpData::None) => true,
+        (MessageType::Ack, UdpData::Checksum(_)) => true,
+        (MessageType::Nak, UdpData::Checksum(_)) => true,
         _ => false,
     }
 }
@@ -938,15 +970,18 @@ pub fn comp_checksum(msg: &UdpMsg) -> bool {
 pub fn udp_ack(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,udp_handler: &UdpHandler) -> bool {
     let checksum = calc_checksum(&original_msg.data); // Compute checksum of original data
 
+    let new_data =UdpData::Checksum(original_msg.header.checksum);
+    let checksum = calc_checksum(&new_data);
+
     let ack_msg = UdpMsg {
         header: UdpHeader {
             sender_id,
             message_type: MessageType::Ack, 
-            checksum: checksum.clone(),   
+            checksum: checksum,   
         },
-        data: UdpData::None, 
+        data: UdpData::Checksum(original_msg.header.checksum), 
     };
-
+    println!("Sending ACK with data: {:?}", ack_msg.data);
     return udp_handler.send(&target_address, &ack_msg);
 }
 
@@ -972,9 +1007,9 @@ pub fn udp_nak(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,
         header: UdpHeader {
             sender_id,
             message_type: MessageType::Nak, 
-            checksum: checksum.clone(),  
+            checksum: calc_checksum(&UdpData::Checksum(original_msg.header.checksum)),
         },
-        data: UdpData::None, 
+        data: UdpData::Checksum(original_msg.header.checksum), 
     };
 
     return udp_handler.send(&target_address, &nak_msg);

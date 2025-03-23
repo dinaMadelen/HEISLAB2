@@ -36,7 +36,7 @@ fn main() -> std::io::Result<()> {
             message_type: MessageType::Worldview,
             checksum: 0,
         },
-        data: UdpData::None,
+        data: UdpData::Checksum(0),
     };
 
     println!("Elevator started:\n{:#?}", elevator);
@@ -189,8 +189,8 @@ fn main() -> std::io::Result<()> {
                 drop(active_elevators_locked);
 
                 //SEND ACK
-                let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None);
-                udp_broadcast(&msg);
+                //let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None); ----------------------------------Commented untill we have cleared up what we are acking
+                //udp_broadcast(&msg);
             },
             
             recv(door_rx) -> a => {

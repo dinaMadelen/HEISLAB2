@@ -110,7 +110,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     }
 
     // Inform rest of system that the order has been added
-    let message = make_udp_msg(state.me_id,MessageType::NewOrder, UdpData::Cabs(vec![elevator.clone()]));
+    let message = make_udp_msg(state.me_id,MessageType::NewOrder, UdpData::Cab(elevator.clone()));
     println!("Broadcasting new orders for elevator:{}", elevator.id);
 
     // Broadcast message

@@ -15,34 +15,41 @@ use super::cab::Cab;
 
     impl Cab{
         // Set initial status
-        pub fn try_close_door(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) -> bool{
-        elevator.door_light(true);
-        self.set_status(Status::DoorOpen, elevator.clone());
-        thread::spawn(move || {
-            {
-                println!("🚪 Doors opened.");
- 
-                thread::sleep(Duration::from_secs(1));
-                /* 
-                cbc::select!{
-                    recv(obstruction_rx)-> a=> {
-                        let obstruction = a.unwrap();
-                        if obstruction{
-                            thread::sleep(Duration::from_secs(1));
+        pub fn try_close_door( &mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator: Elevator) -> bool {
+            elevator.door_light(true);
+            self.set_status(Status::DoorOpen, elevator.clone());
+        
+            thread::spawn(move || {
+                println!("Doors opened");
+        
+                loop {
+                    // Wait 1 second before attempting to close
+                    thread::sleep(Duration::from_secs(1));
+        
+                    match obstruction_rx.try_recv() {
+                        Ok(true) => {
+                             // obstruction: start loop again
+                            println!("Obstruction detected, holding doors..");
+                            continue;
+                        }
+                        Ok(false) | Err(cbc::TryRecvError::Empty) => {
+                            // No obstruction or nothing received: close door
+                            println!("No obstruction, closing doors");
+                            break;
+                        }
+                        Err(e) => {
+                            println!("Error receiving obstruction: {:?}", e);
+                            break;
                         }
                     }
                 }
-                */
-                println!("🚪 Doors closed.");
- 
+        
                 door_tx.send(true).unwrap();
-            } 
-            return true;
-        });
-
-        return false;
-
-    }
+                println!("Doors closed");
+            });
+            true
+        }
+    
          
      
     pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) {

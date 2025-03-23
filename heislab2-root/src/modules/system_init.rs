@@ -2,7 +2,7 @@
 
 use std::env;                               //https://doc.rust-lang.org/std/env/index.html
 use std::fs::File;                          //https://doc.rust-lang.org/std/fs/struct.File.html
-use std::io::{BufRead, BufReader, Write};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
+use std::io::{BufRead, BufReader};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
 use std::path::PathBuf;                     //https://doc.rust-lang.org/std/path/struct.PathBuf.html
 
 use std::sync::{Mutex,Arc};

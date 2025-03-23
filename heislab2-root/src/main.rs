@@ -1,23 +1,19 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
 use heislab2_root::modules::elevator_object::*;
 use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use heislab2_root::modules::*;
-use system_status::SystemState;
+
 
 use cab_object::*;
 use cab::Cab;
-use cab::Role;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
-
-
-use master_functions::master::*;
 use slave_functions::slave::*;
 use system_init::*;
 
@@ -28,10 +24,10 @@ use udp_functions::udp::UdpData;
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
 
-// Check boot function in system Init
+    // Check boot function in system Init
 
     let elev_num_floors = 4;
-    let mut elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -44,10 +40,11 @@ fn main() -> std::io::Result<()> {
     };
 
     println!("Elevator started:\n{:#?}", elevator);
+
     //--------------INIT ELEVATOR FINISH------------
 
     // --------------INIT CAB---------------
-    let mut system_state = Arc::new(boot());
+    let system_state = Arc::new(boot());
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
@@ -57,10 +54,10 @@ fn main() -> std::io::Result<()> {
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
     println!("me id is {}",system_state.me_id);
     //Make free cab
-    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
+    let cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
 
     //---------------INIT UDP HANDLER-------------------
-    let mut udphandler = init_udp_handler(cab.clone());
+    let udphandler = init_udp_handler(cab.clone());
     //-------------INIT UDP HANDLER FINISH-----------------
 
     //Lock free cab into captivity:(
@@ -118,7 +115,7 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
-    let mut system_state_clone = Arc::clone(&system_state);
+    let system_state_clone = Arc::clone(&system_state);
     
     // -------------------SET MASTER ID------------------
     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();

@@ -85,7 +85,6 @@ pub enum Role{
 pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler,order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     let mut retries = 3;
     let max_timeout_ms = 300;
-    let received_acks = Vec::new();
     println!("Give order entered");
 
     // Lock active_elevators
@@ -102,7 +101,9 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 
     // Clone necessary data before dropping mutex lock
     let mut elevator = active_elevators_locked[elevator_index].clone();
-    
+
+    // Release active_elevators
+    drop(active_elevators_locked);
     
     // Add new orders to elevator
     for order in new_order {
@@ -111,58 +112,10 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 
     // Inform rest of system that the order has been added
     let message = make_udp_msg(state.me_id,MessageType::NewOrder, UdpData::Cabs(vec![elevator.clone()]));
-    let mut missing_acks: Vec<u8> = active_elevators_locked.iter().map(|e| e.id).collect();
     println!("Broadcasting new orders for elevator:{}", elevator.id);
-    udp_broadcast(&message);
 
-    // Release active_elevators
-    drop(active_elevators_locked);
-
-    // Check if there are missing acks
-    missing_acks.retain(|id| !received_acks.contains(id));
-    if !missing_acks.is_empty() {
-        while retries > 0 {
-            println!("Remaining retries: {}", retries);
-            retries -= 1;
-            let mut received_acks = Vec::new();
-
-            let start_time = std::time::Instant::now();
-
-            while start_time.elapsed() < Duration::from_millis(max_timeout_ms) { 
-                if let Some(response) = udp_handler.receive(max_timeout_ms as u32, state, order_update_tx.clone()) { // WE SHOULD MOVE THIS OUT, WE ONLY HAVE ONE THREAD THAT I CONSTANTLY LISTENING
-                    if response.header.message_type == MessageType::Ack && response.header.checksum == message.header.checksum {
-                        received_acks.push(response.header.sender_id);
-                    }
-                }
-
-                if missing_acks.is_empty() {
-                    println!("All elevators acknowledged order.");
-                    return true;
-                }
-            }
-
-            // Remove received acks from missing list
-            missing_acks.retain(|id| !received_acks.contains(id));
-
-            // Send the order to all elevators where ack has not been received
-            if !missing_acks.is_empty(){
-                for _elevator_id in &missing_acks {
-                    let target_address = &elevator.inn_address;
-                    udp_handler.send(&target_address, &message);
-                }
-            }
-        }
-
-        if missing_acks.is_empty() {
-            println!("Successfully acknowledged by all elevators.");
-            return true;
-        } else {
-            println!("Missing acknowledgments.");
-        }
-    }
-
-    println!("Failed to deliver order after {} retries.", retries);
-    return false;
+    // Broadcast message
+    return udp_handler.ensure_broadcast(&message,state,5);
 }
 
 

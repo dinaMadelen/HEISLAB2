@@ -38,7 +38,7 @@ fn main() -> std::io::Result<()> {
         header: UdpHeader {
             sender_id: 0,
             message_type: MessageType::Worldview,
-            checksum: vec![0],
+            checksum: 0,
         },
         data: UdpData::None,
     };

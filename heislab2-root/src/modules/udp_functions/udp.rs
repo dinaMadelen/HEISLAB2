@@ -49,6 +49,7 @@ use std::ops::DerefMut; // https://doc.rust-lang.org/std/net/struct.UdpSocket.ht
 use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                      // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode; 
+use crc32fast::Hasher; // Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
 // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
 use std::time::{Duration,Instant}; // https://doc.rust-lang.org/std/time/struct.Duration.html
@@ -61,6 +62,7 @@ use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
 use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
 use crate::modules::slave_functions::slave::update_from_worldview;
+use crate::modules::system_status::WaitingConfirmation;
 
 
 pub use crate::modules::elevator_object::*;
@@ -94,7 +96,7 @@ pub enum MessageType {
 pub struct UdpHeader {
     pub sender_id: u8,             // ID of the sender of the message.
     pub message_type: MessageType, // ID for what kind of message it is, e.g. Button press, or Update queue.
-    pub checksum: Vec<u8>,         // Hash of data to check message integrity.
+    pub checksum: u32,         // Hash of data to check message integrity.
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
@@ -140,6 +142,73 @@ impl UdpHandler {
                 return false;
             }
         };
+    }
+
+
+    pub fn ensure_broadcast(&self, message:&UdpMsg, state: &Arc<SystemState>, max_retries:u8) -> bool {
+        let mut retries = max_retries;
+
+        // Add check for acks
+        let confirmation = WaitingConfirmation {message_hash: message.header.checksum, responded_ids: vec![],   all_confirmed: false,};
+        let mut sent_messages_locked = state.sent_messages.lock().unwrap();
+        sent_messages_locked.push(confirmation);
+        drop(sent_messages_locked);
+
+
+        udp_broadcast(message);
+
+        // Check if there are missing acks
+        if !confirm_recived(message, state) {
+    
+            while retries > 0 {
+    
+                println!("Remaining retries: {}", retries);
+                retries -= 1;
+    
+                std::thread::sleep(Duration::from_millis(30));
+    
+                //Lock mutexes
+                let sent_messages_locked = state.sent_messages.lock().unwrap();
+                let active_elevators_locked = state.active_elevators.lock().unwrap();
+    
+                if let Some(waiting) = sent_messages_locked.iter().find(|m| m.message_hash == message.header.checksum) {
+                    let expected_ids: Vec<u8> = active_elevators_locked.iter().map(|e| e.id).collect();
+                    let missing: Vec<u8> = expected_ids.into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
+                
+    
+                    for elevator_id in &missing {
+                        if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
+    
+                            let target_address = &elevator.inn_address;
+                            self.send(&target_address, message);
+                        }
+                    }
+                }
+    
+                
+                drop(sent_messages_locked);
+                drop(active_elevators_locked);
+    
+                if confirm_recived(&message, state){
+                    println!("Successfully acknowledged by all elevators.");
+                    return true;
+                }
+            
+                println!("Missing acknowledgments.");
+    
+            }
+        }else{
+            println!("Successfully acknowledged by all elevators.");
+            return true;
+        }
+    
+        // Remove waiting for Acks from state
+        let mut sent_messages_locked = state.sent_messages.lock().unwrap();
+        sent_messages_locked.retain(|m| m.message_hash != message.header.checksum);
+        drop(sent_messages_locked);
+    
+        println!("Failed to deliver order after {} retries.", retries);
+        return false;
     }
 
 
@@ -193,6 +262,7 @@ impl UdpHandler {
 
         println!("Received message of size {} from {}", size, sender);
 
+        // Identify Messagetype and handle appropriatly
         if let Some(msg) = msg_deserialize(&buffer[..size]) {
             println!("Message type: {:?}", msg.header.message_type);
 
@@ -216,8 +286,6 @@ impl UdpHandler {
             println!("Failed to deserialize message from {}", sender);
             return None;
         }
-            
-        
     }
 }
 
@@ -380,20 +448,47 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
 /// Returns -None- .
 ///
 pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
-    println!("Received ACK from ID: {}", msg.header.sender_id);
+    
+    let sender_id = msg.header.sender_id;
+    let checksum = msg.header.checksum;
 
+    //Lock mutex for messages awaiting response
     let mut sent_messages_locked = state.sent_messages.lock().unwrap();
 
-    // Check if this ACK matches sent message
+    if let Some(waiting) = sent_messages_locked.iter_mut().find(|e| e.message_hash == checksum){
+        // Add sender id if not in responded
+        if !waiting.responded_ids.contains(&sender_id){
+            waiting.responded_ids.push(sender_id);
+            println!("Added Ack from:{} for checksum:{}", sender_id, checksum);
+        }
 
-    if let Some(index) = sent_messages_locked.iter().position(|m| calc_checksum(&msg.data) == msg.header.checksum) {
-        println!("ACK matches message with checksum: {:?}", msg.data);
-                
-        // Remove acknowledged message from tracking
-        sent_messages_locked.remove(index);
-    } else { 
-        println!("ERROR: Received ACK with unknown checksum {:?}", msg.data);
-    }
+        // Variable to control if all elevators have acked
+        let mut all_confirmed = true;
+
+        // Lock mutex for active elevators
+        let active_elevators_locked = state.active_elevators.lock().unwrap();
+
+        //Check that all active elevatos have responded 
+        for elevator in active_elevators_locked.iter(){
+            if !waiting.responded_ids.contains(&elevator.id){
+                println!("Still missing confirmations for elevaotr ID:{}", elevator.id);
+                all_confirmed = false;
+            }
+
+        }
+        drop(active_elevators_locked);
+
+        if all_confirmed{
+            waiting.all_confirmed = true;
+            println!("Added Ack from:{} for checksum:{}", sender_id, checksum);
+        }
+
+        println!("All elevators have confirmed reciving message with checksum{}",checksum);
+        
+    }else {
+
+    println!("Checksum: {} not found in list waiting for confirmation, sender was {}", checksum, sender_id);
+    };
 
 }
 
@@ -416,9 +511,8 @@ pub fn handle_nak(msg: &UdpMsg, state: &Arc<SystemState>, target_address: &Socke
 
     // Check if this NAK matches sent message
     let sent_messages_locked = state.sent_messages.lock().unwrap();
-    if let Some(index) = sent_messages_locked.iter().position(|m| calc_checksum(&m.data) == msg.header.checksum) {
-        println!("NAK matches message with checksum: {:?}. Resending...", msg.header.checksum);
-        // Resend the message                udp_handler.send(target_address, &sent_messages_locked[index]);
+    if let Some(waiting_response) = sent_messages_locked.iter().position(|m| m.message_hash == msg.header.checksum) {
+        println!("NAK matches message with checksum: {:?}", msg.header.checksum);
     } else {
         println!("ERROR: Received NAK with unknown checksum {:?}", msg.header.checksum);
     }
@@ -766,12 +860,11 @@ fn data_valid_for_type(msg: &UdpMsg) -> bool {
 ///
 /// Returns - Vec<u8>- returns the hashed string .
 ///
-pub fn calc_checksum(data: &UdpData) -> Vec<u8> {
+pub fn calc_checksum(data: &UdpData) -> u32 {
     let serialized_data = bincode::serialize(data).expect("Failed to serialize data");
-    let mut hasher = Sha256::new();
-    Digest::update(&mut hasher, &serialized_data);
-    let hash = hasher.finalize();
-    return hash.as_slice().to_vec();
+    let mut hasher = Hasher::new();
+    hasher.update(&serialized_data);
+    return hasher.finalize();
 }
 
 // comp_checksum
@@ -902,6 +995,30 @@ pub fn same_subnet(local: IpAddr, remote: IpAddr) -> bool {
         _ => return false
     }
 }
+
+
+pub fn confirm_recived(msg:&UdpMsg, state: &Arc<SystemState>) -> bool {
+    
+    let checksum = msg.header.checksum;
+
+    let mut sent_messages_locked = state.sent_messages.lock().unwrap();
+    if let Some(waiting_for_confirmation) = sent_messages_locked.iter().find(|m|m.message_hash==checksum){
+
+        if waiting_for_confirmation.all_confirmed{
+            println!("Confirmation checked message with checksum {}, all acks recvied", checksum);
+            //Remove message
+            sent_messages_locked.retain(|m| m.message_hash != checksum);
+            return true;
+        }else{
+            println!("Confirmation checked message with checksum {}, Not recived all acks", checksum);
+            return false;
+        }
+    }
+    println!("Checksum:{} not in sent messages", checksum);
+    return false;
+}
+
+
 
 
 

@@ -240,8 +240,18 @@ pub fn handle_im_alive(msg: &UdpMsg, state: &Arc<SystemState>){
     } else {
         println!("Sender elevator not in active elevators");
         //Send a NewOnline message with that cab
-        active_elevators_locked.push(updated_cab);
-        
+        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+
+        println!("Seardching dead elevators");
+        if let Some(pos) = dead_elevators_locked.iter().position(|e| e.id == msg.header.sender_id) {
+            // Remove from dead
+            let resurrected_elevator = dead_elevators_locked.remove(pos);
+            // Push to active
+            active_elevators_locked.push(resurrected_elevator);
+        } else {
+            println!("Sender elevator not in dead or active elevators, pushing to active elevators");
+            active_elevators_locked.push(updated_cab);
+        }
     }
 
 }

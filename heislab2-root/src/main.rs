@@ -57,7 +57,7 @@ fn main() -> std::io::Result<()> {
     let cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
 
     //---------------INIT UDP HANDLER-------------------
-    let udphandler = init_udp_handler(cab.clone());
+    let udphandler = Arc::new(init_udp_handler(cab.clone()));
     //-------------INIT UDP HANDLER FINISH-----------------
 
     //Lock free cab into captivity:(
@@ -126,11 +126,14 @@ fn main() -> std::io::Result<()> {
     set_new_master(&mut cab_clone, &system_state);
     // -------------------SET MASTER ID FINISHED------------------
 
-    spawn(move||
+    let udphandler_clone = Arc::clone(&udphandler);
+    spawn(move||{
         loop{
-            udphandler.receive(60000, &system_state_clone, order_update_tx.clone());
+
+            let handler = Arc::clone(&udphandler_clone); 
+            handler.receive(60000, &system_state_clone, order_update_tx.clone());
         }
-    );
+    });
     // -------------INIT RECIEVER FINISHED-----------------
 
 
@@ -330,7 +333,7 @@ fn main() -> std::io::Result<()> {
 
             //if message is from slave 
             //if order, add to own full queue and world view
-            //if message is an ack update elevators alive
+            //if message is an ack update elevators alive   
             
         }
     }

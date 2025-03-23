@@ -54,6 +54,7 @@ use std::time::{Duration,Instant};              // https://doc.rust-lang.org/std
 // use std::thread::sleep;                      // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};                     // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use crossbeam_channel as cbc;
+use std::thread;
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
@@ -236,7 +237,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn receive(&self, max_wait: u32, state: &Arc<SystemState>, order_update_tx: cbc::Sender<Vec<Order>>) -> Option<UdpMsg> {
+    pub fn receive(self: Arc<Self>, max_wait: u32, state: &Arc<SystemState>, order_update_tx: cbc::Sender<Vec<Order>>) -> Option<UdpMsg> {
 
         //Lock socket from udp.handler
         let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
@@ -245,64 +246,75 @@ impl UdpHandler {
         sock.set_read_timeout(Some(Duration::from_millis(max_wait as u64))).expect("Failed to set timeout for socket");
         let mut buffer = [0; 1024];
 
-        // Receive data
-        let (size, sender) = match sock.recv_from(&mut buffer) {
-            Ok(res) => res,
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
-                // Ignore the error if it's just a timeout
-                return None;
-            }
-            Err(e) => {
-                println!("Failed to receive message: {}", e);
-                return None;
-            }
-        };
 
         //Find IP
         let local_ip = sock.local_addr().expect("Failed to get local address").ip();
         drop(sock); 
+        
 
-        let sender_ip = sender.ip();
+        loop{
 
-        //Check that the sender is from the same subnet, we dont want any outside messages
-        //UNCOMMENT THIS
-        /* 
-        if !same_subnet(local_ip, sender_ip) {
-            println!("Message from rejected {}(sender not in same subnet)",sender_ip);
-            return None;
-        }
-        */
+            let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
+            // Receive data
+            let (size, sender) = match sock.recv_from(&mut buffer) {
+                Ok(res) => res,
+                Err(ref e) if (e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut) => {
+                    // Ignore the error if it's just a timeout
+                    return None;
+                }
+                Err(e) => {
+                    println!("Failed to receive message: {}", e);
+                    return None;
+                }
+            };
+            drop(sock); 
 
-        println!("Received message of size {} from {}", size, sender);
+            let sender_ip = sender.ip();
 
-        // Identify Messagetype and handle appropriatly
-        if let Some(msg) = msg_deserialize(&buffer[..size]) {
-            println!("Message type: {:?}", msg.header.message_type);
-
-            match msg.header.message_type{
-                MessageType::Worldview => {handle_worldview(state, &msg);},
-                MessageType::Ack => {handle_ack(&msg, state);},
-                MessageType::Nak => {handle_nak(&msg, state, &sender, &self);},
-                MessageType::NewOrder => {handle_new_order(&msg, &sender, state, &self);},
-                MessageType::NewOnline => {handle_new_online(&msg, state);},
-                MessageType::ErrorWorldview => {handle_error_worldview(&msg, state);},
-                //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
-                MessageType::OrderComplete => {handle_remove_order(&msg, state);},
-                MessageType::NewRequest => {println!("MOTOOK MELDING");
-                handle_new_request(&msg,state, &self,order_update_tx);},
-                MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
-                MessageType::ImAlive => {handle_im_alive(&msg, state)},
-                _ => println!("Unreadable message received from {}", sender),
+            //Check that the sender is from the same subnet, we dont want any outside messages
+            //UNCOMMENT THIS
+            /* 
+            if !same_subnet(local_ip, sender_ip) {
+                println!("Message from rejected {}(sender not in same subnet)",sender_ip);
+                return None;
             }
-            return Some(msg);
-        } else {
-            println!("Failed to deserialize message from {}", sender);
-            return None;
+            */
+
+            println!("Received message of size {} from {}", size, sender);
+            // Identify Messagetype and handle appropriatly
+            if let Some(msg) = msg_deserialize(&buffer[..size]) {
+                println!("Message type: {:?}", msg.header.message_type);
+
+                let passable_state = Arc::clone(state);
+                let udp_handler_clone = Arc::clone(&self);
+                let msg_clone = msg.clone();
+                let tx_clone = order_update_tx.clone();
+
+                match msg.header.message_type{
+                    MessageType::Worldview => {thread::spawn(move || {handle_worldview(passable_state, &msg_clone)});},
+                    MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
+                    MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
+                    MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone)});},
+                    MessageType::NewOnline => {thread::spawn(move || {handle_new_online(&msg_clone, passable_state)});},
+                    MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
+                    //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
+                    MessageType::OrderComplete => {thread::spawn(move || {(handle_remove_order(&msg_clone, passable_state))});},
+                    MessageType::NewRequest => {println!("MOTOOK MELDING");
+                    thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone)});},
+                    MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},
+                    MessageType::ImAlive => {thread::spawn(move ||{ handle_im_alive(&msg_clone, passable_state)});},
+                    _ => println!("Unreadable message received from {}", sender),
+                };
+                //return Some(msg);
+            } else {
+                println!("Failed to deserialize message from {}", sender);
+                //return None;
+            }
         }
     }
 }
 
-pub fn handle_im_alive(msg: &UdpMsg, state: &Arc<SystemState>){
+pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
     //Extract updated cab from message
     let updated_cab = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
@@ -338,7 +350,7 @@ pub fn handle_im_alive(msg: &UdpMsg, state: &Arc<SystemState>){
 
 
 //NEW_REQUEST
-pub fn handle_new_request(msg: &UdpMsg, state: &Arc<SystemState>,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>){
+pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, order_update_tx: cbc::Sender<Vec<Order>>){
 
     // Find order in message
     let new_order = if let UdpData::Order(order) = &msg.data{
@@ -452,7 +464,7 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 ///
 /// Returns - None - .
 ///
-pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
+pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview
@@ -472,7 +484,7 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
         return;
     };
 
-    update_from_worldview(state, &elevators);
+    update_from_worldview(&state, &elevators);
     let active_elevators: Vec<Cab> = {
     let active_elevators_locked = state.active_elevators.lock().unwrap();
     active_elevators_locked.clone() 
@@ -482,7 +494,7 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
     //generate_worldview(&active_elevators);
 
 
-    handle_multiple_masters(state, &msg.header.sender_id);
+    handle_multiple_masters(&state, &msg.header.sender_id);
 }
 
 /// handle_ack
@@ -496,7 +508,7 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
 ///
 /// Returns -None- .
 ///
-pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
+pub fn handle_ack(msg: &UdpMsg, state: Arc<SystemState>) {
     
     let sender_id = msg.header.sender_id;
     let original_checksum = if let UdpData::Checksum(original_checksum) = &msg.data {
@@ -560,7 +572,7 @@ pub fn handle_ack(msg: &UdpMsg, state: &Arc<SystemState>) {
 ///
 /// Returns - - .
 ///
-pub fn handle_nak(msg: &UdpMsg, state: &Arc<SystemState>, target_address: &SocketAddr,udp_handler: &UdpHandler) {
+pub fn handle_nak(msg: &UdpMsg, state: Arc<SystemState>, target_address: &SocketAddr,udp_handler: Arc<UdpHandler>) {
     println!("Received NAK from ID: {}", msg.header.sender_id);
 
     let original_checksum = if let UdpData::Checksum(original_checksum) = &msg.data {
@@ -596,7 +608,7 @@ pub fn handle_nak(msg: &UdpMsg, state: &Arc<SystemState>, target_address: &Socke
 /// Returns -None- .
 ///
 
-pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<SystemState>,udp_handler: &UdpHandler) -> bool {
+pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>) -> bool {
     println!("New order received ID: {}", msg.header.sender_id);
 
     let elevator = if let UdpData::Cab(cab) = &msg.data {
@@ -628,7 +640,7 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<S
     let encoded = bincode::serialize(&msg1).unwrap();
     println!("Sender enum tag: {}", encoded[0]); // Should be 0
 
-    return udp_ack(*sender_address, &msg, elevator.id, udp_handler);
+    return udp_ack(*sender_address, &msg, elevator.id, &udp_handler);
 }
 
 /// handle_new_master
@@ -641,11 +653,11 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<S
 ///
 /// Returns -None- .
 ///
-pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab>>>) {
+pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
 
     // Set current master's role to Slave
-    let mut active_elevators_locked = active_elevators.lock().unwrap();
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
     if let Some(current_master) = active_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
         println!("Changing current master (ID: {}) to slave.", current_master.id);
         current_master.role = Role::Slave;
@@ -673,7 +685,7 @@ pub fn handle_new_master(msg: &UdpMsg, active_elevators: &Arc<Mutex<Vec<Cab>>>) 
 ///
 /// Returns `true` if the elevator was added or already in the vector, otherwise `false`.
 ///
-pub fn handle_new_online(msg: &UdpMsg, state: &Arc<SystemState>) -> bool {
+pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     //Lock active elevaotrs
@@ -727,7 +739,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: &Arc<SystemState>) -> bool {
 ///
 /// Returns -None- .
 ///
-pub fn handle_error_worldview(msg: &UdpMsg, state: &Arc<SystemState>) {
+pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
@@ -739,7 +751,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: &Arc<SystemState>) {
     };
 
     // Compare and correct worldview based on received data
-    if correct_master_worldview(&mut missing_orders, state) {
+    if correct_master_worldview(&mut missing_orders, &state) {
         println!("Worldview corrected based on report from ID: {}", msg.header.sender_id);
     } else {
         println!("ERROR: Failed to correct worldview");
@@ -757,7 +769,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: &Arc<SystemState>) {
 ///
 /// Returns - None - .
 ///
-pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) {
+pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
     let mut removed_elevator: Option<Cab> = None;
@@ -786,7 +798,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: 
         let orders = offline_elevator.queue.clone();
         println!("Reassigning orders, if any: {:?}", orders);
         let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
-        reassign_orders(&order_ids, state ,udp_handler, order_update_tx);
+        reassign_orders(&order_ids, &state ,udp_handler, order_update_tx);
     } else {
         println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
     }
@@ -803,7 +815,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: &Arc<SystemState> ,udp_handler: 
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: &UdpMsg, state: &Arc<SystemState>) {
+pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>) {
 
     let elevator_from_msg = if let UdpData::Cab(cab) = &msg.data {
         cab

@@ -2,9 +2,8 @@
 
 use std::env;                               //https://doc.rust-lang.org/std/env/index.html
 use std::fs::File;                          //https://doc.rust-lang.org/std/fs/struct.File.html
-use std::io::{BufRead, BufReader};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
+use std::io::{BufWriter, Write, BufRead, BufReader};   //https://doc.rust-lang.org/std/io/trait.BufRead.html
 use std::path::PathBuf;                     //https://doc.rust-lang.org/std/path/struct.PathBuf.html
-
 use std::sync::{Mutex,Arc};
 use std::time::{Duration,Instant};
 
@@ -69,10 +68,21 @@ pub fn load_config() -> (u8, u8) {
         }
 
     return (me_id, master_id);
-    }else{
+    }else {
 
-        println!("Couldnt find boot.txt, using 5 and 6");
-        return (5,6);
+        println!("boot.txt not found, creating one with default values");
+
+        let file = File::create(&config_path).expect("Failed to create boot.txt");
+        let mut info = BufWriter::new(file);
+
+        // Set default values
+        let me_id = 5;
+        let master_id = 6;
+
+        writeln!(info, "me_id: {}", me_id).expect("Failed to write to boot.txt");
+        writeln!(info, "master_id: {}", master_id).expect("Failed to write to boot.txt");
+
+        return (me_id, master_id);
     }
 
 

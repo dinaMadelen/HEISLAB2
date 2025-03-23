@@ -44,23 +44,21 @@
 
 //----------------------------------------------Imports
 use std::net::{IpAddr,SocketAddr, UdpSocket};
-use std::ops::DerefMut; // https://doc.rust-lang.org/std/net/struct.UdpSocket.html
-                                       //use std::sync::{Arc, Mutex};          // https://doc.rust-lang.org/std/sync/struct.Mutex.html
-use serde::{Deserialize, Serialize}; // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
-                                     // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
-use bincode; 
-use crc32fast::Hasher; // Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
-// https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
-use sha2::{Digest, Sha256}; // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
-use std::time::{Duration,Instant}; // https://doc.rust-lang.org/std/time/struct.Duration.html
-// use std::thread::sleep; // https://doc.rust-lang.org/std/thread/fn.sleep.html
-use std::sync::{Mutex,Arc};
+//use std::ops::DerefMut;                        // https://doc.rust-lang.org/std/net/struct.UdpSocket.html       
+use serde::{Deserialize, Serialize};            // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
+                                                // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
+use bincode;                                    // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
+use crc32fast::Hasher;                          // Add to Cargo.toml file, Check comment above  //Add to Cargo,toml Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
+//use sha2::{Digest, Sha256};                     // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
+use std::time::{Duration,Instant};              // https://doc.rust-lang.org/std/time/struct.Duration.html
+// use std::thread::sleep;                      // https://doc.rust-lang.org/std/thread/fn.sleep.html
+use std::sync::{Mutex,Arc};                     // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use crossbeam_channel as cbc;
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview,generate_worldview, reassign_orders};
+use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview, reassign_orders};
 use crate::modules::slave_functions::slave::update_from_worldview;
 use crate::modules::system_status::WaitingConfirmation;
 
@@ -246,9 +244,9 @@ impl UdpHandler {
             }
         };
 
+        //Find IP
         let local_ip = sock.local_addr().expect("Failed to get local address").ip();
         drop(sock); 
-        
 
         let sender_ip = sender.ip();
 
@@ -277,7 +275,7 @@ impl UdpHandler {
                 //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
                 MessageType::OrderComplete => {handle_remove_order(&msg, state);},
                 MessageType::NewRequest => {println!("MOTOOK MELDING");
-                handle_new_request(&msg, &sender,state, &self,order_update_tx);},
+                handle_new_request(&msg,state, &self,order_update_tx);},
                 MessageType::NewMaster => {handle_new_master(&msg, &state.active_elevators);},
                 MessageType::ImAlive => {handle_im_alive(&msg, state)},
                 _ => println!("Unreadable message received from {}", sender),
@@ -326,7 +324,7 @@ pub fn handle_im_alive(msg: &UdpMsg, state: &Arc<SystemState>){
 
 
 //NEW_REQUEST
-pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc<SystemState>,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>){
+pub fn handle_new_request(msg: &UdpMsg, state: &Arc<SystemState>,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>){
 
     // Find order in message
     let new_order = if let UdpData::Order(order) = &msg.data{
@@ -358,9 +356,9 @@ pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc
             
             println!("Entered call type cab");
             if is_master{
-                let new_msg = make_udp_msg(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone()));
+                let new_msg = make_udp_msg(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone())); //---------------------------------------------This is never used?
                 //MÅ DROPPE ACTIVE ELEVATORS FOR Å KUNNE KJØRE GIVE ORDER! Fører til deadlock ------------------------------------------------------
-                give_order(sender_elevator.id,vec![&new_order], &state, &udp_handler, order_update_tx.clone()); //-------------------------------------------------------------------------------------------------Fix
+                give_order(sender_elevator.id,vec![&new_order], &state, &udp_handler, order_update_tx.clone()); //FIXED
                 println!("Added CAB order to elevator ID:{}", sender_elevator.id);
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             }
@@ -376,7 +374,7 @@ pub fn handle_new_request(msg: &UdpMsg, sender_address: &SocketAddr, state: &Arc
             
             drop(active_elevators_locked);
             println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
-            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//---------------------------------------------------------------------------------------------------------->Fix
+            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//FIXED
             order_update_tx.send(vec![new_order.clone()]).unwrap();
         }
         
@@ -466,8 +464,10 @@ pub fn handle_worldview(state: &Arc<SystemState>, msg: &UdpMsg) {
     active_elevators_locked.clone() 
     };
      
+    //not used
+    //generate_worldview(&active_elevators);
 
-    generate_worldview(&active_elevators);
+
     handle_multiple_masters(state, &msg.header.sender_id);
 }
 

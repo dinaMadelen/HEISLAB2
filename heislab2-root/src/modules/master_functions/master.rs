@@ -38,8 +38,7 @@ use crossbeam_channel as cbc;
 
 
 use serde::{Serialize, Deserialize};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc};
 
 /* 
 //-----------------------GLOBAL VARIABLES---------------------------------------------------
@@ -49,12 +48,13 @@ static mut FAILED_ORDERS: Option<Arc<Mutex<Vec<Order>>>> = None;
 
 //-----------------------STRUCTS------------------------------------------------------------
 
+/*  Not used
 /// A struct that holds all the active elevators aswell as all active lights
 pub struct Worldview{
     elevators: Vec<Cab>,
     lights: Vec<u8>,
 }
-
+*/
 /// All possible roles of a node
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Role{
@@ -83,8 +83,7 @@ pub enum Role{
 ///
 /// 
 pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler,order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
-    let mut retries = 3;
-    let max_timeout_ms = 300;
+
     println!("Give order entered");
 
     // Lock active_elevators
@@ -176,6 +175,9 @@ pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, state: &Arc<System
 ///
 /// Returns - Worldview- Returns a worldview struct.
 ///
+
+
+/*Not used
 pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 
     // Find active lights
@@ -199,6 +201,7 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
         lights,                       
     };
 }
+*/
 
 
 /// master_worldview

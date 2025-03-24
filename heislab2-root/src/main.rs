@@ -159,8 +159,11 @@ fn main() -> std::io::Result<()> {
                                 let dead_elevator = active_elevators_locked.remove(i);
                                 let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
                                 dead_elevators_locked.push(dead_elevator.clone());
+                                drop(dead_elevators_locked);
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                
+
+                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator));
+                                udp_broadcast(&msg);
                             }
                         }
                     }
@@ -278,7 +281,9 @@ fn main() -> std::io::Result<()> {
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 
                 //Safety if elevator is idle to double check if its going to correct floor
-                if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
+                if active_elevators_locked.is_empty(){
+
+                }else if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     println!("GOING NEXT FLOOR!");
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
 
@@ -318,37 +323,44 @@ fn main() -> std::io::Result<()> {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
-                drop(active_elevators_locked);
+                if active_elevators_locked.is_empty(){
 
-                //Should add cab to systemstatevec and then broadcast new state of stopped
-                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-                drop(active_elevators_locked);
+                }else {
+                    active_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
+                    drop(active_elevators_locked);
 
-                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                udp_broadcast(&msg);
+                    //Should add cab to systemstatevec and then broadcast new state of stopped
+                    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                    drop(active_elevators_locked);
 
-                //WHO CONTROLS THE LIGHTS
-                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
-                drop(active_elevators_locked);
-                //broadcast current floor, stop and current queue - this might be redistributed
+                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                    udp_broadcast(&msg);
+
+                    //WHO CONTROLS THE LIGHTS
+                    let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                    active_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
+                    drop(active_elevators_locked);
+                    //broadcast current floor, stop and current queue - this might be redistributed
+                }
+                
             },
 
             recv(obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
-
-                //Should add cab to systemstatevec and then broadcast new state of stopped
                 let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-                drop(active_elevators_locked);
+                if active_elevators_locked.is_empty(){
 
-                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                udp_broadcast(&msg);
-                //broadcast obstruction
+                }else {
+                    //Should add cab to systemstatevec and then broadcast new state of stopped
+                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                    drop(active_elevators_locked);
+
+                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                    udp_broadcast(&msg);
+                }
             },
 
             //recv UDP message

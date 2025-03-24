@@ -300,7 +300,7 @@ impl UdpHandler {
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone)});},
                     MessageType::NewOnline => {thread::spawn(move || {handle_new_online(&msg_clone, passable_state)});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
-                    //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
+                    MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
                     MessageType::OrderComplete => {thread::spawn(move || {handle_remove_order(&msg_clone, passable_state, light_update_tx_clone)});},
                     MessageType::NewRequest => {thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone, light_update_tx_clone)});},
                     MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},

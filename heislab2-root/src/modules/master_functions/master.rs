@@ -88,7 +88,6 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 
     // Lock active_elevators
     let active_elevators_locked = state.active_elevators.lock().unwrap();
-    println!("If im here its not a deadlock");
     // Find the elevator and copy the needed data
     let elevator_index = match active_elevators_locked.iter().position(|e| e.id == elevator_id) {
         Some(index) => index,

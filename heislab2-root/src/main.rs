@@ -1,6 +1,7 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
+use heislab2_root::modules::master_functions::master::handle_slave_failure;
 use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
@@ -159,6 +160,7 @@ fn main() -> std::io::Result<()> {
                                 let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
                                 dead_elevators_locked.push(dead_elevator.clone());
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
+                                
                             }
                         }
                     }
@@ -169,6 +171,7 @@ fn main() -> std::io::Result<()> {
                     if system_state_clone.me_id == *locked_master_id{
                         let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
                         udp_broadcast(&msg);
+                        
                     }
                 }
             }
@@ -233,11 +236,6 @@ fn main() -> std::io::Result<()> {
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                 drop(active_elevators_locked);
-
-                if cab_clone.status == Status::Moving{
-                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    udp_broadcast(&msg);
-                }
                 
                 //SEND ACK
                 //let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None); ----------------------------------Commented untill we have cleared up what we are acking
@@ -274,24 +272,6 @@ fn main() -> std::io::Result<()> {
                     let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     udp_broadcast(&msg);
 
-                    // IF MASTER SORT ELEVATORS AND GIVE ORDER
-                    /* 
-                    if new_order.order_type == CAB{
-                        let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                        active_elevators_locked.get_mut(0).unwrap().add_to_queue(new_order);
-                        drop(active_elevators_locked);
-                    } else if cab.role==Role::Master{
-                        let system_state_active_elevators = system_state.active_elevators.lock().unwrap();
-                        let best_elevator_vec = best_to_worst_elevator(&new_order,&*system_state_active_elevators);
-                        drop(system_state_active_elevators);
-                        
-                        //Give order and broadcast new worldview
-                        if let Some(best_elevator) = best_elevator_vec.first() { 
-                            give_order(*best_elevator,vec![&new_order], &system_state, &udphandler);
-                            master_worldview(&system_state);
-                        }
-                    }*/
-
                 }
 
                 //cab.turn_on_queue_lights(elevator.clone());
@@ -301,6 +281,11 @@ fn main() -> std::io::Result<()> {
                 if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     println!("GOING NEXT FLOOR!");
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+
+                    if active_elevators_locked.get_mut(0).unwrap().status == Status::Moving{
+                        let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(active_elevators_locked.get_mut(0).unwrap().clone()));
+                        udp_broadcast(&msg);
+                    }
                 } 
                 drop(active_elevators_locked);
             },

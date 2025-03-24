@@ -55,7 +55,8 @@ fn main() -> std::io::Result<()> {
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
     println!("me id is {}",system_state.me_id);
     //Make free cab
-    let cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
+    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
+    cab.turn_off_lights(elevator.clone());
 
     //---------------INIT UDP HANDLER-------------------
     let udphandler = Arc::new(init_udp_handler(cab.clone()));

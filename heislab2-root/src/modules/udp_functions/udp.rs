@@ -237,7 +237,7 @@ impl UdpHandler {
     ///
     /// Returns -Option(UdpMsg)- Handels message based on message type and returns either a message or none depending on message.
     ///
-    pub fn receive(self: Arc<Self>, max_wait: u32, state: &Arc<SystemState>, order_update_tx: cbc::Sender<Vec<Order>>) -> Option<UdpMsg> {
+    pub fn receive(self: Arc<Self>, max_wait: u32, state: &Arc<SystemState>, order_update_tx: cbc::Sender<Vec<Order>>, light_update_tx: cbc::Sender<Vec<Order>>) -> Option<UdpMsg> {
 
         //Lock socket from udp.handler
         let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
@@ -289,18 +289,20 @@ impl UdpHandler {
                 let udp_handler_clone = Arc::clone(&self);
                 let msg_clone = msg.clone();
                 let tx_clone = order_update_tx.clone();
+                let light_update_tx_clone = light_update_tx.clone();
+                
+
 
                 match msg.header.message_type{
                     MessageType::Worldview => {thread::spawn(move || {handle_worldview(passable_state, &msg_clone)});},
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
-                    MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone)});},
+                    MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone)});},
                     MessageType::NewOnline => {thread::spawn(move || {handle_new_online(&msg_clone, passable_state)});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     //MessageType::ErrorOffline => {handle_error_offline(&msg, state, &self);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
-                    MessageType::OrderComplete => {thread::spawn(move || {(handle_remove_order(&msg_clone, passable_state))});},
-                    MessageType::NewRequest => {println!("MOTOOK MELDING");
-                    thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone)});},
+                    MessageType::OrderComplete => {thread::spawn(move || {handle_remove_order(&msg_clone, passable_state, light_update_tx_clone)});},
+                    MessageType::NewRequest => {thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone, light_update_tx_clone)});},
                     MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},
                     MessageType::ImAlive => {thread::spawn(move ||{ handle_im_alive(&msg_clone, passable_state)});},
                     _ => println!("Unreadable message received from {}", sender),
@@ -350,7 +352,7 @@ pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
 
 
 //NEW_REQUEST
-pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, order_update_tx: cbc::Sender<Vec<Order>>){
+pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, order_update_tx: cbc::Sender<Vec<Order>>,light_update_tx: cbc::Sender<Vec<Order>>){
 
     // Find order in message
     let new_order = if let UdpData::Order(order) = &msg.data{
@@ -383,8 +385,10 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
         println!("Deadlock pass 2");
         if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
             sender_elevator.queue.push(new_order.clone());
+            if sender_elevator.id == state.me_id{
+                light_update_tx.send(sender_elevator.queue.clone()).unwrap();
+            }
             println!("Entered call type cab");
-            
             if is_master {
                 // Capture necessary data (elevator id) before dropping the lock.
                 let elevator_id = sender_elevator.id;
@@ -392,9 +396,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                 drop(active_elevators_locked);
                 give_order(elevator_id, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
                 println!("Added CAB order to elevator ID: {}", elevator_id);
-                order_update_tx.send(vec![new_order.clone()]).unwrap();
             }
-           
         }
         else{
             println!("Elevator with NewRequest CAB is not active ID:{}", msg.header.sender_id)
@@ -407,7 +409,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
             let active_elevators_locked = state.active_elevators.lock().unwrap();
             let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked);
             drop(active_elevators_locked);
-            
+
             println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
             give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//FIXED
             order_update_tx.send(vec![new_order.clone()]).unwrap();
@@ -618,7 +620,7 @@ pub fn handle_nak(msg: &UdpMsg, state: Arc<SystemState>, target_address: &Socket
 /// Returns -None- .
 ///
 
-pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>) -> bool {
+pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, light_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     println!("New order received ID: {}", msg.header.sender_id);
 
     let elevator = if let UdpData::Cab(cab) = &msg.data {
@@ -639,6 +641,7 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
             if !update_elevator.queue.contains(&order){
                 update_elevator.queue.push(order.clone());
                 println!("Order {:?} successfully added to elevator {}.", order, elevator.id);
+                light_update_tx.send(update_elevator.queue.clone()).unwrap();
             }else {
                 println!("Order {:?} already in queue for elevator {}.", order, elevator.id);
             }
@@ -825,7 +828,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
 ///
 /// Returns - None - .
 ///
-pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>) {
+pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_tx: cbc::Sender<Vec<Order>>) {
 
     let elevator_from_msg = if let UdpData::Cab(cab) = &msg.data {
         cab
@@ -851,6 +854,10 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>) {
             if let Some(index) = elevator.queue.iter().position(|o| o == order) {
                 elevator.queue.remove(index);
                 println!("Order {:?} removed from elevator ID: {}", order, elevator.id);
+                if elevator.id == state.me_id{
+                    light_update_tx.send(elevator.queue.clone()).unwrap();
+                }
+                
             } else {
                 println!("ERROR: Elevator ID:{} does not have order {:?}", elevator.id, order); 
             }               
@@ -862,6 +869,7 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>) {
     } else {
         println!("ERROR: No elevator data found in the message.");
     }
+
 }
 
 

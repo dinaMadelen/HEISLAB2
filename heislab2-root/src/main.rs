@@ -107,9 +107,10 @@ fn main() -> std::io::Result<()> {
     let (door_tx, door_rx) = cbc::unbounded::<bool>();
     
     let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
+    let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
     /*let (world_view_update_tx, world_view_update_rx) = cbc::unbounded::<Vec<Cab>>();
     let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
-    let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
+    
     let (recieve_request_tx, recieve_request_rx) = cbc::unbounded::<Order>();
     */
     // --------------INIT CHANNELS FINISHED---------------
@@ -131,7 +132,7 @@ fn main() -> std::io::Result<()> {
         loop{
 
             let handler = Arc::clone(&udphandler_clone); 
-            handler.receive(60000, &system_state_clone, order_update_tx.clone());
+            handler.receive(60000, &system_state_clone, order_update_tx.clone(), light_update_tx.clone());
         }
     });
     // -------------INIT RECIEVER FINISHED-----------------
@@ -167,15 +168,19 @@ fn main() -> std::io::Result<()> {
                 let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
                 udp_broadcast(&msg);
             },
+            */
             recv(light_update_rx) -> a => {
-                //Send Ack
-                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
-                udp_broadcast(&msg);
-
+                let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
-                cab.turn_on_queue_lights(elevator.clone());
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                if lights_to_turn_on == active_elevators_locked.get_mut(0).unwrap().queue{
+                    active_elevators_locked.get_mut(0).unwrap().turn_on_queue_lights(elevator.clone());
+                }else{
+                    active_elevators_locked.get_mut(0).unwrap().turn_off_differing_lights(elevator.clone(), lights_to_turn_on);
+                }
+                drop(active_elevators_locked);
             },
-            recv(recieve_request_rx) -> a => {
+            /*(recieve_request_rx) -> a => {
                 //UPDATE OWN SET OF ALL ORDERS
                 //CHECK IF HANDLED IN HANDLER
                 let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);

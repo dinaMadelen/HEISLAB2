@@ -235,11 +235,14 @@ fn main() -> std::io::Result<()> {
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
                 //Mulig denne er for tidlig
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                println!("current queue: {:?}",active_elevators_locked.get_mut(0).unwrap().queue);
-                active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
-                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-                drop(active_elevators_locked);
-                
+                if active_elevators_locked.is_empty(){
+
+                }else{
+                    println!("current queue: {:?}",active_elevators_locked.get_mut(0).unwrap().queue);
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                    drop(active_elevators_locked);
+                }
                 //SEND ACK
                 //let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None); ----------------------------------Commented untill we have cleared up what we are acking
                 //udp_broadcast(&msg);

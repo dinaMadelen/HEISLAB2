@@ -23,3 +23,4 @@ pub struct WaitingConfirmation {
     pub responded_ids: Vec<u8>,
     pub all_confirmed: bool,
 }
+

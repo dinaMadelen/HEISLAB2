@@ -50,7 +50,7 @@ use serde::{Deserialize, Serialize};            // https://serde.rs/impl-seriali
 use bincode;                                    // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use crc32fast::Hasher;                          // Add to Cargo.toml file, Check comment above  //Add to Cargo,toml Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
 //use sha2::{Digest, Sha256};                     // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
-use std::time::{Duration,Instant};              // https://doc.rust-lang.org/std/time/struct.Duration.html
+use std::time::{Duration,Instant, SystemTime};              // https://doc.rust-lang.org/std/time/struct.Duration.html
 // use std::thread::sleep;                      // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};                     // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 use crossbeam_channel as cbc;
@@ -330,6 +330,8 @@ pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
     if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
         println!("Updating alive elevator");
         sender_elevator.merge_with(&updated_cab); 
+        sender_elevator.last_lifesign = SystemTime::now();
+        //update last lifesign of that elevator
 
     } else {
         println!("Sender elevator not in active elevators");
@@ -730,6 +732,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
         status: msg_elevator.status.clone(),
         direction: msg_elevator.direction.clone(),
         role: msg_elevator.role.clone(),
+        last_lifesign: SystemTime::now(),
     };
 
     // Lock again and add the new elevator

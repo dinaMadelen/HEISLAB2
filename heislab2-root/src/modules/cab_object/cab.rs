@@ -2,6 +2,7 @@
 #![warn(unused_variables)]
 #[allow(unused_imports)]
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr}; // https://doc.rust-lang.org/std/net/enum.IpAddr.html
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,7 @@ pub struct Cab {
     pub status: Status,          // Current status of the elevator
     pub direction: i8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
+    pub last_lifesign: SystemTime,
 }
 
 
@@ -72,6 +74,7 @@ impl Cab {
                 status: Status::Idle,
                 direction: 0,
                 role: Role::Slave,
+                last_lifesign: SystemTime::now()
             });
     }
 }

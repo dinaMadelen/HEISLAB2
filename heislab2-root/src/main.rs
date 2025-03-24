@@ -137,6 +137,43 @@ fn main() -> std::io::Result<()> {
     });
     // -------------INIT RECIEVER FINISHED-----------------
 
+    //ELEVATORMONITOR!!!
+    let system_state_clone = Arc::clone(&system_state);
+    spawn(move||{
+            loop{
+                // Sleep for 5 seconds between checks.
+                sleep(Duration::from_secs(5));
+                let now = SystemTime::now();
+
+                // Lock active_elevators.
+                let mut active_elevators_locked = system_state_clone.active_elevators.lock().unwrap();
+                // Iterate in reverse order so that removing elements doesn't affect our indices.
+                for i in (0..active_elevators_locked.len()).rev() {
+                    let elevator = &active_elevators_locked[i];
+                    // Only check elevators that are Moving or DoorOpen.
+                    if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
+                        if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
+                            if elapsed >= Duration::from_secs(5) {
+                                // Remove the elevator from active list.
+                                let dead_elevator = active_elevators_locked.remove(i);
+                                let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
+                                dead_elevators_locked.push(dead_elevator.clone());
+                                println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
+                            }
+                        }
+                    }
+                }
+
+                {   
+                    let locked_master_id = system_state_clone.master_id.lock().unwrap();
+                    if system_state_clone.me_id == *locked_master_id{
+                        let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
+                        udp_broadcast(&msg);
+                    }
+                }
+            }
+    });
+    //INIT OVER
 
     let dirn = DIRN_DOWN;
 
@@ -191,13 +228,17 @@ fn main() -> std::io::Result<()> {
 
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
                 //Mulig denne er for tidlig
-                println!("ORDER UPDATED!");
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                println!("GOING NEXT FLOOR!");
                 println!("current queue: {:?}",active_elevators_locked.get_mut(0).unwrap().queue);
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                 drop(active_elevators_locked);
 
+                if cab_clone.status == Status::Moving{
+                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                    udp_broadcast(&msg);
+                }
+                
                 //SEND ACK
                 //let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None); ----------------------------------Commented untill we have cleared up what we are acking
                 //udp_broadcast(&msg);

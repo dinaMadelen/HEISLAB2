@@ -371,40 +371,50 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     //Check if this elevator is master 
     let master_id_clone = state.master_id.lock().unwrap().clone();
     let is_master = state.me_id == master_id_clone;
-
+    println!("Deadlock pass 1");
     //Lock active_elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    
     
     //IF New Request is CAB order
     if new_order.order_type == CAB{
-        if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
+        
+        // Lock the active elevators and find the elevator that matches the sender id.
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+        println!("Deadlock pass 2");
+        if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
             sender_elevator.queue.push(new_order.clone());
-            
             println!("Entered call type cab");
-            if is_master{
-                let new_msg = make_udp_msg(state.me_id, MessageType::NewOrder, UdpData::Cab(sender_elevator.clone())); //---------------------------------------------This is never used?
-                //MÅ DROPPE ACTIVE ELEVATORS FOR Å KUNNE KJØRE GIVE ORDER! Fører til deadlock ------------------------------------------------------
-                give_order(sender_elevator.id,vec![&new_order], &state, &udp_handler, order_update_tx.clone()); //FIXED
-                println!("Added CAB order to elevator ID:{}", sender_elevator.id);
+            
+            if is_master {
+                // Capture necessary data (elevator id) before dropping the lock.
+                let elevator_id = sender_elevator.id;
+                // Lock is dropped here when the block ends.
+                drop(active_elevators_locked);
+                give_order(elevator_id, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
+                println!("Added CAB order to elevator ID: {}", elevator_id);
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             }
-            
-        }else{
+           
+        }
+        else{
             println!("Elevator with NewRequest CAB is not active ID:{}", msg.header.sender_id)
-        }    
+        }
+        order_update_tx.send(vec![new_order.clone()]).unwrap();    
     
     }else {
         
         if is_master{
+            let active_elevators_locked = state.active_elevators.lock().unwrap();
             let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked);
-            
             drop(active_elevators_locked);
+            
             println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
             give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//FIXED
             order_update_tx.send(vec![new_order.clone()]).unwrap();
         }
         
     }
+    order_update_tx.send(vec![new_order.clone()]).unwrap();
 }
 
 /// Creates a new UDP handler with a bound sockets based on this elevator

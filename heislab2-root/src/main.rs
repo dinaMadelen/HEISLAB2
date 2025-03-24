@@ -188,6 +188,8 @@ fn main() -> std::io::Result<()> {
                 //Mulig denne er for tidlig
                 println!("ORDER UPDATED!");
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
+                println!("GOING NEXT FLOOR!");
+                println!("current queue: {:?}",active_elevators_locked.get_mut(0).unwrap().queue);
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 drop(active_elevators_locked);
 
@@ -209,7 +211,7 @@ fn main() -> std::io::Result<()> {
                     let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
-
+                   
                     let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                     udp_broadcast(&msg);
                 }
@@ -251,6 +253,7 @@ fn main() -> std::io::Result<()> {
                 
                 //Safety if elevator is idle to double check if its going to correct floor
                 if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
+                    println!("GOING NEXT FLOOR!");
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 } 
                 drop(active_elevators_locked);
@@ -266,7 +269,6 @@ fn main() -> std::io::Result<()> {
 
                 //Do stuff
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                 drop(active_elevators_locked);
 

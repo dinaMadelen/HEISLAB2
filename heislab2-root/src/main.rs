@@ -141,10 +141,19 @@ fn main() -> std::io::Result<()> {
 
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
+    let elevator_clone = elevator.clone();
     spawn(move||{
             loop{
                 // Sleep for 5 seconds between checks.
-                sleep(Duration::from_secs(5));
+                sleep(Duration::from_secs(1));
+                let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
+                
+                for cab in dead_elevators_locked.iter_mut(){
+                    cab.turn_off_lights_not_in_queue(elevator_clone.clone());
+                };
+
+                drop(dead_elevators_locked);
+                sleep(Duration::from_secs(4));
                 let now = SystemTime::now();
 
                 // Lock active_elevators.

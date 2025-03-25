@@ -153,13 +153,13 @@ fn main() -> std::io::Result<()> {
 
     //INIT OVER
     //TEST IF MASTER FAILURE WORKS!!!!!
-    /* 
+    
     let system_state_clone = Arc::clone(&system_state);
     
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
-    */
+    
 
     let dirn = DIRN_DOWN;
     if elevator.floor_sensor().is_none() {
@@ -195,7 +195,7 @@ fn main() -> std::io::Result<()> {
                 if lights_to_turn_on == active_elevators_locked.get_mut(0).unwrap().queue{
                     active_elevators_locked.get_mut(0).unwrap().turn_on_queue_lights(elevator.clone());
                 }else{
-                    active_elevators_locked.get_mut(0).unwrap().turn_off_differing_lights(elevator.clone(), lights_to_turn_on);
+                    active_elevators_locked.get_mut(0).unwrap().turn_off_lights_not_in_queue(elevator.clone());
                 }
                 drop(active_elevators_locked);
             },

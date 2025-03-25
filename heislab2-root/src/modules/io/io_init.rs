@@ -2,7 +2,6 @@
 // Module description
 //--------------------
 //! This module contains the objects related to elevator input/output. 
-//! The input and output consists of the buttons, floor sensor, and obstruction
 
 
 //---------

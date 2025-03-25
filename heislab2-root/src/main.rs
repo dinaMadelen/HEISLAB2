@@ -17,6 +17,7 @@ use cab::Cab;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
 use slave_functions::slave::*;
+use master_functions::master::*;
 use system_init::*;
 
 
@@ -141,8 +142,9 @@ fn main() -> std::io::Result<()> {
                 {   
                     let locked_master_id = system_state_clone.master_id.lock().unwrap();
                     if system_state_clone.me_id == *locked_master_id{
-                        let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
-                        udp_broadcast(&msg);
+                        //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
+                        //udp_broadcast(&msg);
+                        master_worldview(&system_state_clone);
                     }
                 }
             }

@@ -250,6 +250,7 @@ fn main() -> std::io::Result<()> {
                 
                 //Safety if elevator is idle to double check if its going to correct floor
                 if active_elevators_locked.is_empty(){
+                    println!("No active elevators, not even this one ID:{}",system_state.me_id);
 
                 }else if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     println!("GOING NEXT FLOOR!");

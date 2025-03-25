@@ -166,7 +166,7 @@ fn main() -> std::io::Result<()> {
                         if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
                             if elapsed >= Duration::from_secs(5) {
                                 // Remove the elevator from active list. and add to dead list
-                                //Before adding to dead list remove all but cab calls from the dead elevators queue
+                                //Before adding to dead list remove all but cab calls from the dead elevators queue 
                                 let dead_elevator = active_elevators_locked.remove(i);
                                 let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
                                 dead_elevators_locked.push(dead_elevator.clone());
@@ -191,6 +191,10 @@ fn main() -> std::io::Result<()> {
             }
     });
     //INIT OVER
+    let system_state_clone = Arc::clone(&system_state);
+    spawn(move||{
+        check_master_failure(&system_state_clone);
+    });
 
     let dirn = DIRN_DOWN;
 
@@ -207,6 +211,7 @@ fn main() -> std::io::Result<()> {
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     udp_broadcast(&msg);
+
 
     
 

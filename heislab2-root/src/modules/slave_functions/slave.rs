@@ -214,7 +214,7 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_ord
 ///
 /// Returns - bool - returns `true` if master is dead, repeats untill master is dead.
 ///
-pub fn check_master_failure(me:&mut Cab, state: &Arc<SystemState>) -> bool {
+pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
 
 
     loop{
@@ -239,7 +239,8 @@ pub fn check_master_failure(me:&mut Cab, state: &Arc<SystemState>) -> bool {
         //Check age of new lifesign
         if  last_lifesign.elapsed() > Duration::from_millis(5000) {
             println!("No worldview recived from Master in last 5sec, electing new master");
-            set_new_master(me,state)
+            let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+            set_new_master(active_elevators_locked.get_mut(0).unwrap(),state)
         }
         
     }    

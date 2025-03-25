@@ -9,7 +9,7 @@ use std::time::Instant;
 pub struct SystemState {
     pub me_id : u8,
     pub master_id: Arc<Mutex<u8>>,
-    pub last_lifesign: Arc<Mutex<Instant>>,
+    pub lifesign_master: Arc<Mutex<Instant>>,
     pub last_worldview: Arc<Mutex<UdpMsg>>,
     pub active_elevators: Arc<Mutex<Vec<Cab>>>,
     pub dead_elevators: Arc<Mutex<Vec<Cab>>>,

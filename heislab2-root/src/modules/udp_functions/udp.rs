@@ -331,7 +331,7 @@ pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
         println!("Updating alive elevator");
         sender_elevator.merge_with(&updated_cab); 
         sender_elevator.last_lifesign = SystemTime::now();
-        //update last lifesign of that elevator
+        //Update last lifesign of that elevator
 
     } else {
         println!("Sender elevator not in active elevators");
@@ -413,7 +413,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
             drop(active_elevators_locked);
 
             println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
-            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());//FIXED
+            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());
             order_update_tx.send(vec![new_order.clone()]).unwrap();
         }
         
@@ -482,7 +482,7 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview
-    let mut last_lifesign_locked = state.last_lifesign.lock().unwrap();
+    let mut last_lifesign_locked = state.lifesign_master.lock().unwrap();
     *last_lifesign_locked = Instant::now();
     drop(last_lifesign_locked);
 

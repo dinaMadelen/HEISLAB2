@@ -232,7 +232,7 @@ pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
 
 
         //Get time of last lifesign
-        let last_lifesign_locked = state.last_lifesign.lock().unwrap();
+        let last_lifesign_locked = state.lifesign_master.lock().unwrap();
         let last_lifesign = last_lifesign_locked.clone();
         drop(last_lifesign_locked);
 
@@ -262,7 +262,7 @@ pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
 
     sleep(Duration::from_millis(150*u64::from(me.id)));
     println!("Entered set new master");
-    let last_lifesign_locked = state.last_lifesign.lock().unwrap();
+    let last_lifesign_locked = state.lifesign_master.lock().unwrap().clone();
     if last_lifesign_locked.elapsed() > Duration::from_millis(5000){
         //Set myself as master
     
@@ -295,12 +295,11 @@ pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
     }else{
         
         //Someone sendt worldview, and became the new master
-        let last_worldview_locked=state.last_worldview.lock().unwrap();
+        let last_worldview_locked=state.last_worldview.lock().unwrap().clone();
         let last_worldview=last_worldview_locked.clone();
-        drop(last_worldview_locked);
         let mut master_id_locked=state.master_id.lock().unwrap();
         *master_id_locked=last_worldview.header.sender_id;
-        drop(master_id_locked)
+        drop(master_id_locked);
     }    
     
 }

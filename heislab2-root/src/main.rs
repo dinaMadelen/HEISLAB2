@@ -1,6 +1,7 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
+use heislab2_root::modules::io::io_init;
 use heislab2_root::modules::master_functions::master::handle_slave_failure;
 use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
@@ -21,6 +22,8 @@ use system_init::*;
 
 use heislab2_root::modules::udp_functions::udp::*;
 use udp_functions::udp::UdpData;
+
+use heislab2_root::modules::io::io_init::*;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
@@ -70,37 +73,7 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CAB FINISH---------------
     
     // --------------INIT CHANNELS---------------
-    let poll_period = Duration::from_millis(25);
-
-    let (call_button_tx, call_button_rx) = cbc::unbounded::<poll::CallButton>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || poll::call_buttons(elevator, call_button_tx, poll_period));
-    }
-
-    let (floor_sensor_tx, floor_sensor_rx) = cbc::unbounded::<u8>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || poll::floor_sensor(elevator, floor_sensor_tx, poll_period));
-    }
-
-    let (stop_button_tx, stop_button_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || poll::stop_button(elevator, stop_button_tx, poll_period));
-    }
-
-    let (obstruction_tx, obstruction_rx) = cbc::unbounded::<bool>();
-    {
-        let elevator = elevator.clone();
-        spawn(move || poll::obstruction(elevator, obstruction_tx, poll_period));
-    }
-
-    let (door_tx, door_rx) = cbc::unbounded::<bool>();
-    
-    let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
-    let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
-
+    let io_channels = IoChannels::new(&elevator);
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
@@ -120,7 +93,7 @@ fn main() -> std::io::Result<()> {
         loop{
 
             let handler = Arc::clone(&udphandler_clone); 
-            handler.receive(60000, &system_state_clone, order_update_tx.clone(), light_update_tx.clone());
+            handler.receive(60000, &system_state_clone, io_channels.order_update_tx.clone(), io_channels.light_update_tx.clone());
         }
     });
     // -------------INIT RECIEVER FINISHED-----------------
@@ -214,7 +187,7 @@ fn main() -> std::io::Result<()> {
                 udp_broadcast(&msg);
             },
             */
-            recv(light_update_rx) -> a => {
+            recv(io_channels.light_update_rx) -> a => {
                 let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
@@ -225,7 +198,7 @@ fn main() -> std::io::Result<()> {
                 }
                 drop(active_elevators_locked);
             },
-            recv(order_update_rx) -> a => {
+            recv(io_channels.order_update_rx) -> a => {
 
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
                 //Mulig denne er for tidlig
@@ -240,18 +213,18 @@ fn main() -> std::io::Result<()> {
                         udp_broadcast(&imalive);
                     }
 
-                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                     
                     drop(active_elevators_locked);
                 }
             },
             
-            recv(door_rx) -> a => {
+            recv(io_channels.door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
                     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                     active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
-                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
                     elevator.door_light(false);
@@ -262,7 +235,7 @@ fn main() -> std::io::Result<()> {
                 }
             },
 
-            recv(call_button_rx) -> a => {
+            recv(io_channels.call_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 //Make new order and add that order to elevators queue
@@ -283,7 +256,7 @@ fn main() -> std::io::Result<()> {
 
                 }else if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     println!("GOING NEXT FLOOR!");
-                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
 
                     if active_elevators_locked.get_mut(0).unwrap().status == Status::Moving{
                         let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(active_elevators_locked.get_mut(0).unwrap().clone()));
@@ -293,7 +266,7 @@ fn main() -> std::io::Result<()> {
                 drop(active_elevators_locked);
             },
 
-            recv(floor_sensor_rx) -> a => {
+            recv(io_channels.floor_rx) -> a => {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 //update current floor status
@@ -304,7 +277,7 @@ fn main() -> std::io::Result<()> {
 
                 //Do stuff
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                 drop(active_elevators_locked);
 
                 //Broadcast new state
@@ -317,7 +290,7 @@ fn main() -> std::io::Result<()> {
             },
 
             /*Burde nok modifiseres*/
-            recv(stop_button_rx) -> a => {
+            recv(io_channels.stop_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
@@ -341,7 +314,7 @@ fn main() -> std::io::Result<()> {
                 
             },
 
-            recv(obstruction_rx) -> a => {
+            recv(io_channels.obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });

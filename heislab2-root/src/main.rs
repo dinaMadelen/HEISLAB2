@@ -138,7 +138,7 @@ fn main() -> std::io::Result<()> {
                     cab.turn_off_lights_not_in_queue(elevator_clone.clone());
                 };
                 drop(dead_elevators_locked);
-                sleep(Duration::from_secs(4));
+                sleep(Duration::from_secs(9));
                 let now = SystemTime::now();
 
                 // Lock active_elevators.
@@ -149,7 +149,7 @@ fn main() -> std::io::Result<()> {
                     // Only check elevators that are Moving or DoorOpen.
                     if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
                         if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
-                            if elapsed >= Duration::from_secs(5) {
+                            if elapsed >= Duration::from_secs(10) {
                                 let dead_elevator = active_elevators_locked.get(i).unwrap();
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
                                 let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));

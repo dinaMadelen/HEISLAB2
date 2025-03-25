@@ -433,7 +433,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                 //If not all acs are recieved, give order to self
                 if !give_order_success{active_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());};
             }
-         }       
+        }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();
 }
@@ -506,7 +506,7 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     let mut new_worldview = state.last_worldview.lock().unwrap();
     *new_worldview = msg.clone();
     drop(new_worldview);
-
+    
     
     
     let worldview = if let UdpData::Worldview(worldview) = &msg.data{
@@ -954,7 +954,7 @@ pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 /// 
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
-        (MessageType::NewOrder, UdpData::Cab(_)) => true,
+        (MessageType::NewOrder, UdpData::Worldview(_)) => true,
         (MessageType::Worldview, UdpData::Cabs(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,

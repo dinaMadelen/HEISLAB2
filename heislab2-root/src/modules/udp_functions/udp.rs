@@ -213,6 +213,8 @@ impl UdpHandler {
                             println!("Elevator {} didnt respond to new order update, assuming offline",elevator.id);
                         }
                     }
+                    drop(sent_messages_locked);
+                    drop(active_elevators_locked);
 
                 }else{
                     drop(sent_messages_locked);
@@ -578,7 +580,7 @@ pub fn handle_ack(msg: &UdpMsg, state: Arc<SystemState>) {
         //Check that all active elevatos have responded 
         for elevator in active_elevators_locked.iter(){
             if !waiting.responded_ids.contains(&elevator.id){
-                println!("Still missing confirmations for elevaotr ID:{}", elevator.id);
+                println!("Still missing confirmations for elevator ID:{}", elevator.id);
                 all_confirmed = false;
             }
 

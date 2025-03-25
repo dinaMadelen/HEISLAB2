@@ -104,7 +104,7 @@ fn main() -> std::io::Result<()> {
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
-    
+
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -121,7 +121,7 @@ fn main() -> std::io::Result<()> {
                 let now = SystemTime::now();
 
                 // Lock active_elevators.
-                let mut active_elevators_locked = system_state_clone.active_elevators.lock().unwrap();
+                let active_elevators_locked = system_state_clone.active_elevators.lock().unwrap();
                 // Iterate in reverse order so that removing elements doesn't affect our indices.
                 for i in (0..active_elevators_locked.len()).rev() {
                     let elevator = &active_elevators_locked[i];
@@ -167,6 +167,7 @@ fn main() -> std::io::Result<()> {
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
+    
 
     // ------------------ MAIN LOOP ---------------------
     loop {
@@ -181,7 +182,6 @@ fn main() -> std::io::Result<()> {
             },
             */
             recv(io_channels.light_update_rx) -> a => {
-                let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 active_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());

@@ -398,7 +398,6 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
 
     //IF New Request is CAB order
     if new_order.order_type == CAB{
-        
         // Lock the active elevators and find the elevator that matches the sender id.
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
         if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
@@ -434,18 +433,12 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                     elevator
                 }
                 None => {
-                    println!("No available elevator to assign the order.");
-                    return; // Or handle the situation appropriately.
+                    println!("No available elevator to assign the order, assigning to self");
+                    &state.me_id
                 }
             };
-
-            let give_order_success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
-            /* 
-            {
-                let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-                //If not all acs are recieved, give order to self
-                if !give_order_success{active_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());};
-            }*/
+            give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+            order_update_tx.send(vec![new_order.clone()]).unwrap(); 
         }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();

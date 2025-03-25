@@ -140,11 +140,14 @@ fn main() -> std::io::Result<()> {
                 }
 
                 {   
-                    let locked_master_id = system_state_clone.master_id.lock().unwrap();
-                    if system_state_clone.me_id == *locked_master_id{
+                    drop(active_elevators_locked);
+                    let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
+                    if system_state_clone.me_id == locked_master_id{
+                        drop(locked_master_id);
                         //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
                         //udp_broadcast(&msg);
-                        master_worldview(&system_state_clone);
+                        let master_system_state_clone = Arc::clone(&system_state_clone);
+                        master_worldview(&master_system_state_clone);
                     }
                 }
             }

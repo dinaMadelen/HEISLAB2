@@ -239,8 +239,15 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 ///
 pub fn master_worldview(state:&Arc<SystemState>) -> bool{
 
+    println!("Starting worldview");
+
     let live_cabs = state.active_elevators.lock().unwrap().clone();
+
+    println!("Past firt mutex in worldview, generation");
+
     let dead_cabs = state.dead_elevators.lock().unwrap().clone();
+
+    println!("Past firt mutex in worldview, generation");
 
     let master_view = Worldview{ 
 
@@ -248,6 +255,7 @@ pub fn master_worldview(state:&Arc<SystemState>) -> bool{
         dead: dead_cabs
     };
     
+    println!("preparing to send");
     let message = make_udp_msg(state.me_id,MessageType::Worldview, UdpData::Worldview(master_view)); 
     return udp_broadcast(&message);
 }

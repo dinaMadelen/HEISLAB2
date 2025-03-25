@@ -192,11 +192,7 @@ fn main() -> std::io::Result<()> {
                 let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                if lights_to_turn_on == active_elevators_locked.get_mut(0).unwrap().queue{
-                    active_elevators_locked.get_mut(0).unwrap().turn_on_queue_lights(elevator.clone());
-                }else{
-                    active_elevators_locked.get_mut(0).unwrap().turn_off_lights_not_in_queue(elevator.clone());
-                }
+                active_elevators_locked.get_mut(0).unwrap().turn_off_lights_not_in_queue(elevator.clone());
                 drop(active_elevators_locked);
             },
             recv(io_channels.order_update_rx) -> a => {

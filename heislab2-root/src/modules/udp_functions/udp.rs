@@ -199,7 +199,6 @@ impl UdpHandler {
     
                     for elevator_id in &missing {
                         if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
-    
                             let target_address = &elevator.inn_address;
                             self.send(&target_address, message);
                         }
@@ -428,11 +427,12 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
             };
 
             let give_order_success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+            /* 
             {
                 let mut active_elevators_locked = state.active_elevators.lock().unwrap();
                 //If not all acs are recieved, give order to self
                 if !give_order_success{active_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());};
-            }
+            }*/
         }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();

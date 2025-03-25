@@ -1,16 +1,18 @@
+//---------
+// Imports
+//---------
+// public crates
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-use heislab2_root::modules::io::io_init;
-use heislab2_root::modules::master_functions::master::handle_slave_failure;
 use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
+// our crates
 use heislab2_root::modules::elevator_object::*;
-use alias_lib::{DIRN_DOWN, DIRN_STOP};
+use alias_lib::DIRN_DOWN;
 use elevator_init::Elevator;
 use heislab2_root::modules::*;
-
 
 use cab_object::*;
 use cab::Cab;
@@ -20,42 +22,42 @@ use slave_functions::slave::*;
 use master_functions::master::*;
 use system_init::*;
 
-
 use heislab2_root::modules::udp_functions::udp::*;
 use udp_functions::udp::UdpData;
-
+use udp_functions::udp_wrapper;
 use heislab2_root::modules::io::io_init::*;
 
+
+//------
+// Main
+//------
 fn main() -> std::io::Result<()> {
-    //--------------INIT ELEVATOR------------
-    // Check boot function in system Init
+    //----------------
+    // Initialization
+    //----------------
+
+    // create elevator
     let elev_num_floors = 4;
     let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
-
-    //Dummy message to have an empty message in current worldview 
-    let boot_worldview =  UdpMsg {
-        header: UdpHeader {
-            sender_id: 0,
-            message_type: MessageType::Worldview,
-            checksum: 0,
-        },
-        data: UdpData::Checksum(0),
-    };
-
     println!("Elevator started:\n{:#?}", elevator);
 
-    //--------------INIT ELEVATOR FINISH------------
+    // create empty worldview dummy message  
+    let boot_worldview = udp_wrapper::create_empty_worldview_msg();
 
-    // --------------INIT CAB---------------
-    let system_state = Arc::new(boot());
+    // initialize cab
+    let system_state = initialize_system_state();
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
 
-    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
-    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
-    let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
+    // create socket addresses
+    let inn_addr = udp_wrapper::create_socket_address(3500);
+    let out_addr = udp_wrapper::create_socket_address(3600);
+    
+    // Assign ID matching state.me_id for local IP assignment
+    let set_id = system_state.me_id; 
     println!("me id is {}",system_state.me_id);
+    
     //Make free cab
     let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
     cab.turn_off_lights(elevator.clone());

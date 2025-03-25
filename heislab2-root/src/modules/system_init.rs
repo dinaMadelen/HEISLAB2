@@ -11,7 +11,7 @@ use crate::modules::system_status::SystemState;
 use crate::modules::udp_functions::udp::{UdpMsg,UdpHeader,UdpData,MessageType};
 use crate::modules::udp_functions::udp::calc_checksum;
 
-pub fn boot() -> SystemState {
+pub fn initialize_system_state() -> Arc<SystemState> {
 
     //Get config from "boot.txt"
     let (me_id_value, default_master_id) = load_config();
@@ -33,7 +33,7 @@ pub fn boot() -> SystemState {
     let old_lifesign = Instant::now() - Duration::from_secs(10);
 
     // Generate a system state
-    SystemState {
+    let system_state = SystemState {
         me_id: me_id_value,
         master_id: Arc::new(Mutex::new(default_master_id)),
         lifesign_master: Arc::new(Mutex::new(old_lifesign)), 
@@ -42,7 +42,9 @@ pub fn boot() -> SystemState {
         dead_elevators: Arc::new(Mutex::new(Vec::new())),
         all_orders: Arc::new(Mutex::new(Vec::new())),
         sent_messages: Arc::new(Mutex::new(Vec::new())),
-    }
+    };
+
+    Arc::new(system_state)
 }
 
 pub fn load_config() -> (u8, u8) {

@@ -60,7 +60,7 @@ use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
 use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview, reassign_orders};
-use crate::modules::slave_functions::slave::update_from_worldview;
+use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure};
 use crate::modules::system_status::WaitingConfirmation;
 
 
@@ -498,7 +498,6 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 ///
 pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
 
-    handle_multiple_masters(&state, &msg.header.sender_id);
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview

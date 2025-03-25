@@ -107,8 +107,14 @@ pub struct UdpMsg {
 }
 #[derive (Clone, Debug)]
 pub struct UdpHandler {
-    sender_socket: Arc<Mutex<UdpSocket>>,
-    receiver_socket: Arc<Mutex<UdpSocket>>,
+    pub sender_socket: Arc<Mutex<UdpSocket>>,
+    pub receiver_socket: Arc<Mutex<UdpSocket>>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
+pub struct Worldview{
+    pub live: Vec<Cab>,
+    pub dead: Vec<Cab>
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
@@ -118,7 +124,9 @@ pub enum UdpData {
     Cab(Cab),
     Orders(Vec<Order>),
     Order(Order),
+    Worldview(Worldview),
 }
+
 
 
 //----------------------------------------------Functions
@@ -494,20 +502,21 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     let mut new_worldview = state.last_worldview.lock().unwrap();
     *new_worldview = msg.clone();
     drop(new_worldview);
+
     
-    let elevators = if let UdpData::Cabs(elevator) = &msg.data{
-        elevator
+    
+    let worldview = if let UdpData::Worldview(worldview) = &msg.data{
+        worldview
     }
     else{
         println!("Wrong data in message for worldview");
         return;
     };
 
-    update_from_worldview(&state, &elevators);
-    let active_elevators: Vec<Cab> = {
+    update_from_worldview(&state, &worldview);
+    /* let active_elevators: Vec<Cab> = {
     let active_elevators_locked = state.active_elevators.lock().unwrap();
-    active_elevators_locked.clone() 
-    };
+    active_elevators_locked.clone() */ 
      
     //not used
     //generate_worldview(&active_elevators);
@@ -765,8 +774,8 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
-    let mut missing_orders = if let UdpData::Cabs(cabs) = &msg.data {
-        cabs.clone()
+    let mut missing_orders = if let UdpData::Worldview(worldview) = &msg.data {
+        worldview.clone()
     } else {
         println!("ERROR: Expected UdpData::Cabs but got something else");
         return;

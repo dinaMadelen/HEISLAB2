@@ -28,7 +28,7 @@
 #[allow(unused_variables)]
 
 //-----------------------IMPORTS------------------------------------------------------------
-use crate::modules::udp_functions::udp::{UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
+use crate::modules::udp_functions::udp::{Worldview ,UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::cab_object::elevator_status_functions::Status;
 use crate::modules::cab_object::cab::Cab;
 use crate::modules::slave_functions::slave::reboot_program;
@@ -131,19 +131,20 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, state: &Arc<SystemState>) -> bool {
+pub fn correct_master_worldview(missing_orders:&Worldview, state: &Arc<SystemState>) -> bool {
     println!("Correcting worldview for master");
 
     let mut changes_made = false;
 
-    if missing_orders.is_empty(){
-        println!("List of missing orders is empty");
+    if missing_orders.live.is_empty() && missing_orders.dead.is_empty(){
+        println!("List of missing cabs is empty");
         return false;
     }
 
+
     // Compare active elevators to missing orders list
     let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-    for missing_elevator in missing_orders.iter_mut() {
+    for missing_elevator in missing_orders.live.iter() {
         if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
                 if !elevator.queue.contains(&order) {
@@ -159,6 +160,27 @@ pub fn correct_master_worldview(missing_orders:&mut Vec<Cab>, state: &Arc<System
             );
         }
     }
+    drop(active_elevators_locked);
+
+        // Compare dead elevators to missing orders list
+        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+        for missing_elevator in missing_orders.dead.iter() {
+            if let Some(elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
+                for order in &missing_elevator.queue {
+                    if !elevator.queue.contains(&order) {
+                        elevator.queue.push(order.clone());
+                        println!("Added missing order {:?} to elevator {}", order.floor, elevator.id);
+                        changes_made = true;
+                    }
+                }
+            } else {
+                println!(
+                    "Warning: Elevator ID {} from missing_orders not found in dead elevators",
+                    missing_elevator.id
+                );
+            }
+        }
+    drop(dead_elevators_locked);
     return changes_made;
 }
 
@@ -216,9 +238,17 @@ pub fn generate_worldview(active_elevators: &Vec<Cab>) -> Worldview {
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
 pub fn master_worldview(state:&Arc<SystemState>) -> bool{
-    let active_elevators_locked = state.active_elevators.lock().unwrap();
-    let cloned_elevators= active_elevators_locked.clone();
-    let message = make_udp_msg(state.me_id,MessageType::Worldview, UdpData::Cabs(cloned_elevators)); 
+
+    let live_cabs = state.active_elevators.lock().unwrap().clone();
+    let dead_cabs = state.dead_elevators.lock().unwrap().clone();
+
+    let master_view = Worldview{ 
+
+        live: live_cabs,
+        dead: dead_cabs
+    };
+    
+    let message = make_udp_msg(state.me_id,MessageType::Worldview, UdpData::Worldview(master_view)); 
     return udp_broadcast(&message);
 }
 
@@ -341,6 +371,7 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
         //For each order check if CAB order
         for order in elevator.queue.clone(){
 
+            // Do not reassign CAB orders
             if order.order_type != CAB { 
 
                 //Lock active elevators and copy, then release
@@ -350,6 +381,7 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
                 for best_alternative in best_to_worst_elevator(&order, &live_elevators) {
                     println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
+                    // Give the order to the best alternative and remove the order from the dead elevator
                     if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
                         let mut dead_elevators_locked=state.dead_elevators.lock().unwrap();
                         if let Some(real_elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == error_cab_id) {

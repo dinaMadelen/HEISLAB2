@@ -128,9 +128,7 @@ fn main() -> std::io::Result<()> {
                                 // Remove the elevator from active list. and add to dead list
                                 //Before adding to dead list remove all but cab calls from the dead elevators queue 
                                 let dead_elevator = active_elevators_locked.remove(i);
-                                let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
-                                dead_elevators_locked.push(dead_elevator.clone());
-                                drop(dead_elevators_locked);
+                    
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
                                 let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator));
                                 udp_broadcast(&msg);

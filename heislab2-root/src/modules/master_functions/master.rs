@@ -34,6 +34,7 @@ use crate::modules::cab_object::cab::Cab;
 use crate::modules::slave_functions::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
+use crate::modules::elevator_object::alias_lib::{CAB,DIRN_DOWN, DIRN_STOP};
 use crossbeam_channel as cbc;
 
 
@@ -284,32 +285,34 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 ///
 pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     for order in orders {
+        
         let mut assigned = false;
 
-        //Lock active elevators and copy, then release
-        let active_elevators_locked = state.active_elevators.lock().unwrap();
-        let elevators = active_elevators_locked.clone();
-        drop(active_elevators_locked);
+        if order.order_type != CAB { 
+            
 
-        //Give order to best alternative
-        for best_alternative in best_to_worst_elevator(&order, &elevators) {
-            println!("Assigning order {} to elevator {}", order.floor, best_alternative);
+            //Lock active elevators and copy, then release
+            let elevators= state.active_elevators.lock().unwrap().clone();
 
-            if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
-                println!("Order {} successfully reassigned to elevator {}", order.floor, best_alternative);
-                assigned = true;
-                break; 
-            } else {
-                println!("Failed to assign order {} to elevator {}. Trying next option", order.floor, best_alternative);
+            //Give order to best alternative
+            for best_alternative in best_to_worst_elevator(&order, &elevators) {
+                println!("Assigning order {} to elevator {}", order.floor, best_alternative);
+
+                if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
+                    println!("Order {} successfully reassigned to elevator {}", order.floor, best_alternative);
+                    assigned = true;
+                    break; 
+                } else {
+                    println!("Failed to assign order {} to elevator {}. Trying next option", order.floor, best_alternative);
+                }
             }
         }
-        
         
         let mut failed_orders_locked = state.all_orders.lock().unwrap();
 
         // If no elevator accepted the order, store it for retry
-        if !assigned {
-            println!("No available elevator for order {}. Storing for retry.", order.floor);
+        if !assigned{
+            println!("No available elevator for order {}. Storing to retry later.", order.floor);
             failed_orders_locked.push(order.clone());
             drop(failed_orders_locked);
         }

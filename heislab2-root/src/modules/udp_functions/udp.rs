@@ -925,7 +925,7 @@ pub fn msg_serialize(msg: &UdpMsg) -> Vec<u8> {
 pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
     match bincode::deserialize::<UdpMsg>(buffer) {
         Ok(msg) => {
-            println!("Deserialized msg type: {:?},Deserialized msg data: {:?}", msg.header.message_type, msg.data);
+            // println!("Deserialized msg type: {:?},Deserialized msg data: {:?}", msg.header.message_type, msg.data);
             if data_valid_for_type(&msg) {
                 return Some(msg);
             } else {

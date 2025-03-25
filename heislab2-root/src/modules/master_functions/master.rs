@@ -39,7 +39,7 @@ use crossbeam_channel as cbc;
 
 
 use serde::{Serialize, Deserialize};
-use std::sync::{Arc};
+use std::sync::Arc;
 
 /* 
 //-----------------------GLOBAL VARIABLES---------------------------------------------------

@@ -382,7 +382,7 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
                     println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
                     // Give the order to the best alternative and remove the order from the dead elevator
-                    if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
+                    if give_order(best_alternative, vec![&order],state,udp_handler) {
                         let mut dead_elevators_locked=state.dead_elevators.lock().unwrap();
                         if let Some(real_elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == error_cab_id) {
                             real_elevator.queue.retain(|o| *o != order);

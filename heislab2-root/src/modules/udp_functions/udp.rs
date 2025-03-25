@@ -297,7 +297,7 @@ impl UdpHandler {
                     MessageType::Worldview => {thread::spawn(move || {handle_worldview(passable_state, &msg_clone)});},
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
-                    MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone)});},
+                    MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
                     MessageType::NewOnline => {thread::spawn(move || {handle_new_online(&msg_clone, passable_state)});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
@@ -375,16 +375,13 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     //Check if this elevator is master 
     let master_id_clone = state.master_id.lock().unwrap().clone();
     let is_master = state.me_id == master_id_clone;
-    println!("Deadlock pass 1");
     //Lock active_elevators
-    
-    
+
     //IF New Request is CAB order
     if new_order.order_type == CAB{
         
         // Lock the active elevators and find the elevator that matches the sender id.
         let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-        println!("Deadlock pass 2");
         if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
             sender_elevator.queue.push(new_order.clone());
             if sender_elevator.id == state.me_id{
@@ -422,9 +419,8 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                     return; // Or handle the situation appropriately.
                 }
             };
-
             give_order(*best_elevator, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
-            order_update_tx.send(vec![new_order.clone()]).unwrap();
+            
         }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();
@@ -631,7 +627,7 @@ pub fn handle_nak(msg: &UdpMsg, state: Arc<SystemState>, target_address: &Socket
 /// Returns -None- .
 ///
 
-pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, light_update_tx: cbc::Sender<Vec<Order>>) -> bool {
+pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<SystemState>,udp_handler: Arc<UdpHandler>, light_update_tx: cbc::Sender<Vec<Order>>, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     println!("New order received ID: {}", msg.header.sender_id);
 
     let elevator = if let UdpData::Cab(cab) = &msg.data {
@@ -653,6 +649,8 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
                 update_elevator.queue.push(order.clone());
                 println!("Order {:?} successfully added to elevator {}.", order, elevator.id);
                 light_update_tx.send(update_elevator.queue.clone()).unwrap();
+                order_update_tx.send(vec![order.clone()]).unwrap();
+
             }else {
                 println!("Order {:?} already in queue for elevator {}.", order, elevator.id);
             }
@@ -663,7 +661,6 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
     let msg1 = UdpData::Checksum(1234);
     let encoded = bincode::serialize(&msg1).unwrap();
     println!("Sender enum tag: {}", encoded[0]); // Should be 0
-
     return udp_ack(*sender_address, &msg, elevator.id, &udp_handler);
 }
 

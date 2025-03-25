@@ -412,11 +412,20 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
             let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked);
             drop(active_elevators_locked);
 
-            println!("Assigning new hallcall to {}", best_elevators.first().unwrap());
-            give_order(*best_elevators.first().unwrap(),vec![&new_order], &state, &udp_handler, order_update_tx.clone());
+            let best_elevator = match best_elevators.first() {
+                Some(elevator) => {
+                    println!("Assigning new hallcall to {:?}", elevator);
+                    elevator
+                }
+                None => {
+                    println!("No available elevator to assign the order.");
+                    return; // Or handle the situation appropriately.
+                }
+            };
+
+            give_order(*best_elevator, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
             order_update_tx.send(vec![new_order.clone()]).unwrap();
-        }
-        
+        }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();
 }

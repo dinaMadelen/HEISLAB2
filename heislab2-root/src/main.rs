@@ -24,9 +24,7 @@ use udp_functions::udp::UdpData;
 
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
-
     // Check boot function in system Init
-
     let elev_num_floors = 4;
     let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
@@ -191,10 +189,13 @@ fn main() -> std::io::Result<()> {
             }
     });
     //INIT OVER
+    /* 
     let system_state_clone = Arc::clone(&system_state);
+    
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
+    */
 
     let dirn = DIRN_DOWN;
 
@@ -255,8 +256,14 @@ fn main() -> std::io::Result<()> {
 
                 }else{
                     println!("current queue: {:?}",active_elevators_locked.get_mut(0).unwrap().queue);
-                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+                    if active_elevators_locked.get_mut(0).unwrap().status == Status::Idle {
+                        let imalive = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                        udp_broadcast(&imalive);
+                    }
+
+                    active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    
                     drop(active_elevators_locked);
                 }
                 //SEND ACK
@@ -270,16 +277,13 @@ fn main() -> std::io::Result<()> {
                     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                     active_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
+                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
                     elevator.door_light(false);
 
-                    //Should add cab to systemstatevec and then broadcast new state
-                    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-                    drop(active_elevators_locked);
-                   
                     let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    udp_broadcast(&msg);
+                    udp_broadcast(&msg);                   
+                    
                 }
             },
 
@@ -319,6 +323,7 @@ fn main() -> std::io::Result<()> {
                 let floor = a.unwrap();
                 println!("Floor: {:#?}", floor);
                 //update current floor status
+
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 active_elevators_locked.get_mut(0).unwrap().current_floor = floor;
                 drop(active_elevators_locked);
@@ -335,7 +340,6 @@ fn main() -> std::io::Result<()> {
 
                 let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                 udp_broadcast(&msg);
-                
             },
 
             /*Burde nok modifiseres*/
@@ -353,9 +357,6 @@ fn main() -> std::io::Result<()> {
                     let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
-
-                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    udp_broadcast(&msg);
 
                     //WHO CONTROLS THE LIGHTS
                     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();

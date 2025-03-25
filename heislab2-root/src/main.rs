@@ -158,7 +158,6 @@ fn main() -> std::io::Result<()> {
                                 dead_elevators_locked.push(dead_elevator.clone());
                                 drop(dead_elevators_locked);
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-
                                 let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator));
                                 udp_broadcast(&msg);
                             }
@@ -171,7 +170,6 @@ fn main() -> std::io::Result<()> {
                     if system_state_clone.me_id == *locked_master_id{
                         let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
                         udp_broadcast(&msg);
-                        
                     }
                 }
             }
@@ -241,7 +239,6 @@ fn main() -> std::io::Result<()> {
                     }
 
                     active_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx.clone(),obstruction_rx.clone(),elevator.clone());
-                    
                     drop(active_elevators_locked);
                 }
             },
@@ -345,12 +342,16 @@ fn main() -> std::io::Result<()> {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
-                let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-
+                let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 if active_elevators_locked.is_empty(){
 
                 }else {
                     //Should add cab to systemstatevec and then broadcast new state of stopped
+                    if obstr{
+                        active_elevators_locked.get_mut(0).unwrap().set_status(Status::Obstruction,elevator.clone());
+                    }else{
+                        active_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
+                    }
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
 

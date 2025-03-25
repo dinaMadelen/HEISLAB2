@@ -63,7 +63,7 @@ use super::cab::Cab;
          
      
     pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) {
-        if (self.status == Status::Moving)||(self.status == Status::Idle)&&!(self.queue.is_empty()){
+        if ((self.status == Status::Moving)||(self.status == Status::Idle))&&(!self.queue.is_empty()){
             if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
                 if next_floor > self.current_floor {
                     self.set_status(Status::Moving, elevator.clone()); 

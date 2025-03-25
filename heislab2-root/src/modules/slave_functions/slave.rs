@@ -163,7 +163,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Worldview
 
             //No new orders
             if active_queue == wv_elevator.queue{
-                println!("Worldview matches for ID:{}", elevator.id);
+                println!("Worldview matches for Live elevator ID:{}", elevator.id);
                 continue;
             }
 
@@ -194,7 +194,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Worldview
     
             //No new orders
             if dead_queue == wv_elevator.queue{
-                println!("Worldview matches for ID:{}", elevator.id);
+                println!("Worldview matches for dead ID:{}", elevator.id);
                 continue;
             }
     

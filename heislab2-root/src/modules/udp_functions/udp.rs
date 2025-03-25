@@ -496,6 +496,9 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 /// Returns - None - .
 ///
 pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
+
+    handle_multiple_masters(&state, &msg.header.sender_id);
+
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview
@@ -524,9 +527,6 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
      
     //not used
     //generate_worldview(&active_elevators);
-
-
-    handle_multiple_masters(&state, &msg.header.sender_id);
 }
 
 /// handle_ack

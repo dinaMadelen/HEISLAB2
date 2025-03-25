@@ -27,7 +27,7 @@
 //-----------------------IMPORTS------------------------------------------------------------
 
 use crate::modules::cab_object::cab::Cab; //Import for cab struct
-use crate::modules::udp_functions::udp::{UdpMsg, UdpData, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
+use crate::modules::udp_functions::udp::{Worldview, UdpMsg, UdpData, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master_functions::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
@@ -144,15 +144,18 @@ pub fn cancel_order(slave: &mut Cab, order: Order) -> bool {
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>) -> bool {
+pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Worldview) -> bool {
 
     let mut worldview_changed = false;
 
-    //Lock active elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    
 
     // Compare recived worldview to active elevators
-    for wv_elevator in new_worldview{
+    for wv_elevator in &new_worldview.live{
+
+        //Lock active elevators
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+
         if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
 
 
@@ -178,7 +181,40 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>)
             active_elevators_locked.push(wv_elevator.clone());
             worldview_changed = true;
         }
-    }   
+    
+        drop(active_elevators_locked);
+
+        //Lock dead elevators
+        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+
+        // Compare recived worldview to active elevators
+            if let Some(elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
+    
+            let dead_queue=elevator.queue.clone();
+    
+            //No new orders
+            if dead_queue == wv_elevator.queue{
+                println!("Worldview matches for ID:{}", elevator.id);
+                continue;
+            }
+    
+            //Found missing order, add them to queue
+            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !dead_queue.contains(order)) .cloned().collect();
+            if !missing_orders.is_empty() {
+                println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
+                elevator.queue.extend(missing_orders);
+                worldview_changed = true;
+            }
+    
+        } else{
+            // Add missing worldview elevator to active elevators
+            println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.id);
+            dead_elevators_locked.push(wv_elevator.clone());
+            worldview_changed = true;
+        }
+     
+
+    }
     return worldview_changed;
 }
 
@@ -196,8 +232,19 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>)
 ///
 /// Returns - None - .
 ///
-pub fn notify_worldview_error(sender_id: u8 ,master_adress: String , missing_orders: &Vec<Cab>,udp_handler: &UdpHandler) {
-    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, UdpData::Cabs(missing_orders.clone()));
+pub fn notify_worldview_error(sender_id: u8 ,master_adress: String, state: &Arc<SystemState> ,udp_handler: &UdpHandler) {
+
+
+    let live_cabs = state.active_elevators.lock().unwrap().clone();
+    let dead_cabs = state.dead_elevators.lock().unwrap().clone();
+
+    let slave_view = Worldview{ 
+
+        live: live_cabs,
+        dead: dead_cabs
+    };
+
+    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, UdpData::Worldview(slave_view));
     let socket: SocketAddr = master_adress.parse().expect("invalid adress");
     udp_handler.send(&socket, &message);
 }

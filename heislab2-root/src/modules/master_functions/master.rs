@@ -504,30 +504,35 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 ///
 pub fn handle_multiple_masters(state: &Arc<SystemState>, sender: &u8) -> bool {
 
-    // Lock active elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
+    if state.me_id == state.master_id.lock().unwrap().clone(){
+        
+        // Lock active elevators
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
 
-    // Confirm elevator is active
-    let me = match active_elevators_locked.iter_mut().find(|e| e.id == state.me_id){
+        // Confirm elevator is active
+        let me = match active_elevators_locked.iter_mut().find(|e| e.id == state.me_id){
 
-        Some(me_elevator) =>me_elevator,
+            Some(me_elevator) =>me_elevator,
 
-        None => {
+            None => {
 
-            println!("ERROR:ID{} is not active",state.me_id);
-            return false;
-        }
-    };
+                println!("ERROR:ID{} is not active",state.me_id);
+                return false;
+            }
+        };
 
-    let mut result = true;
-    
-        //Master ID is my ID
-    if me.role == Role::Master {
-        result = false; 
+        let mut result = true;
+        
+            //Master ID is my ID
+        if me.role == Role::Master {
+            result = false; 
 
-        // Give away master role, simple solution, Kill program and reboot
-    }else if sender < &me.id{
-        reboot_program();
-    } 
-    return result; 
+            // Give away master role, simple solution, Kill program and reboot
+        }else if sender < &me.id{
+            reboot_program();
+        } 
+        return result;
+    }
+
+    return false; 
 }

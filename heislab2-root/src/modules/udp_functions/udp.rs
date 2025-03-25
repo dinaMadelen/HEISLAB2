@@ -203,10 +203,22 @@ impl UdpHandler {
                             self.send(&target_address, message);
                         }
                     }
+
+                    for elevator_id in &missing {
+                        if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
+                            let target_address = &elevator.inn_address;
+                            let off_message = make_udp_msg(state.me_id,MessageType::ErrorOffline,UdpData::Cab(elevator.clone()));
+                            self.send(&target_address, &off_message);
+                            println!("Elevator {} didnt respond to new order update, assuming offline",elevator.id);
+                        }
+                    }
+
+                }else{
+                    drop(sent_messages_locked);
+                    drop(active_elevators_locked);
                 }
     
-                drop(sent_messages_locked);
-                drop(active_elevators_locked);
+                
 
     
                 if confirm_recived(&message, state){
@@ -807,35 +819,44 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
 pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) {
     println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
 
-    let mut removed_elevator: Option<Cab> = None;
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    if let UdpData::Cab(cab) = &msg.data {
 
-    // Check if active elevators contains, retain keeps only elements that return true
-    active_elevators_locked.retain(|e| {
-        if e.id == msg.header.sender_id {
-            removed_elevator = Some(e.clone());
-            //Remove this elevator
-            return false;  
-        } else {
-            //Keep this elevator
-            return true; 
+        
+        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+
+        if state.me_id == state.master_id.lock().unwrap().clone(){
+            
         }
-    });
 
-    //Release active elevators
-    drop(active_elevators_locked);
+        //Add dead
+        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+        dead_elevators_locked.push(cab.clone());
 
-    // Check if the elevator was removed
-    if let Some(offline_elevator) = removed_elevator {
-        println!("Removed elevator ID: {} from active list.", msg.header.sender_id);
+        if let Some(elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+            elevator.queue.retain(|o| o.order_type == CAB);
+        }
+        drop(dead_elevators_locked);
 
-        // Extract orders from the offline elevator
-        let orders = offline_elevator.queue.clone();
-        println!("Reassigning orders, if any: {:?}", orders);
-        let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
-        reassign_orders(&order_ids, &state ,udp_handler, order_update_tx);
-    } else {
-        println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
+        // Check if active elevators contains, retain keeps only elements that return true
+        active_elevators_locked.retain(|e| e.id != cab.id);
+
+        //Release active elevators
+        drop(active_elevators_locked);
+
+        /*
+        // Check if the elevator was removed
+        if let Some(offline_elevator) = removed_elevator{
+            println!("Removed elevator ID: {} from active list.", msg.header.sender_id);
+
+            // Extract orders from the offline elevator
+            let orders = offline_elevator.queue.clone();
+            println!("Reassigning orders, if any: {:?}", orders);
+            let order_ids: Vec<Order> = orders.iter().map(|order| (*order).clone()).collect();
+            reassign_orders(&order_ids, &state ,udp_handler, order_update_tx);
+        } else {
+            println!("ERROR: Elevator ID {} was not found in active list.", msg.header.sender_id);
+        }
+        */
     }
 }
 

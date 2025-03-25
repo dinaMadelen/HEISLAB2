@@ -201,6 +201,7 @@ impl UdpHandler {
                         if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
                             let target_address = &elevator.inn_address;
                             self.send(&target_address, message);
+                            
                         }
                     }
                 }
@@ -498,7 +499,6 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
 
     handle_multiple_masters(&state, &msg.header.sender_id);
-
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview
@@ -509,8 +509,6 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     let mut new_worldview = state.last_worldview.lock().unwrap();
     *new_worldview = msg.clone();
     drop(new_worldview);
-    
-    
     
     let worldview = if let UdpData::Worldview(worldview) = &msg.data{
         worldview

@@ -99,57 +99,7 @@ fn main() -> std::io::Result<()> {
     });
     // -------------INIT RECIEVER FINISHED-----------------
 
-    //ELEVATORMONITOR!!!
-    let system_state_clone = Arc::clone(&system_state);
-    let elevator_clone = elevator.clone();
-    spawn(move||{
-            loop{
-                // Sleep for 5 seconds between checks.
-                sleep(Duration::from_secs(1));
-                let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
-                
-                for cab in dead_elevators_locked.iter_mut(){
-                    cab.turn_off_lights_not_in_queue(elevator_clone.clone());
-                };
-
-                drop(dead_elevators_locked);
-                sleep(Duration::from_secs(4));
-                let now = SystemTime::now();
-
-                // Lock active_elevators.
-                let mut active_elevators_locked = system_state_clone.active_elevators.lock().unwrap();
-                // Iterate in reverse order so that removing elements doesn't affect our indices.
-                for i in (0..active_elevators_locked.len()).rev() {
-                    let elevator = &active_elevators_locked[i];
-                    // Only check elevators that are Moving or DoorOpen.
-                    if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
-                        if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
-                            if elapsed >= Duration::from_secs(5) {
-                                // Remove the elevator from active list. and add to dead list
-                                //Before adding to dead list remove all but cab calls from the dead elevators queue 
-                                let dead_elevator = active_elevators_locked.remove(i);
-                    
-                                println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator));
-                                udp_broadcast(&msg);
-                            }
-                        }
-                    }
-                }
-
-                {   
-                    drop(active_elevators_locked);
-                    let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
-                    if system_state_clone.me_id == locked_master_id{
-                        
-                        //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
-                        //udp_broadcast(&msg);
-                        let master_system_state_clone = Arc::clone(&system_state_clone);
-                        master_worldview(&master_system_state_clone);
-                    }
-                }
-            }
-    });
+    
 
     //INIT OVER
     //TEST IF MASTER FAILURE WORKS!!!!!
@@ -175,6 +125,53 @@ fn main() -> std::io::Result<()> {
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     udp_broadcast(&msg);
+
+    //ELEVATORMONITOR!!!
+    let system_state_clone = Arc::clone(&system_state);
+    let elevator_clone = elevator.clone();
+    spawn(move||{
+            loop{
+                // Sleep for 5 seconds between checks.
+                sleep(Duration::from_secs(1));
+                let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
+                for cab in dead_elevators_locked.iter_mut(){
+                    cab.turn_off_lights_not_in_queue(elevator_clone.clone());
+                };
+                drop(dead_elevators_locked);
+                sleep(Duration::from_secs(4));
+                let now = SystemTime::now();
+
+                // Lock active_elevators.
+                let mut active_elevators_locked = system_state_clone.active_elevators.lock().unwrap();
+                // Iterate in reverse order so that removing elements doesn't affect our indices.
+                for i in (0..active_elevators_locked.len()).rev() {
+                    let elevator = &active_elevators_locked[i];
+                    // Only check elevators that are Moving or DoorOpen.
+                    if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
+                        if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
+                            if elapsed >= Duration::from_secs(5) {
+                                let dead_elevator = active_elevators_locked.get(i).unwrap();
+                                println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
+                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
+                                udp_broadcast(&msg);
+                            }
+                        }
+                    }
+                }
+
+                {   
+                    drop(active_elevators_locked);
+                    let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
+                    if system_state_clone.me_id == locked_master_id{
+                        
+                        //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
+                        //udp_broadcast(&msg);
+                        let master_system_state_clone = Arc::clone(&system_state_clone);
+                        master_worldview(&master_system_state_clone);
+                    }
+                }
+            }
+    });
 
     // ------------------ MAIN LOOP ---------------------
     loop {

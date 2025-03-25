@@ -78,6 +78,7 @@ use  crate::modules::udp_functions::udp::UdpData;
                      
                 } else if next_floor == self.current_floor{
                     elevator.motor_direction(DIRN_STOP);  
+                    self.queue.remove(0);
                     let msg = make_udp_msg(self.id, MessageType::OrderComplete, UdpData::Cab(self.clone()));
                     udp_broadcast(&msg);
                     self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());

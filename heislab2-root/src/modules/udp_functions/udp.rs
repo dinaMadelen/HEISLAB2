@@ -313,14 +313,14 @@ impl UdpHandler {
 
 
                 match msg.header.message_type{
-                    MessageType::Worldview => {thread::spawn(move || {handle_worldview(passable_state, &msg_clone)});},
+                    MessageType::Worldview => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_worldview(passable_state, &msg_clone)}});},
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
-                    MessageType::NewOnline => {thread::spawn(move || {handle_new_online(&msg_clone, passable_state)});},
+                    MessageType::NewOnline => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_new_online(&msg_clone, passable_state);}});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
-                    MessageType::OrderComplete => {thread::spawn(move || {handle_remove_order(&msg_clone, passable_state, light_update_tx_clone)});},
+                    MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_remove_order(&msg_clone, passable_state, light_update_tx_clone);}});},
                     MessageType::NewRequest => {thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone, light_update_tx_clone)});},
                     MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},
                     MessageType::ImAlive => {thread::spawn(move ||{ handle_im_alive(&msg_clone, passable_state)});},

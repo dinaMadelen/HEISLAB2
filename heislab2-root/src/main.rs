@@ -101,31 +101,6 @@ fn main() -> std::io::Result<()> {
 
     
 
-    //INIT OVER
-    //TEST IF MASTER FAILURE WORKS!!!!!
-    
-    let system_state_clone = Arc::clone(&system_state);
-    
-    spawn(move||{
-        check_master_failure(&system_state_clone);
-    });
-    
-
-    let dirn = DIRN_DOWN;
-    if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
-
-    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
-    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
-    drop(active_elevators_locked);
-    
-    let master_id_clone = system_state.master_id.lock().unwrap().clone();
-    println!("The master is assigned as: {}",master_id_clone);
-
-    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    udp_broadcast(&msg);
-
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -166,11 +141,30 @@ fn main() -> std::io::Result<()> {
                         
                         //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
                         //udp_broadcast(&msg);
-                        let master_system_state_clone = Arc::clone(&system_state_clone);
-                        master_worldview(&master_system_state_clone);
+                        master_worldview(&system_state_clone);
                     }
                 }
             }
+    });
+    
+    let dirn = DIRN_DOWN;
+    if elevator.floor_sensor().is_none() {
+        elevator.motor_direction(dirn);
+    }
+
+    let master_id_clone = system_state.master_id.lock().unwrap().clone();
+    println!("The master is assigned as: {}",master_id_clone);
+
+    let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
+    drop(active_elevators_locked);
+
+    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+    udp_broadcast(&msg);
+    
+    let system_state_clone = Arc::clone(&system_state);
+    spawn(move||{
+        check_master_failure(&system_state_clone);
     });
 
     // ------------------ MAIN LOOP ---------------------

@@ -26,7 +26,7 @@ use heislab2_root::modules::udp_functions::udp::*;
 use udp_functions::udp::UdpData;
 use udp_functions::udp_wrapper;
 use heislab2_root::modules::io::io_init::*;
-
+use heislab2_root::modules::cab_object::cab_wrapper;
 
 //------
 // Main
@@ -49,18 +49,7 @@ fn main() -> std::io::Result<()> {
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
-
-    // create socket addresses
-    let inn_addr = udp_wrapper::create_socket_address(3500);
-    let out_addr = udp_wrapper::create_socket_address(3600);
-    
-    // Assign ID matching state.me_id for local IP assignment
-    let set_id = system_state.me_id; 
-    println!("me id is {}",system_state.me_id);
-    
-    //Make free cab
-    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
-    cab.turn_off_lights(elevator.clone());
+    let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone())?;
 
     //---------------INIT UDP HANDLER-------------------
     let udphandler = Arc::new(init_udp_handler(cab.clone()));

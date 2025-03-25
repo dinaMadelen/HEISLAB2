@@ -206,7 +206,6 @@ impl UdpHandler {
                     }
                 }
     
-                
                 drop(sent_messages_locked);
                 drop(active_elevators_locked);
 
@@ -401,7 +400,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                 let elevator_id = sender_elevator.id;
                 // Lock is dropped here when the block ends.
                 drop(active_elevators_locked);
-                give_order(elevator_id, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
+                give_order(elevator_id, vec![&new_order], &state, &udp_handler);
                 println!("Added CAB order to elevator ID: {}", elevator_id);
             }
         }
@@ -427,9 +426,14 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                     return; // Or handle the situation appropriately.
                 }
             };
-            give_order(*best_elevator, vec![&new_order], &state, &udp_handler, order_update_tx.clone());
-            
-        }       
+
+            let give_order_success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+            {
+                let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+                //If not all acs are recieved, give order to self
+                if !give_order_success{active_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());};
+            }
+         }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();
 }

@@ -83,7 +83,7 @@ pub enum Role{
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
 /// 
-pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler,order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
+pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
 
     println!("Give order entered");
 
@@ -317,7 +317,7 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handle
             for best_alternative in best_to_worst_elevator(&order, &elevators) {
                 println!("Assigning order {} to elevator {}", order.floor, best_alternative);
 
-                if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
+                if give_order(best_alternative, vec![&order],state,udp_handler) {
                     println!("Order {} successfully reassigned to elevator {}", order.floor, best_alternative);
                     assigned = true;
                     break; 

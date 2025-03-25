@@ -99,6 +99,12 @@ fn main() -> std::io::Result<()> {
     });
     // -------------INIT RECIEVER FINISHED-----------------
 
+    
+    let dirn = DIRN_DOWN;
+    if elevator.floor_sensor().is_none() {
+        elevator.motor_direction(dirn);
+    }
+    
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -107,13 +113,11 @@ fn main() -> std::io::Result<()> {
                 // Sleep for 5 seconds between checks.
                 sleep(Duration::from_secs(1));
                 let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
-                
                 for cab in dead_elevators_locked.iter_mut(){
-                    cab.turn_off_lights_not_in_queue(elevator_clone.clone());
+                    cab.turn_on_just_lights_in_queue(elevator_clone.clone());
                 };
-
                 drop(dead_elevators_locked);
-                sleep(Duration::from_secs(4));
+                sleep(Duration::from_secs(9));
                 let now = SystemTime::now();
 
                 // Lock active_elevators.
@@ -124,13 +128,10 @@ fn main() -> std::io::Result<()> {
                     // Only check elevators that are Moving or DoorOpen.
                     if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
                         if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
-                            if elapsed >= Duration::from_secs(5) {
-                                // Remove the elevator from active list. and add to dead list
-                                //Before adding to dead list remove all but cab calls from the dead elevators queue 
-                                let dead_elevator = active_elevators_locked.remove(i);
-                    
+                            if elapsed >= Duration::from_secs(10) {
+                                let dead_elevator = active_elevators_locked.get(i).unwrap();
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator));
+                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
                                 udp_broadcast(&msg);
                             }
                         }
@@ -144,37 +145,28 @@ fn main() -> std::io::Result<()> {
                         
                         //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(active_elevators_locked.clone()));
                         //udp_broadcast(&msg);
-                        let master_system_state_clone = Arc::clone(&system_state_clone);
-                        master_worldview(&master_system_state_clone);
+                        master_worldview(&system_state_clone);
                     }
                 }
             }
     });
-
-    //INIT OVER
-    //TEST IF MASTER FAILURE WORKS!!!!!
     
-    let system_state_clone = Arc::clone(&system_state);
-    
-    spawn(move||{
-        check_master_failure(&system_state_clone);
-    });
     
 
-    let dirn = DIRN_DOWN;
-    if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
+    let master_id_clone = system_state.master_id.lock().unwrap().clone();
+    println!("The master is assigned as: {}",master_id_clone);
 
     let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
     drop(active_elevators_locked);
-    
-    let master_id_clone = system_state.master_id.lock().unwrap().clone();
-    println!("The master is assigned as: {}",master_id_clone);
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     udp_broadcast(&msg);
+    
+    let system_state_clone = Arc::clone(&system_state);
+    spawn(move||{
+        check_master_failure(&system_state_clone);
+    });
 
     // ------------------ MAIN LOOP ---------------------
     loop {
@@ -192,7 +184,7 @@ fn main() -> std::io::Result<()> {
                 let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().turn_off_lights_not_in_queue(elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                 drop(active_elevators_locked);
             },
             recv(io_channels.order_update_rx) -> a => {
@@ -275,7 +267,9 @@ fn main() -> std::io::Result<()> {
                 //Do stuff
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                 drop(active_elevators_locked);
+                
 
                 //Broadcast new state
                 let  active_elevators_locked = system_state.active_elevators.lock().unwrap();

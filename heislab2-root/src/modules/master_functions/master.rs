@@ -255,22 +255,12 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 
     println!("Elevator {} is offline, redistributing elevator {}'s orders.", slave_id,slave_id);
 
-    // Find and redistribute orders for elevator with that spesific ID
-    if let Some(index) = elevators.iter().position(|elevator| elevator.id == slave_id) {
-        // Have to use clone to not take ownership of the queue variable(problem compiling)
-        let orders: Vec<Order> = elevators[index].queue.clone();
-        elevators.remove(index);
-        reassign_orders(&orders, state, &udp_handler, order_update_tx.clone());
-        return true;
-    } else {
-        println!("Error: cant find Elevator with ID {}", slave_id);
-        return false;
-    }
+    return reassign_elevator_orders(slave_id, state, &udp_handler, order_update_tx.clone());
 }
 
 
 
-/// Reassign order
+/// Reassign failed orders
 /// Reassigns a or more orders from one elevator to active elevators
 ///  
 /// # Arguments:
@@ -289,7 +279,6 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handle
         let mut assigned = false;
 
         if order.order_type != CAB { 
-            
 
             //Lock active elevators and copy, then release
             let elevators= state.active_elevators.lock().unwrap().clone();
@@ -329,6 +318,81 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handle
     }
 }
 
+
+pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
+    
+    //Changing elevator from active elevators to inactive
+    // Remove from active queue
+    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    if let Some(index) = active_elevators_locked.iter().position(|elevator| elevator.id == error_cab_id) {
+        active_elevators_locked.remove(index);
+    } else {
+        println!("Error: cant find Elevator in active list with ID {}", error_cab_id);
+    }
+    drop(active_elevators_locked);
+
+    //Find dead elevator in inactive elevators
+    let mut dead_elevators = state.dead_elevators.lock().unwrap().clone();
+
+    //Find this elevator
+    if let Some(elevator) = dead_elevators.iter_mut().find(|e| e.id == error_cab_id) {
+        let mut assigned = true;
+
+        //For each order check if CAB order
+        for order in elevator.queue.clone(){
+
+            if order.order_type != CAB { 
+
+                //Lock active elevators and copy, then release
+                let live_elevators= state.dead_elevators.lock().unwrap().clone();
+
+                //Give order to best alternative
+                for best_alternative in best_to_worst_elevator(&order, &live_elevators) {
+                    println!("Assigning order {} to elevator {}", order.floor, best_alternative);
+
+                    if give_order(best_alternative, vec![&order],state,udp_handler, order_update_tx.clone()) {
+                        let mut dead_elevators_locked=state.dead_elevators.lock().unwrap();
+                        if let Some(real_elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == error_cab_id) {
+                            real_elevator.queue.retain(|o| *o != order);
+                            println!("Order removed from ID:{} and succsesfully redistributed", error_cab_id);
+                        } else {
+                            println!("Could not find elevator with ID {} in dead_elevators", error_cab_id);
+                        }
+                        drop(dead_elevators_locked);
+                        break; 
+                    
+                    } else {
+                        println!("Failed to assign order {} to elevator {}. Trying next option", order.floor, best_alternative);
+                        assigned = false;
+                    }
+                }
+
+                let mut failed_orders_locked = state.all_orders.lock().unwrap();
+                // If no elevator accepted the order, store it for retry
+                if !assigned{
+                    println!("No available elevator for order {}. Storing to retry later.", order.floor);
+                    failed_orders_locked.push(order.clone());
+                    drop(failed_orders_locked);
+                } 
+            }
+        }
+    }else{
+        println!("Couldnt find ID:{}, in active elevators", error_cab_id);
+        }
+
+
+    
+
+    let failed_orders_locked = state.all_orders.lock().unwrap();
+    if failed_orders_locked.is_empty() {
+        println!("All failed orders are redistributed");
+        return true;
+    } else {
+        println!("There are failed to be distributed");
+        return false;
+    }
+    
+}
 
 /// Cost function that returns order to the best fitting elevators from best to worst alternative.
 ///  

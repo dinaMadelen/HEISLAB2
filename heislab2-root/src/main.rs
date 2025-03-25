@@ -354,9 +354,6 @@ fn main() -> std::io::Result<()> {
                     }
                     let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
-
-                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    udp_broadcast(&msg);
                 }
             },
             

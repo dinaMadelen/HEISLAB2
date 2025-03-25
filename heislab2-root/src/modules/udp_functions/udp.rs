@@ -954,8 +954,8 @@ pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 /// 
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
-        (MessageType::NewOrder, UdpData::Worldview(_)) => true,
-        (MessageType::Worldview, UdpData::Cabs(_)) => true,
+        (MessageType::NewOrder, UdpData::Cab(_)) => true,
+        (MessageType::Worldview, UdpData::Worldview(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,
         (MessageType::ImAlive, UdpData::Cab(_)) => true,

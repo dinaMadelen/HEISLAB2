@@ -100,7 +100,11 @@ fn main() -> std::io::Result<()> {
     // -------------INIT RECIEVER FINISHED-----------------
 
     
-
+    let dirn = DIRN_DOWN;
+    if elevator.floor_sensor().is_none() {
+        elevator.motor_direction(dirn);
+    }
+    
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -110,7 +114,7 @@ fn main() -> std::io::Result<()> {
                 sleep(Duration::from_secs(1));
                 let mut dead_elevators_locked = system_state_clone.dead_elevators.lock().unwrap();
                 for cab in dead_elevators_locked.iter_mut(){
-                    cab.turn_off_lights_not_in_queue(elevator_clone.clone());
+                    cab.turn_on_just_lights_in_queue(elevator_clone.clone());
                 };
                 drop(dead_elevators_locked);
                 sleep(Duration::from_secs(9));
@@ -147,10 +151,7 @@ fn main() -> std::io::Result<()> {
             }
     });
     
-    let dirn = DIRN_DOWN;
-    if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
+    
 
     let master_id_clone = system_state.master_id.lock().unwrap().clone();
     println!("The master is assigned as: {}",master_id_clone);
@@ -183,7 +184,7 @@ fn main() -> std::io::Result<()> {
                 let lights_to_turn_on = a.unwrap();
                 //Turn onn all lights in own queue
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
-                active_elevators_locked.get_mut(0).unwrap().turn_off_lights_not_in_queue(elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                 drop(active_elevators_locked);
             },
             recv(io_channels.order_update_rx) -> a => {
@@ -266,7 +267,9 @@ fn main() -> std::io::Result<()> {
                 //Do stuff
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 active_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                active_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                 drop(active_elevators_locked);
+                
 
                 //Broadcast new state
                 let  active_elevators_locked = system_state.active_elevators.lock().unwrap();

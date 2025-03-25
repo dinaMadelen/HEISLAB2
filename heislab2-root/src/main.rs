@@ -65,18 +65,10 @@ fn main() -> std::io::Result<()> {
     active_elevators_locked.push(cab);
     drop(active_elevators_locked);
 
-
-
     println!("Cab initialized:\n{:#?}", elevator);
 
     // --------------INIT CAB FINISH---------------
     
-
-    //---------------------------------------
-    //Create Mutex for elevators
-    //let elevators = Arc::new(Mutex::new(Vec::<Elevator>::new()));
-    //---------------------------------------
-
     // --------------INIT CHANNELS---------------
     let poll_period = Duration::from_millis(25);
 
@@ -108,11 +100,7 @@ fn main() -> std::io::Result<()> {
     
     let (order_update_tx, order_update_rx) = cbc::unbounded::<Vec<Order>>();
     let (light_update_tx, light_update_rx) = cbc::unbounded::<Vec<Order>>();
-    /*let (world_view_update_tx, world_view_update_rx) = cbc::unbounded::<Vec<Cab>>();
-    let (master_update_tx, master_update_rx) = cbc::unbounded::<Vec<Cab>>();
-    
-    let (recieve_request_tx, recieve_request_rx) = cbc::unbounded::<Order>();
-    */
+
     // --------------INIT CHANNELS FINISHED---------------
 
     // --------------INIT RECIEVER THREAD------------------
@@ -188,7 +176,9 @@ fn main() -> std::io::Result<()> {
                 }
             }
     });
+
     //INIT OVER
+    //TEST IF MASTER FAILURE WORKS!!!!!
     /* 
     let system_state_clone = Arc::clone(&system_state);
     
@@ -198,7 +188,6 @@ fn main() -> std::io::Result<()> {
     */
 
     let dirn = DIRN_DOWN;
-
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
@@ -212,10 +201,6 @@ fn main() -> std::io::Result<()> {
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     udp_broadcast(&msg);
-
-
-    
-
 
     // ------------------ MAIN LOOP ---------------------
     loop {
@@ -240,13 +225,6 @@ fn main() -> std::io::Result<()> {
                 }
                 drop(active_elevators_locked);
             },
-            /*(recieve_request_rx) -> a => {
-                //UPDATE OWN SET OF ALL ORDERS
-                //CHECK IF HANDLED IN HANDLER
-                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
-                udp_broadcast(&msg);
-            },
-            */
             recv(order_update_rx) -> a => {
 
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
@@ -266,9 +244,6 @@ fn main() -> std::io::Result<()> {
                     
                     drop(active_elevators_locked);
                 }
-                //SEND ACK
-                //let msg = make_udp_msg(system_state.me_id, MessageType::Ack, UdpData::None); ----------------------------------Commented untill we have cleared up what we are acking
-                //udp_broadcast(&msg);
             },
             
             recv(door_rx) -> a => {
@@ -371,6 +346,7 @@ fn main() -> std::io::Result<()> {
                 println!("Obstruction: {:#?}", obstr);
                 elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
                 let  active_elevators_locked = system_state.active_elevators.lock().unwrap();
+
                 if active_elevators_locked.is_empty(){
 
                 }else {
@@ -382,23 +358,6 @@ fn main() -> std::io::Result<()> {
                     udp_broadcast(&msg);
                 }
             },
-
-            //recv UDP message
-
-            //check message type 
-            //if message is from master
-            // MAKE HANDLE MASTER MESSAGE FUNCTION
-            
-
-            //if order is yours
-            //add to own queue
-
-            //if order is someone elses
-            //add to full queue
-
-            //if message is from slave 
-            //if order, add to own full queue and world view
-            //if message is an ack update elevators alive   
             
         }
     }

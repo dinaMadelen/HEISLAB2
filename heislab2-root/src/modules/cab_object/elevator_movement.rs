@@ -31,6 +31,7 @@ use super::cab::Cab;
                         Ok(true) => {
                              // obstruction: start loop again
                             println!("Obstruction detected, holding doors..");
+                            cabclone.status = Status::Obstruction;
                             start_time = SystemTime::now();
                             continue;
                         }

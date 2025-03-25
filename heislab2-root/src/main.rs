@@ -315,7 +315,7 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.obstruction_rx) -> a => {
                 let obstr = a.unwrap();
                 println!("Obstruction: {:#?}", obstr);
-                elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
+                //elevator.motor_direction(if obstr { DIRN_STOP } else { dirn });
                 let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();
                 if active_elevators_locked.is_empty(){
 

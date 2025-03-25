@@ -352,7 +352,6 @@ fn main() -> std::io::Result<()> {
                     }else{
                         active_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
                     }
-                    let cab_clone = active_elevators_locked.get(0).unwrap().clone();
                     drop(active_elevators_locked);
                 }
             },

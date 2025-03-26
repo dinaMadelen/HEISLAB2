@@ -112,19 +112,12 @@ pub struct UdpHandler {
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
-pub struct Worldview{
-    pub live: Vec<Cab>,
-    pub dead: Vec<Cab>
-}
-
-#[derive(Debug, Serialize, PartialEq, Deserialize, Clone)]
 pub enum UdpData {
     Checksum(u32),
     Cabs(Vec<Cab>),
     Cab(Cab),
     Orders(Vec<Order>),
     Order(Order),
-    Worldview(Worldview),
 }
 
 
@@ -165,8 +158,8 @@ impl UdpHandler {
 
         udp_broadcast(message);
 
-        let active_elevators_locked = state.active_elevators.lock().unwrap();
-        if active_elevators_locked.len() == 1 && active_elevators_locked[0].id == state.me_id {
+        let known_elevators_locked = state.known_elevators.lock().unwrap();
+        if known_elevators_locked.len() == 1 && known_elevators_locked[0].id == state.me_id {
 
             //Mark message as recvied 
             let mut sent_messages_locked = state.sent_messages.lock().unwrap();
@@ -175,11 +168,15 @@ impl UdpHandler {
             }
             println!("This is the only elevator in system, skipping ACK wait.");
         }
-        drop(active_elevators_locked);
+        drop(known_elevators_locked);
         
 
         // Check if there are missing acks
         if !confirm_recived(message, state) {
+
+            let mut last_expected_ids: Vec<u8> = Vec::new();
+            let mut last_waiting: Option<WaitingConfirmation> = None;
+
     
             while retries > 0 {
     
@@ -189,53 +186,69 @@ impl UdpHandler {
                 std::thread::sleep(Duration::from_millis(30));
     
                 //Lock mutexes
-                let sent_messages_locked = state.sent_messages.lock().unwrap();
-                let active_elevators_locked = state.active_elevators.lock().unwrap();
+                let sent_messages_locked = state.sent_messages.lock().unwrap().clone();
+                let known_elevators_locked = state.known_elevators.lock().unwrap();
     
                 if let Some(waiting) = sent_messages_locked.iter().find(|m| m.message_hash == message.header.checksum) {
-                    let expected_ids: Vec<u8> = active_elevators_locked.iter().map(|e| e.id).collect();
-                    let missing: Vec<u8> = expected_ids.into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
-                
-    
+                    //Only expect from the live ones
+                    let expected_ids: Vec<u8> = known_elevators_locked.iter().filter(|e|e.alive).map(|e| e.id).collect();
+                    let missing: Vec<u8> = expected_ids.clone().into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
+
+                    last_expected_ids = expected_ids;
+                    last_waiting = Some(waiting.clone());
+
+                    //resend to the ones that havent acked
                     for elevator_id in &missing {
-                        if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
+                        if let Some(elevator) = known_elevators_locked.iter().find(|e| e.id == *elevator_id){
                             let target_address = &elevator.inn_address;
                             self.send(&target_address, message);
                             
                         }
                     }
 
-                    for elevator_id in &missing {
-                        if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == *elevator_id){
-                            let target_address = &elevator.inn_address;
-                            let off_message = make_udp_msg(state.me_id,MessageType::ErrorOffline,UdpData::Cab(elevator.clone()));
-                            self.send(&target_address, &off_message);
-                            println!("Elevator {} didnt respond to new order update, assuming offline",elevator.id);
-                        }
-                    }
-
                 }else{
+                    drop(known_elevators_locked);
                     drop(sent_messages_locked);
-                    drop(active_elevators_locked);
                 }
-    
-                
-
     
                 if confirm_recived(&message, state){
                     println!("Successfully acknowledged by all elevators.");
                     return true;
                 }
-            
-                println!("Missing acknowledgments.");
-    
             }
-        }else{
-            println!("Successfully acknowledged by all elevators.");
-            return true;
-        }
+
+            //Lock mutexes
+            let sent_messages_locked = state.sent_messages.lock().unwrap().clone();
+            let known_elevators_locked = state.known_elevators.lock().unwrap();
+
+            if let Some(waiting) = last_waiting {
+
+                // Final retry failed, send notify offline
+                let assumed_offline: Vec<u8> = last_expected_ids.into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
+                for elevator_id in &assumed_offline{
+                    if let Some(elevator) = known_elevators_locked.iter().find(|e| e.id == *elevator_id) {
+                        let target_address = &elevator.inn_address;
+                        let off_message = make_udp_msg(state.me_id,MessageType::ErrorOffline,UdpData::Cab(elevator.clone()),);
+                        self.send(&target_address, &off_message);
+                        println!("Elevator {} didn't respond after retries. Assuming offline.",elevator.id);
+                    }
+                }
+            }
+
+               
+
     
-        // Remove waiting for Acks from state
+        }else {
+            println!("Successfully acknowledged by all active elevators.");
+            return true;
+
+            println!("Missing acknowledgments.");
+
+        }
+        
+
+        
+        // Remove order waiting for Acks from state
         let mut sent_messages_locked = state.sent_messages.lock().unwrap();
         sent_messages_locked.retain(|m| m.message_hash != message.header.checksum);
         drop(sent_messages_locked);
@@ -313,14 +326,14 @@ impl UdpHandler {
 
 
                 match msg.header.message_type{
-                    MessageType::Worldview => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_worldview(passable_state, &msg_clone)}});},
+                    MessageType::Worldview => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_worldview(passable_state, &msg_clone, udp_handler_clone)}});},
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
                     MessageType::NewOnline => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_new_online(&msg_clone, passable_state);}});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
-                    MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_remove_order(&msg_clone, passable_state, light_update_tx_clone);}});},
+                    MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_order_completed(&msg_clone, passable_state, light_update_tx_clone);}});},
                     MessageType::NewRequest => {thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone, light_update_tx_clone)});},
                     MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},
                     MessageType::ImAlive => {thread::spawn(move ||{ handle_im_alive(&msg_clone, passable_state)});},
@@ -336,7 +349,7 @@ impl UdpHandler {
 }
 
 pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
-    //Extract updated cab from message
+    //Extract updated cab data from message
     let updated_cab = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
     }else{
@@ -345,30 +358,61 @@ pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
     };
 
     //Replace the old cab struct with the updated cab struct
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-    if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    if let Some(sender_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id){
         println!("Updating alive elevator");
-        sender_elevator.merge_with(&updated_cab); 
+        sender_elevator.alive=true;
+        sender_elevator.merge_with(&updated_cab);   //------------------------------------------------------------------------------PROBLEM?
         sender_elevator.last_lifesign = SystemTime::now();
         //Update last lifesign of that elevator
 
     } else {
-        println!("Sender elevator not in active elevators");
-        //Send a NewOnline message with that cab
-        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+        println!("Sender elevator not in known elevators");
+        println!("Adding ID{} to known cabs", updated_cab.id);
+        //Send a NewOnline message with that cab // ----------------------------------------------------------------------------------This will be corrected in next worldview as there will be a discrepancy
+        known_elevators_locked.push(updated_cab);
+    }
+    
+    
+}
 
-        println!("Seardching dead elevators");
-        if let Some(pos) = dead_elevators_locked.iter().position(|e| e.id == msg.header.sender_id) {
-            // Remove from dead
-            let resurrected_elevator = dead_elevators_locked.remove(pos);
-            // Push to active
-            active_elevators_locked.push(resurrected_elevator);
-        } else {
-            println!("Sender elevator not in dead or active elevators, pushing to active elevators");
-            active_elevators_locked.push(updated_cab);
+//Handle Order completed
+
+pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_update_tx_clone: cbc::Sender<Vec<Order>>){
+
+    //Extract updated cab data from message
+    let completed_cab = if let UdpData::Cab(cab) = &msg.data{
+        cab.clone()
+    }else{
+        println!("Couldnt read OrderComplete message");
+        return;
+    };
+
+    let completed_order = match completed_cab.queue.first(){
+        Some(order) => order.clone(),
+
+        None => {
+            println!("Completed order message contains no order");
+            return;
         }
+    };
+
+ 
+    //Remove it from all orders
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    if let Some(elevator) = known_elevators_locked.iter_mut().find(|e|e.id==completed_cab.id){
+        if let Some(index) = elevator.queue.iter().position(|o|*o == completed_order){
+            elevator.queue.remove(index);
+            println!("Removed completed order {:?} from ID:{}",completed_order,elevator.id);
+        }
+
+    }
+    let mut all_orders_locked = state.all_orders.lock().unwrap();
+    if let Some(index) = all_orders_locked.iter().position(|o| *o == completed_order) {
+        all_orders_locked.remove(index);
     }
 
+    
 }
 
 
@@ -394,13 +438,13 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     //Check if this elevator is master 
     let master_id_clone = state.master_id.lock().unwrap().clone();
     let is_master = state.me_id == master_id_clone;
-    //Lock active_elevators
+
 
     //IF New Request is CAB order
     if new_order.order_type == CAB{
-        // Lock the active elevators and find the elevator that matches the sender id.
-        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-        if let Some(sender_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
+        // Lock the known elevators and find the elevator that matches the sender id.
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        if let Some(sender_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
             sender_elevator.queue.push(new_order.clone());
             if sender_elevator.id == state.me_id{
                 light_update_tx.send(sender_elevator.queue.clone()).unwrap();
@@ -410,7 +454,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                 // Capture necessary data (elevator id) before dropping the lock.
                 let elevator_id = sender_elevator.id;
                 // Lock is dropped here when the block ends.
-                drop(active_elevators_locked);
+                drop(known_elevators_locked);
                 give_order(elevator_id, vec![&new_order], &state, &udp_handler);
                 println!("Added CAB order to elevator ID: {}", elevator_id);
             }
@@ -423,22 +467,26 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     }else {
         
         if is_master{
-            let active_elevators_locked = state.active_elevators.lock().unwrap();
-            let best_elevators = best_to_worst_elevator(&new_order, &*active_elevators_locked);
-            drop(active_elevators_locked);
+            let known_elevators_locked = state.known_elevators.lock().unwrap();
+            let alive_elevators: Vec<Cab> = known_elevators_locked.iter().filter(|e| e.alive).cloned().collect();
 
-            let best_elevator = match best_elevators.first() {
-                Some(elevator) => {
-                    println!("Assigning new hallcall to {:?}", elevator);
-                    elevator
-                }
-                None => {
-                    println!("No available elevator to assign the order, assigning to self");
-                    &state.me_id
-                }
-            };
-            give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
-            order_update_tx.send(vec![new_order.clone()]).unwrap(); 
+            if !alive_elevators.is_empty() {
+                let best_elevators = best_to_worst_elevator(&new_order, &alive_elevators);
+                drop(known_elevators_locked);
+
+                let best_elevator = match best_elevators.first() {
+                    Some(elevator) => {
+                        println!("Assigning new hallcall to {:?}", elevator);
+                        elevator
+                    }
+                    None => {
+                        println!("No available elevator to assign the order, assigning to self");
+                        &state.me_id
+                    }
+                };
+                give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+                order_update_tx.send(vec![new_order.clone()]).unwrap();
+            } 
         }       
     }
     order_update_tx.send(vec![new_order.clone()]).unwrap();
@@ -501,7 +549,7 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 ///
 /// Returns - None - .
 ///
-pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
+pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg,udp_handler: Arc<UdpHandler>) {
 
     println!("Updating worldview...");
 
@@ -514,7 +562,7 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
     *new_worldview = msg.clone();
     drop(new_worldview);
     
-    let worldview = if let UdpData::Worldview(worldview) = &msg.data{
+    let worldview = if let UdpData::Cabs(worldview) = &msg.data{
         worldview
     }
     else{
@@ -522,13 +570,13 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg) {
         return;
     };
 
-    update_from_worldview(&state, &worldview);
-    /* let active_elevators: Vec<Cab> = {
-    let active_elevators_locked = state.active_elevators.lock().unwrap();
-    active_elevators_locked.clone() */ 
+    update_from_worldview(&state, &worldview,udp_handler);
+    /* let known_elevators: Vec<Cab> = {
+    let known_elevators_locked = state.known_elevators.lock().unwrap();
+    known_elevators_locked.clone() */ 
      
     //not used
-    //generate_worldview(&active_elevators);
+    //generate_worldview(&known_elevators);
 }
 
 /// handle_ack
@@ -566,17 +614,17 @@ pub fn handle_ack(msg: &UdpMsg, state: Arc<SystemState>) {
         let mut all_confirmed = true;
 
         // Lock mutex for active elevators
-        let active_elevators_locked = state.active_elevators.lock().unwrap();
+        let known_elevators_locked = state.known_elevators.lock().unwrap();
 
         //Check that all active elevatos have responded 
-        for elevator in active_elevators_locked.iter(){
+        for elevator in known_elevators_locked.iter().filter(|e|e.alive){
             if !waiting.responded_ids.contains(&elevator.id){
                 println!("Still missing confirmations for elevaotr ID:{}", elevator.id);
                 all_confirmed = false;
             }
 
         }
-        drop(active_elevators_locked);
+        drop(known_elevators_locked);
 
         if all_confirmed{
             waiting.all_confirmed = true;
@@ -655,10 +703,10 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
     let elevator_id = elevator.id;
 
     //Lock active elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap(); 
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap(); 
 
     //Find elevator with mathcing ID and update queue
-    if let Some(update_elevator) = active_elevators_locked.iter_mut().find(|e| e.id == elevator_id){
+    if let Some(update_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == elevator_id){
         for order in &elevator.queue {
             if !update_elevator.queue.contains(&order){
                 update_elevator.queue.push(order.clone());
@@ -672,10 +720,6 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
         }
     }
     //Send Ack to sender
-
-    let msg1 = UdpData::Checksum(1234);
-    let encoded = bincode::serialize(&msg1).unwrap();
-    println!("Sender enum tag: {}", encoded[0]); // Should be 0
     return udp_ack(*sender_address, &msg, elevator.id, &udp_handler);
 }
 
@@ -683,7 +727,7 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
 /// # Arguments:
 /// 
 /// * `msg` - UdpMsg - recived message.
-/// * `active_elevators` - &Arc<Mutex<Vec<Cab>>> - Vector of active elevators.
+/// * `known_elevators` - &Arc<Mutex<Vec<Cab>>> - Vector of active elevators.
 /// 
 /// # Returns:
 ///
@@ -693,16 +737,17 @@ pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     println!("New master detected, ID: {}", msg.header.sender_id);
 
     // Set current master's role to Slave
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-    if let Some(current_master) = active_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    if let Some(current_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
         println!("Changing current master (ID: {}) to slave.", current_master.id);
         current_master.role = Role::Slave;
+        current_master.alive =false;
     } else {
         println!("ERROR: No active master found.");
     }
 
     // Set new master
-    if let Some(new_master) = active_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
+    if let Some(new_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
         println!("Updating elevator ID {} to Master.", msg.header.sender_id);
         new_master.role = Role::Master;
     } else {
@@ -725,15 +770,19 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     //Lock active elevaotrs
-    let active_elevators_locked = state.active_elevators.lock().unwrap();
+    let known_elevators_locked = state.known_elevators.lock().unwrap();
 
     // Check if elevator is already active
-    if active_elevators_locked.iter().any(|e| e.id == msg.header.sender_id) {
+    if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && e.alive) {
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
+    }else if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && !e.alive){
+        println!("Elevator ID: is set alive, already known elevator");
     }
+
+    
     //Release active elevators
-    drop(active_elevators_locked); 
+    drop(known_elevators_locked); 
 
     let msg_elevator = if let UdpData::Cab(cab) = &msg.data {
         cab
@@ -741,6 +790,8 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
         println!("Error: Wrong UdpData for message type");
         return false;
     };
+
+    println!("New unknown elevator online ID: {}, adding to known", msg.header.sender_id);
 
     // Create new elevator
     let new_elevator = Cab {
@@ -754,12 +805,13 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
         direction: msg_elevator.direction.clone(),
         role: msg_elevator.role.clone(),
         last_lifesign: SystemTime::now(),
+        alive: true
     };
 
     // Lock again and add the new elevator
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-    active_elevators_locked.push(new_elevator);
-    drop(active_elevators_locked); 
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    known_elevators_locked.push(new_elevator);
+    drop(known_elevators_locked); 
 
     println!("Added new elevator ID {}.", msg.header.sender_id);
     return true;
@@ -770,7 +822,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
 /// # Arguments:
 /// 
 /// * `msg` - &UdpMsg - refrence to UDP message.
-/// * `active_elevators` - &Arc<Mutex<Vec<Cab>>> - List of active elevators .
+/// * `known_elevators` - &Arc<Mutex<Vec<Cab>>> - List of active elevators .
 /// 
 /// # Returns:
 ///
@@ -780,7 +832,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
-    let mut missing_orders = if let UdpData::Worldview(worldview) = &msg.data {
+    let mut missing_orders = if let UdpData::Cabs(worldview) = &msg.data {
         worldview.clone()
     } else {
         println!("ERROR: Expected UdpData::Cabs but got something else");
@@ -812,26 +864,23 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
     if let UdpData::Cab(cab) = &msg.data {
 
         
-        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-
-        if state.me_id == state.master_id.lock().unwrap().clone(){
-            
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+            elevator.alive = false;
+            println!("ID:{} set to offline.", cab.id);
+        } else {
+            println!("Elevator ID:{} not found in known elevators.", cab.id);
         }
 
-        //Add dead
-        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
-        dead_elevators_locked.push(cab.clone());
 
-        if let Some(elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+        // Throw away all orders except cab orders from the offline elevator
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+            
             elevator.queue.retain(|o| o.order_type == CAB);
         }
-        drop(dead_elevators_locked);
-
-        // Check if active elevators contains, retain keeps only elements that return true
-        active_elevators_locked.retain(|e| e.id != cab.id);
 
         //Release active elevators
-        drop(active_elevators_locked);
+        drop(known_elevators_locked);
 
         /*
         // Check if the elevator was removed
@@ -854,7 +903,7 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
 /// # Arguments:
 /// 
 /// * `msg` - &UdpMsg - refrence to the UDP message that was recivecd.
-/// * `active_elevators` - &mut Arc<Mutex<Vec<Cab>>> - List of active elevators.
+/// * `known_elevators` - &mut Arc<Mutex<Vec<Cab>>> - List of active elevators.
 /// * `&mut failed_orders` - &mut Arc<Mutex<Vec<Order>>> - list of orders that couldnt be distributed.
 /// 
 /// # Returns:
@@ -877,26 +926,25 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_t
     println!("Removing order from ID: {}", remove_id);
 
     //Lock active elevators
-    let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
     //Check for correct elevator in active elevators
-    if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == remove_id) {
+    if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == remove_id) {
+
+        for order in &elevator_from_msg.queue {
     
-        if let Some(order) = elevator_from_msg.queue.first() {
-                    
             if let Some(index) = elevator.queue.iter().position(|o| o == order) {
+                            
                 elevator.queue.remove(index);
                 println!("Order {:?} removed from elevator ID: {}", order, elevator.id);
                 if elevator.id == state.me_id{
                     light_update_tx.send(elevator.queue.clone()).unwrap();
                 }
-                
+                    
             } else {
                 println!("ERROR: Elevator ID:{} does not have order {:?}", elevator.id, order); 
-            }               
-                    
-        } else {
-                println!("ERROR: No orders found in the received elevator.");
+            }
+                            
         }
 
     } else {
@@ -904,8 +952,6 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_t
     }
 
 }
-
-
 
 /// msg_serialize
 /// Split UdpMsg into bytes for easier transmission
@@ -966,7 +1012,7 @@ pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
         (MessageType::NewOrder, UdpData::Cab(_)) => true,
-        (MessageType::Worldview, UdpData::Worldview(_)) => true,
+        (MessageType::Worldview, UdpData::Cab(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,
         (MessageType::ImAlive, UdpData::Cab(_)) => true,
@@ -976,6 +1022,7 @@ fn data_valid_for_type(msg: &UdpMsg) -> bool {
         (MessageType::NewOnline, UdpData::Cab(_)) => true,
         (MessageType::Ack, UdpData::Checksum(_)) => true,
         (MessageType::Nak, UdpData::Checksum(_)) => true,
+        (MessageType::RemoveOrder, UdpData::Cabs(_)) => true,
         _ => false,
     }
 }
@@ -1113,7 +1160,7 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
 }  
 
 
-//Check if the subnet (not full ip) matches.
+//Check if the subnet matches.
 pub fn same_subnet(local: IpAddr, remote: IpAddr) -> bool {
 
     match (local, remote) {

@@ -34,6 +34,7 @@ pub struct Cab {
     pub direction: i8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
     pub last_lifesign: SystemTime,
+    pub alive: bool
 }
 
 
@@ -74,7 +75,8 @@ impl Cab {
                 status: Status::Idle,
                 direction: 0,
                 role: Role::Slave,
-                last_lifesign: SystemTime::now()
+                last_lifesign: SystemTime::now(),
+                alive: true,
             });
     }
 }

@@ -27,7 +27,7 @@
 //-----------------------IMPORTS------------------------------------------------------------
 
 use crate::modules::cab_object::cab::Cab; //Import for cab struct
-use crate::modules::udp_functions::udp::{Worldview, UdpMsg, UdpData, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
+use crate::modules::udp_functions::udp::{UdpMsg, UdpData, MessageType, UdpHandler, udp_broadcast, make_udp_msg,udp_ack};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master_functions::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
@@ -86,21 +86,29 @@ pub fn receive_order(slave: &mut Cab, new_order: Order, master_address: SocketAd
 ///
 /// Returns - bool - 'true' if succsessful broadcast, 'false' if failed to broadcast.
 ///
-pub fn notify_completed(completed_order: Order, status: &SystemState) -> bool {
+pub fn notify_completed(completed_order: Order, state: &SystemState) -> bool {
 
     //Lock active elevators
-    let active_elevators_locked = status.active_elevators.lock().unwrap();
+    let known_elevators_locked = state.known_elevators.lock().unwrap();
 
     // Send message with order to remove
-    if let Some(elevator) = active_elevators_locked.iter().find(|e| e.id == status.me_id) {
-        let mut remove_elevator = elevator.clone();
-        remove_elevator.queue = vec![completed_order];
+    if let Some(elevator) = known_elevators_locked.iter().find(|e| e.id == state.me_id) {
+        let mut responsible_elevator = elevator.clone();
+        responsible_elevator.queue = vec![completed_order.clone()];
 
-        let message = make_udp_msg(status.me_id,MessageType::OrderComplete, UdpData::Cab(remove_elevator.clone()));
+        let message = make_udp_msg(state.me_id,MessageType::OrderComplete, UdpData::Cab(responsible_elevator.clone()));
+        drop(known_elevators_locked);
+
+        //remove it from all orders
+        let mut all_orders_locked = state.all_orders.lock().unwrap();
+        if let Some(index) = all_orders_locked.iter().position(|o| *o == completed_order) {
+            all_orders_locked.remove(index);
+        }
+
         return udp_broadcast(&message);
 
     }else{
-        println!("Error:Elevator  {} is missing from active", status.me_id);
+        println!("Error:Elevator  {} is missing from active", state.me_id);
         return false;
     }
 }
@@ -144,78 +152,66 @@ pub fn cancel_order(slave: &mut Cab, order: Order) -> bool {
 ///
 /// Returns -bool - returns 'true' if added orders or orders match, returns 'false' if there are missing orders in worldview.
 ///
-pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Worldview) -> bool {
+pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,udp_handler: Arc<UdpHandler>) -> bool {
 
-    let mut worldview_changed = false;
+    let mut worldview_missing = false;
 
     
 
-    // Compare recived worldview to active elevators
-    for wv_elevator in &new_worldview.live{
+    // Compare recived worldview to known elevators
+    for wv_elevator in new_worldview{
 
-        //Lock active elevators
-        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
+        //Lock known elevators
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
-        if let Some(elevator) = active_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
 
 
-            let active_queue=elevator.queue.clone();
+            let known_queue=elevator.queue.clone();
 
             //No new orders
-            if active_queue == wv_elevator.queue{
+
+            //Check if elevator is alive or dead
+            if elevator.alive != wv_elevator.alive{
+                worldview_missing = true;
+            }
+
+            if known_queue == wv_elevator.queue{
                 println!("Worldview matches for ID:{}", elevator.id);
                 continue;
             }
 
             //Found missing order, add them to queue
-            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !active_queue.contains(order)) .cloned().collect();
+            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)) .cloned().collect();
             if !missing_orders.is_empty() {
                 println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
                 elevator.queue.extend(missing_orders);
-                worldview_changed = true;
             }
 
         } else{
             // Add missing worldview elevator to active elevators
             println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.id);
-            active_elevators_locked.push(wv_elevator.clone());
-            worldview_changed = true;
+            known_elevators_locked.push(wv_elevator.clone());
+            worldview_missing = true;
         }
     
-        drop(active_elevators_locked);
+        drop(known_elevators_locked)
 
-        //Lock dead elevators
-        let mut dead_elevators_locked = state.dead_elevators.lock().unwrap();
+    } 
+    
 
-        // Compare recived worldview to active elevators
-            if let Some(elevator) = dead_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
-    
-            let dead_queue=elevator.queue.clone();
-    
-            //No new orders
-            if dead_queue == wv_elevator.queue{
-                println!("Worldview matches for ID:{}", elevator.id);
-                continue;
-            }
-    
-            //Found missing order, add them to queue
-            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !dead_queue.contains(order)) .cloned().collect();
-            if !missing_orders.is_empty() {
-                println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
-                elevator.queue.extend(missing_orders);
-                worldview_changed = true;
-            }
-    
-        } else{
-            // Add missing worldview elevator to active elevators
-            println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.id);
-            dead_elevators_locked.push(wv_elevator.clone());
-            worldview_changed = true;
+    if worldview_missing{
+
+        let master_id = state.master_id.lock().unwrap().clone();
+        let known_elevators_locked = state.known_elevators.lock().unwrap().clone();
+
+        if let Some(master_elevator) = known_elevators_locked.iter().find(|e| e.id == master_id) {
+            let master_address = master_elevator.inn_address.clone();
+            notify_worldview_error(state.me_id,master_address,state,udp_handler);
         }
-     
-
     }
-    return worldview_changed;
+
+    return worldview_missing;
 }
 
 /// Missing order in worldview, notify master that there is a missing order/orders
@@ -232,21 +228,12 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Worldview
 ///
 /// Returns - None - .
 ///
-pub fn notify_worldview_error(sender_id: u8 ,master_adress: String, state: &Arc<SystemState> ,udp_handler: &UdpHandler) {
+pub fn notify_worldview_error(sender_id: u8 ,master_adress: SocketAddr, state: &Arc<SystemState> ,udp_handler: Arc<UdpHandler>) {
 
+    let all_cabs = state.known_elevators.lock().unwrap().clone();
 
-    let live_cabs = state.active_elevators.lock().unwrap().clone();
-    let dead_cabs = state.dead_elevators.lock().unwrap().clone();
-
-    let slave_view = Worldview{ 
-
-        live: live_cabs,
-        dead: dead_cabs
-    };
-
-    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, UdpData::Worldview(slave_view));
-    let socket: SocketAddr = master_adress.parse().expect("invalid adress");
-    udp_handler.send(&socket, &message);
+    let message = make_udp_msg(sender_id,MessageType::ErrorWorldview, UdpData::Cabs(all_cabs));
+    udp_handler.send(&master_adress, &message);
 }
 
 
@@ -285,9 +272,9 @@ pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
 
         //Check age of new lifesign
         if  last_lifesign.elapsed() > Duration::from_millis(5000) {
-            println!("No worldview recived from Master in last 5sec, electing new master");
-            let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-            set_new_master(active_elevators_locked.get_mut(0).unwrap(),state)
+            println!("No lifesign from master recived from Master in last 5sec, electing new master");
+            let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+            set_new_master(known_elevators_locked.get_mut(0).unwrap(),state)
         }
         
     }    
@@ -319,12 +306,14 @@ pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
         drop(master_id_locked);
         
         //This causes deadlock since calling the cab already requires locking the mutex
-        let mut active_elevators_locked = state.active_elevators.lock().unwrap();
-        if let Some(old_master) = active_elevators_locked.iter_mut().find(|e| e.id == master_id) {
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        if let Some(old_master) = known_elevators_locked.iter_mut().find(|e| e.id == master_id) {
             old_master.role = Role::Slave;
             println!("Old master (ID: {}) set to Slave.", old_master.id);
+
+            
         }
-        if let Some(new_master) = active_elevators_locked.iter_mut().find(|e|e.id == state.me_id){
+        if let Some(new_master) = known_elevators_locked.iter_mut().find(|e|e.id == state.me_id){
             new_master.role = Role::Master;
             {
                 let mut master_id_locked = state.master_id.lock().unwrap();
@@ -334,7 +323,7 @@ pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
             println!("New master (ID: {}).", new_master.id);
             let message = make_udp_msg(me.id,MessageType::NewMaster, UdpData::Cab(new_master.clone()));
             udp_broadcast(&message);
-            drop(active_elevators_locked);
+            drop(known_elevators_locked);
         } else {
             println!("ERROR: New master is not an active elevator");
         }
@@ -370,11 +359,14 @@ pub fn reboot_program(){
 
 
 pub fn send_new_online(state: &SystemState) -> bool {
+
     // Lock 
-    let active_elevators_locked = state.active_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
     //Find this elevator in systemstate
-    if let Some(this_elevator) = active_elevators_locked.iter().find(|e| e.id == state.me_id) {
+    if let Some(this_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == state.me_id) {
+        //ensure alive
+        this_elevator.alive = true;
         // Create UdpMsg
         let data = UdpData::Cab(this_elevator.clone());
         let msg = make_udp_msg(this_elevator.id, MessageType::NewOnline, data);
@@ -386,11 +378,14 @@ pub fn send_new_online(state: &SystemState) -> bool {
 }
 
 pub fn send_error_offline(state: &SystemState) -> bool {
+
     // Lock 
-    let active_elevators = state.active_elevators.lock().unwrap();
+    let mut known_elevators = state.known_elevators.lock().unwrap();
 
     //Find this elevator in systemstate
-    if let Some(my_elevator) = active_elevators.iter().find(|e| e.id == state.me_id) {
+    if let Some(my_elevator) = known_elevators.iter_mut().find(|e| e.id == state.me_id) {
+        //set dead
+        my_elevator.alive = false;
         // Create UdpMsg
         let data = UdpData::Cab(my_elevator.clone());
         let msg = make_udp_msg(my_elevator.id, MessageType::ErrorOffline, data);
@@ -399,9 +394,10 @@ pub fn send_error_offline(state: &SystemState) -> bool {
         return udp_broadcast(&msg);
     } else {
         println!(
-            "ERROR: Elevator with ID {} not found in active_elevators. Cannot send ErrorOffline.",
+            "ERROR: Elevator with ID {} not found in known_elevators. Cannot send ErrorOffline, Rebooting",
             state.me_id
         );
+        reboot_program();
         return false;
     }
 }

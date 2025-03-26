@@ -11,8 +11,7 @@ pub struct SystemState {
     pub master_id: Arc<Mutex<u8>>,
     pub lifesign_master: Arc<Mutex<Instant>>,
     pub last_worldview: Arc<Mutex<UdpMsg>>,
-    pub active_elevators: Arc<Mutex<Vec<Cab>>>,
-    pub dead_elevators: Arc<Mutex<Vec<Cab>>>,
+    pub known_elevators: Arc<Mutex<Vec<Cab>>>,
     pub all_orders: Arc<Mutex<Vec<Order>>>,
     pub sent_messages: Arc<Mutex<Vec<WaitingConfirmation>>>,
 }

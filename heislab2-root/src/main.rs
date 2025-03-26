@@ -17,7 +17,7 @@ use cab::Cab;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
 use slave_functions::slave::*;
-//use master_functions::master::*;
+use master_functions::master::*;
 use system_init::*;
 
 
@@ -106,7 +106,7 @@ fn main() -> std::io::Result<()> {
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
-    /* 
+    
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -148,12 +148,13 @@ fn main() -> std::io::Result<()> {
                         
                         //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked.clone()));
                         //udp_broadcast(&msg);
+                        
                         master_worldview(&system_state_clone);
                     }
                 }
             }
     });
-    */
+    
     
     
 
@@ -164,6 +165,7 @@ fn main() -> std::io::Result<()> {
     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
     drop(known_elevators_locked);
 
+    //SEND MESSAGE TO EVERYONE THAT YOU ARE ALIVE
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
     for port in 3701..3705{
@@ -172,19 +174,20 @@ fn main() -> std::io::Result<()> {
     }
     drop(known_elevators_locked);
     
-    /* 
+    //STARTING CHECK MASTER FAILURE
     let system_state_clone = Arc::clone(&system_state);
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
-    */
+    
+    //STARTING A LOOP TO MAKE SURE ALL ELEVATORS ALWAYS FINISH THEIR QUEUE
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
     let door_tx_clone = io_channels.door_tx.clone();
     let obstruction_tx_clone = io_channels.obstruction_rx.clone();
     spawn(move|| {
         loop{
-            sleep(Duration::from_secs(2));
+            sleep(Duration::from_secs(1));
             
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
@@ -215,6 +218,7 @@ fn main() -> std::io::Result<()> {
                 known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone() );
                 drop(known_elevators_locked);
             },
+
             recv(io_channels.order_update_rx) -> a => {
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
                 //Mulig denne er for tidlig
@@ -239,13 +243,15 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
-                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
-                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                    drop(known_elevators_locked);
                     elevator.door_light(false);
-
+                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                     let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
+                    known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                    drop(known_elevators_locked);
+                    
+
                     let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         for elevator in known_elevators_locked.iter(){

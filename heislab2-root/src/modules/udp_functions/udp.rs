@@ -194,11 +194,7 @@ impl UdpHandler {
             {
                 // Only consider elevators marked as alive.
                 let expected_ids: Vec<u8> = known_elevators.iter().filter(|e| e.alive).map(|e| e.id).collect();
-                let missing: Vec<u8> = expected_ids
-                    .iter()
-                    .cloned()
-                    .filter(|id| !waiting.responded_ids.contains(id))
-                    .collect();
+                let missing: Vec<u8> = expected_ids.iter().cloned().filter(|id| !waiting.responded_ids.contains(id)).collect();
 
                 last_expected_ids = expected_ids;
                 last_waiting = Some(waiting.clone());
@@ -219,10 +215,7 @@ impl UdpHandler {
 
         // After all retries have been exhausted, mark any missing elevators as dead.
         if let Some(waiting) = last_waiting {
-            let missing: Vec<u8> = last_expected_ids
-                .into_iter()
-                .filter(|id| !waiting.responded_ids.contains(id))
-                .collect();
+            let missing: Vec<u8> = last_expected_ids.into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
             if !missing.is_empty() {
                 let mut known_elevators = state.known_elevators.lock().unwrap();
                 for elevator in known_elevators.iter_mut() {
@@ -351,10 +344,10 @@ pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
         //Update last lifesign of that elevator
 
     } else {
-        println!("Sender elevator not in known elevators");
-        println!("Adding ID{} to known cabs", updated_cab.id);
         //Send a NewOnline message with that cab // ----------------------------------------------------------------------------------This will be corrected in next worldview as there will be a discrepancy
-        known_elevators_locked.push(updated_cab);
+        println!("Elevator not known, running handle_new_online");
+        drop(known_elevators_locked);
+        handle_new_online(&msg, state);
     }
     
     
@@ -469,10 +462,11 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                     }
                 };
                 let success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+                /* 
                 if !success{
                     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
                     known_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());
-                }
+                }*/
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             } 
         }       
@@ -708,8 +702,11 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
             }
         }
     }
+    for elevator in known_elevators_locked.iter(){
+        udp_ack(*&elevator.inn_address, &msg, elevator.id, &udp_handler);
+    }
     //Send Ack to sender
-    return udp_ack(*sender_address, &msg, elevator.id, &udp_handler);
+    return udp_ack(*&elevator.inn_address, &msg, elevator.id, &udp_handler);
 }
 
 /// handle_new_master
@@ -1081,6 +1078,7 @@ pub fn udp_ack(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,
         data: UdpData::Checksum(original_msg.header.checksum), 
     };
     println!("Sending ACK with data: {:?}", ack_msg.data);
+    
     return udp_handler.send(&target_address, &ack_msg);
 }
 

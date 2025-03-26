@@ -1,8 +1,8 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
-use heislab2_root::modules::io::io_init;
-use heislab2_root::modules::master_functions::master::handle_slave_failure;
+//use heislab2_root::modules::io::io_init;
+//use heislab2_root::modules::master_functions::master::handle_slave_failure;
 use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
@@ -17,7 +17,7 @@ use cab::Cab;
 use elevator_status_functions::Status;
 use order_object::order_init::Order;
 use slave_functions::slave::*;
-use master_functions::master::*;
+//use master_functions::master::*;
 use system_init::*;
 
 
@@ -26,11 +26,13 @@ use udp_functions::udp::UdpData;
 
 use heislab2_root::modules::io::io_init::*;
 
+
+
 fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15659", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -51,9 +53,10 @@ fn main() -> std::io::Result<()> {
 
     //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
     //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
-
-    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3500);
-    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3600);
+    
+    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
+    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);
+    
     let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
     println!("me id is {}",system_state.me_id);
     //Make free cab
@@ -92,7 +95,6 @@ fn main() -> std::io::Result<()> {
     let udphandler_clone = Arc::clone(&udphandler);
     spawn(move||{
         loop{
-
             let handler = Arc::clone(&udphandler_clone); 
             handler.receive(60000, &system_state_clone, io_channels.order_update_tx.clone(), io_channels.light_update_tx.clone());
         }
@@ -104,7 +106,7 @@ fn main() -> std::io::Result<()> {
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
-
+    /* 
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -151,6 +153,7 @@ fn main() -> std::io::Result<()> {
                 }
             }
     });
+    */
     
     
 
@@ -162,13 +165,37 @@ fn main() -> std::io::Result<()> {
     drop(known_elevators_locked);
 
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    udp_broadcast(&msg);
+    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+    for port in 3701..3705{
+        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
+        udphandler.send(&inn_addr, &msg);
+    }
+    drop(known_elevators_locked);
     
+    /* 
     let system_state_clone = Arc::clone(&system_state);
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
-    
+    */
+    let system_state_clone = Arc::clone(&system_state);
+    let elevator_clone = elevator.clone();
+    let door_tx_clone = io_channels.door_tx.clone();
+    let obstruction_tx_clone = io_channels.obstruction_rx.clone();
+    spawn(move|| {
+        loop{
+            sleep(Duration::from_secs(2));
+            
+            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+            if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
+                known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
+                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator_clone.clone());
+            }
+
+            known_elevators_locked.get_mut(0).unwrap().print_status();
+            drop(known_elevators_locked);
+        }
+    });
 
     // ------------------ MAIN LOOP ---------------------
     loop {
@@ -185,11 +212,10 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.light_update_rx) -> a => {
                 //Turn onn all lights in own queue
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
+                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone() );
                 drop(known_elevators_locked);
             },
             recv(io_channels.order_update_rx) -> a => {
-
                 //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
                 //Mulig denne er for tidlig
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
@@ -200,9 +226,11 @@ fn main() -> std::io::Result<()> {
                     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle {
                         let imalive = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                        udp_broadcast(&imalive);
+                        for elevator in known_elevators_locked.iter(){
+                            udphandler.send(&elevator.inn_address, &imalive);
+                        }
+                        //udp_broadcast(&imalive);
                     }
-
                     known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                     drop(known_elevators_locked);
                 }
@@ -212,13 +240,20 @@ fn main() -> std::io::Result<()> {
                 let door_signal = a.unwrap();
                 if door_signal {
                     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::DoorOpen,elevator.clone());
-                    known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
                     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                     drop(known_elevators_locked);
                     elevator.door_light(false);
 
+                    let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                     let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                        for elevator in known_elevators_locked.iter(){
+                            udphandler.send(&elevator.inn_address, &ordercomplete);
+                            udphandler.send(&elevator.inn_address, &msg);
+                        }
+                    known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                    drop(known_elevators_locked);
                     udp_broadcast(&msg);                   
                     
                 }
@@ -228,28 +263,33 @@ fn main() -> std::io::Result<()> {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
                 //Make new order and add that order to elevators queue
-                //broadcast addition, but since order is in own cab the others taking over will not help
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
                     //Broadcast new request
                     let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
+                    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                        for elevator in known_elevators_locked.iter(){
+                            udphandler.send(&elevator.inn_address, &msg);
+                        }
+                    drop(known_elevators_locked);
                     udp_broadcast(&msg);
 
                 }
 
                 //cab.turn_on_queue_lights(elevator.clone());
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                
+
                 //Safety if elevator is idle to double check if its going to correct floor
                 if known_elevators_locked.is_empty(){
                     println!("No active elevators, not even this one ID:{}",system_state.me_id);
 
                 }else if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
-                    println!("GOING NEXT FLOOR!");
                     known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Moving{
-                        let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(known_elevators_locked.get_mut(0).unwrap().clone()));
+                        let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(known_elevators_locked.get(0).unwrap().clone()));
+                        for elevator in known_elevators_locked.iter(){
+                            udphandler.send(&elevator.inn_address, &msg);
+                        }
                         udp_broadcast(&msg);
                     }
                 } 
@@ -270,14 +310,16 @@ fn main() -> std::io::Result<()> {
                 known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                 known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                 drop(known_elevators_locked);
-                
+
 
                 //Broadcast new state
                 let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                drop(known_elevators_locked);
-
                 let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                    for elevator in known_elevators_locked.iter(){
+                        udphandler.send(&elevator.inn_address, &msg);
+                       }
+                drop(known_elevators_locked);
                 udp_broadcast(&msg);
             },
 
@@ -319,11 +361,12 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Obstruction,elevator.clone());
                     }else{
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
+                        known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                        known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
                     }
                     drop(known_elevators_locked);
                 }
             },
-            
         }
     }
 }

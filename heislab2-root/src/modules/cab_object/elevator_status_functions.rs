@@ -37,7 +37,7 @@ impl Status{
 
 impl Cab{
     pub fn print_status(&self){
-        println!("status:{}", self.status.as_str()); //This line got angry if i shortened the rest
+        println!("______________________STATUS : {}", self.status.as_str()); //This line got angry if i shortened the rest
     }
     pub fn set_status(&mut self, status: Status, elevator: Elevator){
 
@@ -91,9 +91,6 @@ impl Cab{
                     Status::Stop =>{
                         self.status = Status::Stop;
                         //Do Something? 
-                    }
-                    Status::DoorOpen =>{
-                        self.status = Status::DoorOpen;
                     }
                     _ => {
                         self.status = Status::Idle;

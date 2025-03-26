@@ -41,14 +41,14 @@ pub struct Cab {
 impl Cab {
   
     pub fn init(inn_addr: &SocketAddr, out_addr: &SocketAddr, num_floors: u8, set_id: u8,state:&Arc<SystemState>) -> std::io::Result<Cab> {
-        let inport = 3500; 
-        let outport = 3600;
+        let inport = 3500 + set_id as u16 *100; 
+        let outport = 3600 + set_id as u16 *100;
 
         let (inn, out) = if set_id == state.me_id {
             match local_ip() {
                 Ok(ip) => {
-                    let inn = SocketAddr::new(ip, inport);
-                    let out = SocketAddr::new(ip, outport);
+                    let inn = *inn_addr;
+                    let out = *out_addr;
 
                     println!("Assigned IP: {} (InPort: {}, OutPort: {})", ip, inport, outport);
                     (inn, out)

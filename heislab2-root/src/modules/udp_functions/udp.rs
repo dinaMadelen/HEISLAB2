@@ -155,8 +155,11 @@ impl UdpHandler {
         sent_messages_locked.push(confirmation);
         drop(sent_messages_locked);
 
-
-        udp_broadcast(message);
+        let known_elevators_locked = state.known_elevators.lock().unwrap();
+        for elevator in known_elevators_locked.iter(){
+                            self.send(&elevator.inn_address, &message);
+        }
+        drop(known_elevators_locked);
 
         let known_elevators_locked = state.known_elevators.lock().unwrap();
         if known_elevators_locked.len() == 1 && known_elevators_locked[0].id == state.me_id {
@@ -171,90 +174,71 @@ impl UdpHandler {
         drop(known_elevators_locked);
         
 
-        // Check if there are missing acks
-        if !confirm_recived(message, state) {
+        // Check if we already have all ACKs.
+    if !confirm_recived(message, state) {
+        let mut last_expected_ids: Vec<u8> = Vec::new();
+        let mut last_waiting: Option<WaitingConfirmation> = None;
 
-            let mut last_expected_ids: Vec<u8> = Vec::new();
-            let mut last_waiting: Option<WaitingConfirmation> = None;
+        while retries > 0 {
+            println!("Remaining retries: {}", retries);
+            retries -= 1;
+            std::thread::sleep(Duration::from_millis(30));
 
-    
-            while retries > 0 {
-    
-                println!("Remaining retries: {}", retries);
-                retries -= 1;
-    
-                std::thread::sleep(Duration::from_millis(30));
-    
-                //Lock mutexes
-                let sent_messages_locked = state.sent_messages.lock().unwrap().clone();
-                let known_elevators_locked = state.known_elevators.lock().unwrap();
-    
-                if let Some(waiting) = sent_messages_locked.iter().find(|m| m.message_hash == message.header.checksum) {
-                    //Only expect from the live ones
-                    let expected_ids: Vec<u8> = known_elevators_locked.iter().filter(|e|e.alive).map(|e| e.id).collect();
-                    let missing: Vec<u8> = expected_ids.clone().into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
+            // Clone the current confirmation list snapshot.
+            let sent_messages_snapshot = state.sent_messages.lock().unwrap().clone();
+            let known_elevators = state.known_elevators.lock().unwrap();
 
-                    last_expected_ids = expected_ids;
-                    last_waiting = Some(waiting.clone());
+            if let Some(waiting) = sent_messages_snapshot
+                .iter()
+                .find(|m| m.message_hash == message.header.checksum)
+            {
+                // Only consider elevators marked as alive.
+                let expected_ids: Vec<u8> = known_elevators.iter().filter(|e| e.alive).map(|e| e.id).collect();
+                let missing: Vec<u8> = expected_ids
+                    .iter()
+                    .cloned()
+                    .filter(|id| !waiting.responded_ids.contains(id))
+                    .collect();
 
-                    //resend to the ones that havent acked
-                    for elevator_id in &missing {
-                        if let Some(elevator) = known_elevators_locked.iter().find(|e| e.id == *elevator_id){
-                            let target_address = &elevator.inn_address;
-                            self.send(&target_address, message);
-                            
-                        }
-                    }
+                last_expected_ids = expected_ids;
+                last_waiting = Some(waiting.clone());
 
-                }else{
-                    drop(known_elevators_locked);
-                    drop(sent_messages_locked);
-                }
-    
-                if confirm_recived(&message, state){
-                    println!("Successfully acknowledged by all elevators.");
-                    return true;
-                }
-            }
-
-            //Lock mutexes
-            let sent_messages_locked = state.sent_messages.lock().unwrap().clone();
-            let known_elevators_locked = state.known_elevators.lock().unwrap();
-
-            if let Some(waiting) = last_waiting {
-
-                // Final retry failed, send notify offline
-                let assumed_offline: Vec<u8> = last_expected_ids.into_iter().filter(|id| !waiting.responded_ids.contains(id)).collect();
-                for elevator_id in &assumed_offline{
-                    if let Some(elevator) = known_elevators_locked.iter().find(|e| e.id == *elevator_id) {
-                        let target_address = &elevator.inn_address;
-                        let off_message = make_udp_msg(state.me_id,MessageType::ErrorOffline,UdpData::Cab(elevator.clone()),);
-                        self.send(&target_address, &off_message);
-                        println!("Elevator {} didn't respond after retries. Assuming offline.",elevator.id);
+                // Resend the message only to the ones that have not acked.
+                for elevator_id in missing.iter() {
+                    if let Some(elevator) = known_elevators.iter().find(|e| e.id == *elevator_id) {
+                        self.send(&elevator.inn_address, message);
                     }
                 }
             }
-
-               
-
-    
-        }else {
-            println!("Successfully acknowledged by all active elevators.");
-            return true;
-
-            println!("Missing acknowledgments.");
-
+            // Check if we now have all ACKs.
+            if confirm_recived(message, state) {
+                println!("Successfully acknowledged by all elevators.");
+                return true;
+            }
         }
-        
 
-        
-        // Remove order waiting for Acks from state
-        let mut sent_messages_locked = state.sent_messages.lock().unwrap();
-        sent_messages_locked.retain(|m| m.message_hash != message.header.checksum);
-        drop(sent_messages_locked);
-    
-        println!("Failed to deliver order after {} retries.", retries);
+        // After all retries have been exhausted, mark any missing elevators as dead.
+        if let Some(waiting) = last_waiting {
+            let missing: Vec<u8> = last_expected_ids
+                .into_iter()
+                .filter(|id| !waiting.responded_ids.contains(id))
+                .collect();
+            if !missing.is_empty() {
+                let mut known_elevators = state.known_elevators.lock().unwrap();
+                for elevator in known_elevators.iter_mut() {
+                    if missing.contains(&elevator.id) {
+                        elevator.alive = false;
+                        println!("Elevator {} marked as dead after all retries failed.", elevator.id);
+                    }
+                }
+            }
+        }
         return false;
+
+    } else {
+        println!("Successfully acknowledged by all elevators.");
+        return true;
+    }
     }
 
 
@@ -484,7 +468,11 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                         &state.me_id
                     }
                 };
-                give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+                let success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
+                if !success{
+                    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+                    known_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());
+                }
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             } 
         }       
@@ -496,11 +484,12 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
 pub fn init_udp_handler(me: Cab) -> UdpHandler {
 
     let sender_socket = UdpSocket::bind(me.out_address).expect("Could not bind UDP socket");
-    /*let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
-    */
+    let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
+    /* 
     //Linjen under er det som jeg har tullet med som burde settes tilbake
-    let receiver_socket = UdpSocket::bind("0.0.0.0:20000").expect("Could not bind UDP receiver socket");
-    
+    let receiver_addr = format!("0.0.0.0:20000");
+    let receiver_socket = UdpSocket::bind(receiver_addr).expect("Could not bind UDP receiver socket");
+    */
     
     sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
     receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
@@ -1012,7 +1001,7 @@ pub fn msg_deserialize(buffer: &[u8]) -> Option<UdpMsg> {
 fn data_valid_for_type(msg: &UdpMsg) -> bool {
     match (&msg.header.message_type, &msg.data) {
         (MessageType::NewOrder, UdpData::Cab(_)) => true,
-        (MessageType::Worldview, UdpData::Cab(_)) => true,
+        (MessageType::Worldview, UdpData::Cabs(_)) => true,
         (MessageType::OrderComplete, UdpData::Cab(_)) => true,
         (MessageType::NewRequest, UdpData::Order(_)) => true,
         (MessageType::ImAlive, UdpData::Cab(_)) => true,

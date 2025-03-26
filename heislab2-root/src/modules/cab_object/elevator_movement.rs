@@ -12,9 +12,6 @@ use elevator_init::Elevator;
 use super::elevator_status_functions::Status;
 use super::cab::Cab;
 
-use crate::modules::udp_functions::udp::*;
-use  crate::modules::udp_functions::udp::UdpData;
-
     impl Cab{
         // Set initial status
         pub fn try_close_door( &mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator: Elevator) -> bool {
@@ -44,7 +41,7 @@ use  crate::modules::udp_functions::udp::UdpData;
                         Err(cbc::TryRecvError::Empty) => {
                             // No obstruction or nothing received: close door
                             let now = SystemTime::now();
-                            if (now.duration_since(start_time).unwrap() > Duration::from_secs(1)) && (cabclone.status != Status::Obstruction) {
+                            if (now.duration_since(start_time).unwrap() > Duration::from_secs(3)) && (cabclone.status != Status::Obstruction) {
                                 println!("No obstruction, closing doors");
                                 break;
                             }
@@ -79,15 +76,14 @@ use  crate::modules::udp_functions::udp::UdpData;
                 } else if next_floor == self.current_floor{
                     elevator.motor_direction(DIRN_STOP);  
                     self.queue.remove(0);
-                    let msg = make_udp_msg(self.id, MessageType::OrderComplete, UdpData::Cab(self.clone()));
-                    udp_broadcast(&msg);
+
                     self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
                 }
  
-             } else {
+             } /*else {
                  //self.set_status(Status::Idle);
                  elevator.motor_direction(DIRN_STOP);
-             }
+             }*/
          } else {
              elevator.motor_direction(DIRN_STOP);
          }

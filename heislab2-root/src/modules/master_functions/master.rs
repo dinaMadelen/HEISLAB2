@@ -23,6 +23,7 @@
 
 //the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
 
+use crate::modules::master_functions::master;
 #[warn(non_snake_case)]
 #[allow(unused_imports)]
 #[allow(unused_variables)]
@@ -476,35 +477,32 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 ///
 /// Returns - Some(bool) - returns false if the ID is its own, returns true if it keeps the master if the ID is higher than the sender, reboots if it is lower.
 ///
-pub fn handle_multiple_masters(state: &Arc<SystemState>, sender: &u8) -> bool {
+pub fn fix_multiple_masters_lowest_id_is_master(state: &Arc<SystemState>) {
+    // Lock the known_elevators so we can mutate them.
+    let mut known_elevators = state.known_elevators.lock().unwrap();
+    // Gather references to all elevators that are currently Master.
+    let mut masters: Vec<&mut Cab> = known_elevators.iter_mut().filter(|cab| cab.role == Role::Master).collect();
 
-    if state.me_id == state.master_id.lock().unwrap().clone(){
-        
-        // Lock active elevators
-        let mut known_elevators_locked = state.known_elevators.lock().unwrap(); 
+    // If more than one master is found
+    if masters.len() > 1 {
+        masters.sort_by_key(|cab| cab.id);
+        let chosen_master_id = masters[0].id;
+        println!(
+            "Multiple masters detected. Keeping elevator {} as master.",
+            chosen_master_id
+        );
+        let mut master_id = state.master_id.lock().unwrap();
+        *master_id = chosen_master_id;
 
-        // Confirm elevator is active
-        let me = match known_elevators_locked.iter_mut().find(|e| e.id == state.me_id && e.alive){
-
-        Some(me_elevator) => me_elevator,
-
-        None => {println!("ERROR: ID {} is known or not alive", state.me_id);
-        return false;
-    }
-};
-
-        let mut result = true;
-        
-            //Master ID is my ID
-        if me.role == Role::Master {
-            result = false; 
-
-            // Give away master role, Kill program and reboot
-        }else if sender < &me.id{
-            reboot_program();
-        } 
-        return result;
+        // all other masters to slave.
+        for cab in masters.iter_mut().skip(1) {
+            println!("Reassigning elevator {} from master to slave.", cab.id);
+            cab.role = Role::Slave;
+        }
+    } else {
+        // Either zero or exactly one master, so no conflict.
+        println!("No multiple-master conflict detected.");
     }
 
-    return false; 
+    // Lock is dropped here automatically when `known_elevators` goes out of scope.
 }

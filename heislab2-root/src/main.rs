@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15659", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -88,8 +88,8 @@ fn main() -> std::io::Result<()> {
     let mut cab_clone = known_elevators_locked.get_mut(0).unwrap().clone();
     drop(known_elevators_locked);
 
-
     set_new_master(&mut cab_clone, &system_state);
+    
     // -------------------SET MASTER ID FINISHED------------------
 
     let udphandler_clone = Arc::clone(&udphandler);
@@ -110,22 +110,16 @@ fn main() -> std::io::Result<()> {
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
+    let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
             loop{
-                // Sleep for 5 seconds between checks.
-                sleep(Duration::from_secs(1));
-                let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-                let mut known_elevators: Vec<&Cab> = known_elevators_locked.iter().filter(|e|!e.alive).collect();
-                for cab in known_elevators_locked.iter_mut(){
-                    cab.turn_on_just_lights_in_queue(elevator_clone.clone());
-                };
-                drop(known_elevators_locked);
-                sleep(Duration::from_secs(9));
+                fix_multiple_masters_lowest_id_is_master(&system_state_clone);
+                sleep(Duration::from_secs(3));
                 let now = SystemTime::now();
-
-                // Lock known_elevators.
-                let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-                // Iterate in reverse order so that removing elements doesn't affect our indices.
+                
+                // Iterate in reverse order so that removing elements doesn't affect things
+                
+                let  known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
                 for i in (0..known_elevators_locked.len()).rev() {
                     let elevator = &known_elevators_locked[i];
                     // Only check elevators that are Moving or DoorOpen.
@@ -135,21 +129,28 @@ fn main() -> std::io::Result<()> {
                                 let dead_elevator = known_elevators_locked.get(i).unwrap();
                                 println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
                                 let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
-                                udp_broadcast(&msg);
+                                for elevator in known_elevators_locked.iter(){
+                                    udp_handler_clone.send(&elevator.inn_address, &msg);
+                                }
                             }
                         }
                     }
                 }
+        
 
                 {   
+                    let known_elevators_locked_clone = known_elevators_locked.clone();
                     drop(known_elevators_locked);
                     let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
                     if system_state_clone.me_id == locked_master_id{
-                        
-                        //let msg = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked.clone()));
-                        //udp_broadcast(&msg);
-                        
-                        master_worldview(&system_state_clone);
+                        print!("BROADCASTING WORLDVIEW _____________________");
+                        //MASTER WORLDVIEW BROADCAST
+                        let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked_clone.clone()));
+                        for elevator in known_elevators_locked_clone.iter(){
+                            udp_handler_clone.send(&elevator.inn_address, &worldview);
+                        }
+
+                        //master_worldview(&system_state_clone);
                     }
                 }
             }
@@ -174,12 +175,14 @@ fn main() -> std::io::Result<()> {
     }
     drop(known_elevators_locked);
     
+    /* 
     //STARTING CHECK MASTER FAILURE
     let system_state_clone = Arc::clone(&system_state);
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
-    
+    */
+
     //STARTING A LOOP TO MAKE SURE ALL ELEVATORS ALWAYS FINISH THEIR QUEUE
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
@@ -243,12 +246,22 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
-                    elevator.door_light(false);
-                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
-                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                    let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
-                    known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                        elevator.door_light(false);
+                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+                        if !cab_clone.queue.is_empty(){
+                            if cab_clone.current_floor == (cab_clone.queue.get(0)).unwrap().floor{
+                                known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                            }
+                        }
+                        let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
+                        if cab_clone.queue.is_empty(){
+                        println!("No things in this elevators queue");
+                    }else {
+                        
+                        
+                    }
                     drop(known_elevators_locked);
                     
 
@@ -260,7 +273,7 @@ fn main() -> std::io::Result<()> {
                         }
                     known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                     drop(known_elevators_locked);
-                    udp_broadcast(&msg);                   
+                                  
                     
                 }
             },
@@ -278,7 +291,7 @@ fn main() -> std::io::Result<()> {
                             udphandler.send(&elevator.inn_address, &msg);
                         }
                     drop(known_elevators_locked);
-                    udp_broadcast(&msg);
+                   
 
                 }
 
@@ -296,7 +309,6 @@ fn main() -> std::io::Result<()> {
                         for elevator in known_elevators_locked.iter(){
                             udphandler.send(&elevator.inn_address, &msg);
                         }
-                        udp_broadcast(&msg);
                     }
                 } 
                 drop(known_elevators_locked);
@@ -326,7 +338,7 @@ fn main() -> std::io::Result<()> {
                         udphandler.send(&elevator.inn_address, &msg);
                        }
                 drop(known_elevators_locked);
-                udp_broadcast(&msg);
+                
             },
 
             /*Burde nok modifiseres*/
@@ -338,11 +350,6 @@ fn main() -> std::io::Result<()> {
 
                 }else {
                     known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
-                    drop(known_elevators_locked);
-
-                    //Should add cab to systemstatevec and then broadcast new state of stopped
-                    let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                     drop(known_elevators_locked);
 
                     //WHO CONTROLS THE LIGHTS

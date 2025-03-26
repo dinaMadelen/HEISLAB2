@@ -271,7 +271,7 @@ pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
         drop(last_lifesign_locked);
 
         //Check age of new lifesign
-        if  last_lifesign.elapsed() > Duration::from_millis(5000) {
+        if  last_lifesign.elapsed() > Duration::from_millis(10000) {
             println!("No lifesign from master recived from Master in last 5sec, electing new master");
             let mut known_elevators_locked = state.known_elevators.lock().unwrap();
             set_new_master(known_elevators_locked.get_mut(0).unwrap(),state)

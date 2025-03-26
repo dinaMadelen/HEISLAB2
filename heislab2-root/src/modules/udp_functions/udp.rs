@@ -59,7 +59,7 @@ use std::thread;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,handle_multiple_masters,Role,correct_master_worldview, reassign_orders};
+use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_multiple_masters_lowest_id_is_master,Role,correct_master_worldview, reassign_orders};
 use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure};
 use crate::modules::system_status::WaitingConfirmation;
 
@@ -282,12 +282,12 @@ impl UdpHandler {
 
             //Check that the sender is from the same subnet, we dont want any outside messages
             //UNCOMMENT THIS
-            /* 
+            
             if !same_subnet(local_ip, sender_ip) {
                 println!("Message from rejected {}(sender not in same subnet)",sender_ip);
                 return None;
             }
-            */
+            
 
             println!("Received message of size {} from {}", size, sender);
             // Identify Messagetype and handle appropriatly
@@ -299,11 +299,10 @@ impl UdpHandler {
                 let msg_clone = msg.clone();
                 let tx_clone = order_update_tx.clone();
                 let light_update_tx_clone = light_update_tx.clone();
-                
 
 
                 match msg.header.message_type{
-                    MessageType::Worldview => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_worldview(passable_state, &msg_clone, udp_handler_clone)}});},
+                    MessageType::Worldview => {thread::spawn(move || {handle_worldview(passable_state, &msg_clone, udp_handler_clone)});},
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},

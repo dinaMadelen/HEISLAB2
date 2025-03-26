@@ -28,6 +28,9 @@ impl Cab{
                 }else{
                     elevator.call_button_light(order.floor, order.order_type, false);
                 }
+                if self.queue.is_empty(){
+                    elevator.call_button_light(floors, call_types, false);
+                }
             }
         }
     }

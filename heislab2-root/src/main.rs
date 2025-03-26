@@ -114,6 +114,7 @@ fn main() -> std::io::Result<()> {
     spawn(move||{
             loop{
                 fix_multiple_masters_lowest_id_is_master(&system_state_clone);
+                
                 sleep(Duration::from_secs(3));
                 let now = SystemTime::now();
                 
@@ -175,13 +176,13 @@ fn main() -> std::io::Result<()> {
     }
     drop(known_elevators_locked);
     
-    /* 
+    
     //STARTING CHECK MASTER FAILURE
     let system_state_clone = Arc::clone(&system_state);
     spawn(move||{
         check_master_failure(&system_state_clone);
     });
-    */
+    
 
     //STARTING A LOOP TO MAKE SURE ALL ELEVATORS ALWAYS FINISH THEIR QUEUE
     let system_state_clone = Arc::clone(&system_state);

@@ -60,7 +60,7 @@ use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
 use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_multiple_masters_lowest_id_is_master,Role,correct_master_worldview, reassign_orders};
-use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure};
+use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure, set_new_master};
 use crate::modules::system_status::WaitingConfirmation;
 
 
@@ -853,10 +853,22 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
             elevator.alive = false;
             println!("ID:{} set to offline.", cab.id);
+            let mut master_id = state.master_id.lock().unwrap();
+            if elevator.id == *master_id{
+                println!("The master died setting new master");
+                //*master_id = 255;
+            }
         } else {
             println!("Elevator ID:{} not found in known elevators.", cab.id);
         }
 
+        //DET UNDER SKAL VÆRE NOE SKJEKK
+        /* 
+        if let master_id = state.master_id.lock().unwrap().clone() == 255{
+            let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
+            set_new_master(known_elevators_locked.get(0).unwrap(), &state);
+        };
+        */
 
         // Throw away all orders except cab orders from the offline elevator
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {

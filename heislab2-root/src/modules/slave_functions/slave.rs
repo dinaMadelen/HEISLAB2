@@ -158,8 +158,6 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
     let mut worldview_missing_orders = false;
 
-    
-
     // Compare recived worldview to known elevators
     for wv_elevator in new_worldview{
 
@@ -184,7 +182,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             }
 
             //Found missing order, add them to queue
-            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)) .cloned().collect();
+            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)).cloned().collect();
             if !missing_orders.is_empty() {
                 println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
                 elevator.queue.extend(missing_orders);
@@ -221,7 +219,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 /// # Arguments:
 /// 
 /// * `sender_id`  -u8- id of the sender
-/// * `master_adress` - String - Adress of the master. // NEED TO FIX THIS 
+/// * `master_adress` - String - 
 /// * `missing_orders` - &Vec<Cab> - refrence to the worldview that has more orders than the new worldview 
 /// * `udp_handler` - &UdpHandler - refrence to the handler that that handles the sending.
 /// 
@@ -355,7 +353,7 @@ pub fn send_new_online(state: &Arc<SystemState>) -> bool {
         // Create UdpMsg
         let data = UdpData::Cab(this_elevator.clone());
         let msg = make_udp_msg(this_elevator.id, MessageType::NewOnline, data);
-
+        println!("Creating NewOnline from function");
         // Broadcast the message to notify others that this elevator is online
         return udp_broadcast(&msg);
     } 

@@ -162,10 +162,11 @@ fn main() -> std::io::Result<()> {
                 {   
                     let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
                     let locked_master_id = system_state_clone.master_id.lock().unwrap();
+                    let worldview_system_state=Arc::clone(&system_state_clone);
                     if system_state_clone.me_id == *locked_master_id{
                         print!("BROADCASTING WORLDVIEW _____________________");
                         //MASTER WORLDVIEW BROADCAST
-                        master_worldview(&system_state_clone);
+                        master_worldview(&worldview_system_state);
                     }
                 }
                 sleep(Duration::from_secs(1));

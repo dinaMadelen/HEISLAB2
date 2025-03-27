@@ -246,23 +246,31 @@ fn main() -> std::io::Result<()> {
                             }
                         }
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
+                        for elevator in known_elevators_locked.iter(){
+                            let send_successfull = udphandler.send(&elevator.inn_address, &ordercomplete);
+                            if send_successfull {handle_order_completed(&ordercomplete,
+                                Arc::clone(&system_state),
+                                io_channels.light_update_tx.clone()
+                                );
+           }
+                        }
                         if cab_clone.queue.is_empty(){
                         println!("No orders in this elevators queue");
                     }else {
                         
                         
                     }
-                    drop(known_elevators_locked);
-                    
+                        drop(known_elevators_locked);
+                        
 
-                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        for elevator in known_elevators_locked.iter(){
-                            udphandler.send(&elevator.inn_address, &ordercomplete);
-                            udphandler.send(&elevator.inn_address, &msg);
-                        }
-                    known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                    drop(known_elevators_locked);
+                        let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                            for elevator in known_elevators_locked.iter(){
+                                udphandler.send(&elevator.inn_address, &ordercomplete);
+                                udphandler.send(&elevator.inn_address, &msg);
+                            }
+                        known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
+                        drop(known_elevators_locked);
                                   
                     
                 }

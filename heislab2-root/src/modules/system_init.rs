@@ -16,7 +16,6 @@ pub fn boot() -> SystemState {
     //Get config from "boot.txt"
     let (me_id_value, default_master_id) = load_config();
 
-
     //Just a dummy/filler message
     let dummy_data = UdpData::Checksum(1);
     let checksum=calc_checksum(&dummy_data);

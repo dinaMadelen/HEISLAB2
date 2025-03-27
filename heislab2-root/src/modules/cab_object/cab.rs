@@ -31,7 +31,7 @@ pub struct Cab {
     pub current_floor: u8,        // Which floor the elevator was last registerd at      
     pub queue: Vec<Order>,        // The current queue the elevator is servicing
     pub status: Status,          // Current status of the elevator
-    pub direction: i8,            // Current direction the elevator is headed
+    pub direction: u8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
     pub last_lifesign: SystemTime,
     pub alive: bool

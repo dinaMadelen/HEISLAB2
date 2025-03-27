@@ -35,7 +35,7 @@ use crate::modules::cab_object::cab::Cab;
 use crate::modules::slave_functions::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
-use crate::modules::elevator_object::alias_lib::{CAB,DIRN_DOWN, DIRN_STOP};
+use crate::modules::elevator_object::alias_lib::{CAB,DIRN_UP,DIRN_DOWN, DIRN_STOP};
 use crossbeam_channel as cbc;
 
 
@@ -98,15 +98,36 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
             return false;
         }
     };
+    let mut already_handeld=Vec::new();
+    let mut not_handeld=Vec::new();
 
     // Clone necessary data before dropping mutex lock
     let mut elevator = known_elevators_locked[elevator_index].clone();
 
+    //Check if order is already being handeld
+    for order in &new_order {
+        if order.order_type != CAB {
+            //For all alive elevators
+            let alive_elevators: Vec<&Cab> = known_elevators_locked.iter().filter(|e| e.alive).collect();
+            for possible_other_server in alive_elevators{
+                // Elevator is alive, and has a cabcall or similar order, then we assume the order will be handeld by this elevator
+                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type || o.order_type == CAB)}) {
+                    already_handeld.push(order.clone());
+                }
+            }
+        }
+    }
+    
+    // Remove orders that are being handeld
+    if !already_handeld.is_empty() {
+        not_handeld = new_order.into_iter().filter(|o| !already_handeld.contains(o)).collect();
+    }
+    
     // Release known_elevators
     drop(known_elevators_locked);
     
     // Add new orders to elevator
-    for order in new_order {
+    for order in not_handeld {
         elevator.queue.push(order.clone());
     }
 
@@ -282,7 +303,21 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 /// returns `true`, if successfull and `false` if failed.
 ///
 pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
-    for order in orders {
+    
+    // Copy value in mutexes
+    let mut all_orders = state.all_orders.lock().unwrap().clone();
+    let mut known_elevators = state.known_elevators.lock().unwrap().clone();
+
+    // Find all orders currently assigned to any elevator
+    let all_assigned_orders: Vec<Order> = known_elevators.iter().flat_map(|e| e.queue.iter().cloned()).collect();
+
+    // Filter out orders that are already in any elevator's queue
+    let mut missing_orders = all_orders.iter().filter(|o| !all_assigned_orders.contains(o)).cloned().collect();
+
+    let mut combined_orders = orders.clone();
+    combined_orders.append(&mut missing_orders);
+
+    for order in combined_orders {
         
         let mut assigned = false;
 
@@ -422,7 +457,6 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
     // Vec<Cab.ID, Score> Higher score = better alternative
     let mut scores: Vec<(u8, i32)> = Vec::new(); 
 
-
     // Give score to all active elevators
     for elevator in elevators {
         let mut score = 0;
@@ -432,8 +466,8 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 
         // Direction compatibility
         if elevator.status == Status::Moving {
-            if (elevator.direction == 1 && elevator.current_floor < order.floor) || 
-               (elevator.direction == -1 && elevator.current_floor > order.floor) {
+            if (elevator.direction == DIRN_UP && elevator.current_floor < order.floor) || 
+               (elevator.direction == DIRN_UP && elevator.current_floor > order.floor) {
                 // Reward for moving towards the floor
                 score += 10; 
             } else {

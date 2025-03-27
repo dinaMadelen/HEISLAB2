@@ -156,7 +156,7 @@ pub fn cancel_order(slave: &mut Cab, order: Order) -> bool {
 ///
 pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,udp_handler: Arc<UdpHandler>) -> bool {
 
-    let mut worldview_missing = false;
+    let mut worldview_missing_orders = false;
 
     
 
@@ -175,7 +175,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
             //Check if elevator is alive or dead
             if elevator.alive != wv_elevator.alive{
-                worldview_missing = true;
+                worldview_missing_orders = true;
             }
 
             if known_queue == wv_elevator.queue{
@@ -194,15 +194,14 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             // Add missing worldview elevator to active elevators
             println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.id);
             known_elevators_locked.push(wv_elevator.clone());
-            worldview_missing = true;
+            worldview_missing_orders = true;
         }
     
-        drop(known_elevators_locked)
+        drop(known_elevators_locked);
 
     } 
     
-
-    if worldview_missing{
+    if worldview_missing_orders{
 
         let master_id = state.master_id.lock().unwrap().clone();
         let known_elevators_locked = state.known_elevators.lock().unwrap().clone();
@@ -213,7 +212,8 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
         }
     }
 
-    return worldview_missing;
+    return worldview_missing_orders;
+    
 }
 
 /// Missing order in worldview, notify master that there is a missing order/orders

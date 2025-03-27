@@ -4,7 +4,7 @@
 
 use std::fmt;
 use crate::modules::elevator_object::*;
-use alias_lib::DIRN_STOP;
+use alias_lib::{CAB,DIRN_DOWN,DIRN_UP,DIRN_STOP};
 use elevator_init::Elevator;
 use super::cab::Cab;
 use serde::{Deserialize, Serialize};
@@ -51,10 +51,10 @@ impl Cab{
                         self.status = Status::Moving;
                         let first_item_in_queue = self.queue.first().unwrap();
                         if first_item_in_queue.floor < self.current_floor {
-                            self.direction = -1;
+                            self.direction = DIRN_DOWN;
                             
                         } else if first_item_in_queue.floor > self.current_floor{
-                            self.direction = 1;
+                            self.direction = DIRN_UP;
                         }
                     }
 

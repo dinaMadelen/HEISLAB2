@@ -110,7 +110,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
             let alive_elevators: Vec<&Cab> = known_elevators_locked.iter().filter(|e| e.alive).collect();
             for possible_other_server in alive_elevators{
                 // Elevator is alive, and has a cabcall or similar order, then we assume the order will be handeld by this elevator
-                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type)}) {
+                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type)|| order.order_type == CAB}) {
                     already_handeld.push(order.clone());
                 }
             }

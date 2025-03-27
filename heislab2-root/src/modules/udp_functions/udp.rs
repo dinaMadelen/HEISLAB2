@@ -250,7 +250,6 @@ impl UdpHandler {
 
         //Lock socket from udp.handler
         let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
-
         //Set timeout for reciving messages (How long are you willing to wait)
         sock.set_read_timeout(Some(Duration::from_millis(max_wait as u64))).expect("Failed to set timeout for socket");
         let mut buffer = [0; 1024];
@@ -306,7 +305,7 @@ impl UdpHandler {
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
-                    MessageType::NewOnline => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_new_online(&msg_clone, passable_state);}});},
+                    MessageType::NewOnline => {thread::spawn(move ||{handle_new_online(&msg_clone, passable_state)});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
                     MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_order_completed(&msg_clone, passable_state, light_update_tx_clone);}});},
@@ -372,7 +371,6 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             return;
         }
     };
-
  
     //Remove it from all orders
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
@@ -470,6 +468,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
             } 
         }       
     }
+    println!("THIS ORDER UPDATE 2 of 4");
     order_update_tx.send(vec![new_order.clone()]).unwrap();
 }
 
@@ -771,20 +770,22 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     //Lock active elevaotrs
-    let known_elevators_locked = state.known_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
     // Check if elevator is already active
     if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && e.alive) {
+  
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
-    }else if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && !e.alive){
+    }else if let Some(cab) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id && !e.alive){
+        cab.alive=true;
         println!("Elevator ID: is set alive, already known elevator");
+        return true;
     }
 
-    
     //Release active elevators
     drop(known_elevators_locked); 
-
+    
     let msg_elevator = if let UdpData::Cab(cab) = &msg.data {
         cab
     } else {
@@ -817,7 +818,6 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("Added new elevator ID {}.", msg.header.sender_id);
     return true;
 }
-
 
 /// handle_error_worldview
 /// # Arguments:
@@ -1248,7 +1248,7 @@ pub fn confirm_recived(msg:&UdpMsg, state: &Arc<SystemState>) -> bool {
 
         if waiting_for_confirmation.all_confirmed{
             println!("Confirmation checked message with checksum {}, all acks recvied", checksum);
-            //Remove message
+            //Remove messages 
             sent_messages_locked.retain(|m| m.message_hash != checksum);
             return true;
         }else{

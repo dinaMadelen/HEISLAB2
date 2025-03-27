@@ -31,6 +31,8 @@ use crate::modules::udp_functions::udp::{UdpMsg, UdpData, MessageType, UdpHandle
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master_functions::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
+use crate::modules::elevator_object::alias_lib::{CAB};
+
 
 use std::net::SocketAddr;
 use std::thread::sleep;
@@ -337,7 +339,7 @@ pub fn reboot_program(){
 }
 
 
-pub fn send_new_online(state: &SystemState) -> bool {
+pub fn send_new_online(state: &Arc<SystemState>) -> bool {
 
     // Lock 
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
@@ -356,18 +358,23 @@ pub fn send_new_online(state: &SystemState) -> bool {
     return false;
 }
 
-pub fn send_error_offline(state: &SystemState) -> bool {
+pub fn send_error_offline(state: &Arc<SystemState>) -> bool {
 
     // Lock 
-    let mut known_elevators = state.known_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
     //Find this elevator in systemstate
-    if let Some(my_elevator) = known_elevators.iter_mut().find(|e| e.id == state.me_id) {
-        //set dead
+    if let Some(my_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == state.me_id) {
+
+        //Set dead
         my_elevator.alive = false;
         // Create UdpMsg
         let data = UdpData::Cab(my_elevator.clone());
         let msg = make_udp_msg(my_elevator.id, MessageType::ErrorOffline, data);
+        //Empty my queue of all orders taht are not cab
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == state.me_id) {
+            elevator.queue.retain(|o| o.order_type == CAB);
+        }
 
         // Broadcast the message to notify others that this elevator is going offline
         return udp_broadcast(&msg);
@@ -376,6 +383,7 @@ pub fn send_error_offline(state: &SystemState) -> bool {
             "ERROR: Elevator with ID {} not found in known_elevators. Cannot send ErrorOffline, Rebooting",
             state.me_id
         );
+        // Dont know what is wrong, lets just reboot
         reboot_program();
         return false;
     }

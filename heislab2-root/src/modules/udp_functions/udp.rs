@@ -383,9 +383,16 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
 
     }
     let mut all_orders_locked = state.all_orders.lock().unwrap();
+    
+    if completed_order.order_type == CAB{
+        if let Some(index) = all_orders_locked.iter().position(|order| 
+            order.floor == completed_order.floor && order.order_type == CAB) {
+            all_orders_locked.remove(index);}
+    }else{
+        all_orders_locked.retain(|order| {order.floor != completed_order.floor 
+        && (order.order_type != completed_order.order_type)});
+    }
 
-    all_orders_locked.retain(|order| {(order.floor != completed_order.floor 
-    && !(order.order_type == completed_order.order_type || order.order_type == CAB))});
             
 }
 

@@ -67,7 +67,7 @@ fn main() -> std::io::Result<()> {
     let udphandler = Arc::new(init_udp_handler(cab.clone()));
     //-------------INIT UDP HANDLER FINISH-----------------
 
-    //Lock free cab into captivity:(
+    //Lock free cab into captivity :(
     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
     known_elevators_locked.push(cab);
     drop(known_elevators_locked);
@@ -258,7 +258,7 @@ fn main() -> std::io::Result<()> {
                         }
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         if cab_clone.queue.is_empty(){
-                        println!("No things in this elevators queue");
+                        println!("No orders in this elevators queue");
                     }else {
                         
                         
@@ -348,16 +348,29 @@ fn main() -> std::io::Result<()> {
                 println!("Stop button: {:#?}", stop);
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.is_empty(){
-
+                    println!("There are no elevators in the system")
                 }else {
-                    known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
-                    drop(known_elevators_locked);
+                    if known_elevators_locked.get(0).unwrap().status == Status::Stop{
+                        known_elevators_locked.get_mut(0).unwrap().alive=true;
+                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+                        drop(known_elevators_locked);
+                        let mut system_state_clone = Arc::clone(&system_state);
+                        send_new_online(&system_state_clone);
 
-                    //WHO CONTROLS THE LIGHTS
-                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                    known_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
-                    drop(known_elevators_locked);
-                    //broadcast current floor, stop and current queue - this might be redistributed
+                    }else{
+                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
+                        
+                        //WHO CONTROLS THE LIGHTS
+                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                        known_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
+                        drop(known_elevators_locked);
+                        let mut system_state_clone = Arc::clone(&system_state);
+                        send_error_offline(&system_state_clone);
+                    }
+                    
+
+
+
                 }
                 
             },

@@ -345,13 +345,14 @@ fn main() -> std::io::Result<()> {
                 println!("Stop button: {:#?}", stop);
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.is_empty(){
-                    println!("There are no elevators in the system")
+                    println!("There are no elevators in the system");
                 }else {
                     if known_elevators_locked.get(0).unwrap().status == Status::Stop{
                         known_elevators_locked.get_mut(0).unwrap().alive=true;
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
+                        println!("DETTE ER LINJE 355 I MAIN");
                         send_new_online(&system_state_clone);
 
                     }else{

@@ -236,21 +236,29 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.door_rx) -> a => {
                 let door_signal = a.unwrap();
                 if door_signal {
+                    // DENNE HAR BLITT ENDRET KRIS_________________________________
                         elevator.door_light(false);
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
-                        let known_elevators_clone = system_state.known_elevators.lock().unwrap().clone();
-                        for elevator in known_elevators_clone.iter(){
-                                let success = udphandler.send(&elevator.inn_address, &ordercomplete);
-                                udphandler.send(&elevator.inn_address, &msg);
 
-                                if !success {handle_order_completed(&ordercomplete,
+                        let elevator_addresses: Vec<_> = {
+                            let known_elevators = system_state.known_elevators.lock().unwrap();
+                            known_elevators.iter().map(|e| e.inn_address).collect()
+                        };
+.
+                        for addr in elevator_addresses {
+                            let success = udphandler.send(&addr, &ordercomplete);
+                            udphandler.send(&addr, &msg);
+
+                            if !success {
+                                handle_order_completed(&ordercomplete,
                                     Arc::clone(&system_state),
-                                    io_channels.order_update_tx.clone(), 
-                                );}
+                                    io_channels.order_update_tx.clone(),
+                                );
+                            }
                         }
 
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
@@ -267,7 +275,7 @@ fn main() -> std::io::Result<()> {
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
-                    //Broadcast new request
+                    //DETTE ER ENDRA _________________________________
                     let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
                         for elevator in known_elevators_locked.iter(){

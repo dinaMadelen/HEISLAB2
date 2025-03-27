@@ -62,13 +62,13 @@ impl Cab{
          
      
     pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) {
+    if self.status == Status::DoorOpen  {
+        // Update last_served_floor here before starting to move.
+        self.last_served_floor = self.current_floor;
+    }
          // Only attempt to change floors if we are moving or idle and there is at least one order.
     if (self.status == Status::Moving || self.status == Status::Idle) && !self.queue.is_empty() {
         // If we are idle (and about to depart), update last_served_floor.
-        if self.status == Status::Idle {
-            // Update last_served_floor here before starting to move.
-            self.last_served_floor = self.current_floor;
-        }
         
         // The "target" floor for stop decisions:
         // When idle, we use the current floor. When moving, we use the last floor we stopped at.

@@ -110,7 +110,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
             let alive_elevators: Vec<&Cab> = known_elevators_locked.iter().filter(|e| e.alive).collect();
             for possible_other_server in alive_elevators{
                 // Elevator is alive, and has a cabcall or similar order, then we assume the order will be handeld by this elevator
-                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type || o.order_type == CAB)}) {
+                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type)}) {
                     already_handeld.push(order.clone());
                 }
             }
@@ -120,6 +120,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     // Remove orders that are being handeld
     if !already_handeld.is_empty() {
         not_handeld = new_order.into_iter().filter(|o| !already_handeld.contains(o)).collect();
+        println!("Order is covered by other orders, ignoring");
     }else{
         not_handeld = new_order;
     }
@@ -130,6 +131,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     // Add new orders to elevator
     for order in not_handeld {
         elevator.queue.push(order.clone());
+        println!("Added order{} to ID:{}",order.floor,elevator.id);
     }
 
     // Inform rest of system that the order has been added

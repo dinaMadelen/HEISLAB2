@@ -88,8 +88,8 @@ impl Cab{
                     println!("Stopping at floor {} as order in queue matches direction and floor of order in queue.",self.current_floor);
                     elevator.motor_direction(DIRN_STOP);
                     self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
-
-                }else if next_floor > self.current_floor {
+                    
+                }}else if next_floor > self.current_floor {
                     self.set_status(Status::Moving, elevator.clone()); 
                     elevator.motor_direction(DIRN_UP);
                         
@@ -103,7 +103,7 @@ impl Cab{
                 }
 
     
-                } /*else {
+                 /*else {
                     //self.set_status(Status::Idle);
                     elevator.motor_direction(DIRN_STOP);
                 }*/

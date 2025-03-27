@@ -851,12 +851,13 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
         
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+            //Dead elevator gets set to dead and slave
             elevator.alive = false;
+            elevator.role = Role::Slave;
             println!("ID:{} set to offline.", cab.id);
             let mut master_id = state.master_id.lock().unwrap();
             if elevator.id == *master_id{
-                println!("The master died setting new master");
-                //*master_id = 255;
+                println!("The master died, check master failure will handle this");
             }
         } else {
             println!("Elevator ID:{} not found in known elevators.", cab.id);

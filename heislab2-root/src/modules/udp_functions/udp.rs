@@ -384,11 +384,9 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
     }
     let mut all_orders_locked = state.all_orders.lock().unwrap();
 
-    all_orders_locked.retain(|order| {!(order.floor == completed_order.floor 
-    && (order.order_type == completed_order.order_type || order.order_type == CAB))});
-        
-
-    
+    all_orders_locked.retain(|order| {(order.floor != completed_order.floor 
+    && !(order.order_type == completed_order.order_type || order.order_type == CAB))});
+            
 }
 
 

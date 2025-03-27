@@ -354,6 +354,7 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
+                        println!("Det er 357 i main");
                         send_new_online(&system_state_clone);
 
                     }else{

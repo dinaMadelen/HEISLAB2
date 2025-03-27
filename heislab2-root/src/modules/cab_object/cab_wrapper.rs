@@ -1,9 +1,9 @@
-use std::os::unix::net::SocketAddr;
 //---------
 // Imports
 //---------
 // public crates
 use std::sync::Arc;
+use std::os::unix::net::SocketAddr;
 
 // project crates
 use crate::modules::system_status::SystemState;
@@ -35,4 +35,11 @@ pub fn initialize_cab(
 } 
 
 /// Pushes a newly created cab to system state
-pub fn add_cab_to_sys_state()
+pub fn add_cab_to_sys_state(sys_state_clone: Arc<SystemState>, cab: Cab) -> Result<()> {
+    let mut known_elevators_locked = system_state_clone.known_elevators.lock()?;
+    known_elevators_locked.push(cab);
+    drop(known_elevators_locked);
+
+    println!("Cab initialized:\n{:#?}", elevator);
+    Ok(())
+}

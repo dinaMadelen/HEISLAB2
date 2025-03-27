@@ -11,7 +11,7 @@ use crate::modules::system_status::SystemState;
 use crate::modules::udp_functions::udp::{UdpMsg,UdpHeader,UdpData,MessageType};
 use crate::modules::udp_functions::udp::calc_checksum;
 
-pub fn boot() -> Arc<SystemState> {
+pub fn initialize_system_state() -> Arc<SystemState> {
 
     //Get config from "boot.txt"
     let (me_id_value, default_master_id) = load_config();

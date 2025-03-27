@@ -4,6 +4,7 @@ pub mod modules{
         pub mod poll;
         pub mod elevator_test;
         pub mod alias_lib;
+        pub mod elevator_wrapper;
     }
     
     pub mod order_object{
@@ -24,6 +25,7 @@ pub mod modules{
     pub mod master_functions{
         pub mod master;
         pub mod master_test;
+        pub mod master_wrapper;
     }
 
     pub mod slave_functions{

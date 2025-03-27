@@ -1,6 +1,9 @@
 use std::thread::*;
 use std::time::*;
 use crossbeam_channel as cbc;
+use heislab2_root::modules::cab_object::cab_wrapper::add_cab_to_sys_state;
+use heislab2_root::modules::master_functions::master_wrapper;
+use heislab2_root::modules::udp_functions::udp_wrapper::spawn_udp_reciever_thread;
 //use heislab2_root::modules::io::io_init;
 //use heislab2_root::modules::master_functions::master::handle_slave_failure;
 use std::sync::Arc;
@@ -28,6 +31,7 @@ use heislab2_root::modules::io::io_init::*;
 
 use udp_functions::udp_wrapper;
 use heislab2_root::modules::cab_object::cab_wrapper;
+use heislab2_root::modules::elevator_object::elevator_wrapper;
 
 
 fn main() -> std::io::Result<()> {
@@ -55,98 +59,27 @@ fn main() -> std::io::Result<()> {
     // initialize udp handler
     let udphandler = initialize_udp_handler(cab.clone());
 
-    //Lock free cab into captivity :(
-    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    known_elevators_locked.push(cab);
-    drop(known_elevators_locked);
+    // add cab to system state 
+    add_cab_to_sys_state(sysstem_state.clone(), cab)?;
 
-    println!("Cab initialized:\n{:#?}", elevator);
-
-    // --------------INIT CAB FINISH---------------
-    
-    // --------------INIT CHANNELS---------------
+    // initialize io channels
     let io_channels = IoChannels::new(&elevator);
-    // --------------INIT CHANNELS FINISHED---------------
 
-    // --------------INIT RECIEVER THREAD------------------
-    let system_state_clone = Arc::clone(&system_state);
+    // clone system state
+    let system_state_clone = system_state.clone();
     
-    // -------------------SET MASTER ID------------------
-    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    let mut cab_clone = known_elevators_locked.get_mut(0).unwrap().clone();
-    drop(known_elevators_locked);
+    // set master id
+    master_wrapper::set_master_id(system_state.clone())?;
 
-    set_new_master(&mut cab_clone, &system_state);
-    
-    // -------------------SET MASTER ID FINISHED------------------
+    // spawn udp reciever
+    let udphandler_clone = udphandler.clone();
+    spawn_udp_reciever_thread(udphandler.clone(), system_state.clone(), io_channels.clone());
 
-
-    // -------------INIT RECIEVER-----------------
-    let udphandler_clone = Arc::clone(&udphandler);
-    spawn(move||{
-        loop{
-            let handler = Arc::clone(&udphandler_clone); 
-            handler.receive(60000, &system_state_clone, io_channels.order_update_tx.clone(), io_channels.light_update_tx.clone());
-        }
-    });
-    // -------------INIT RECIEVER FINISHED-----------------
-
+    // go down until the elevator finds a floor
+    elevator_wrapper::go_down_until_floor_found(&mut elevator, DIRN_DOWN);
     
-    let dirn = DIRN_DOWN;
-    if elevator.floor_sensor().is_none() {
-        elevator.motor_direction(dirn);
-    }
-    
-    //ELEVATORMONITOR!!!
-    let system_state_clone = Arc::clone(&system_state);
-    let udp_handler_clone = Arc::clone(&udphandler);
-    spawn(move||{
-            loop{
-                fix_multiple_masters_lowest_id_is_master(&system_state_clone);
-                sleep(Duration::from_secs(3));
-                let now = SystemTime::now();
-                
-                // Iterate in reverse order so that removing elements doesn't affect things
-                
-                let  known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-                for i in (0..known_elevators_locked.len()).rev() {
-                    let elevator = &known_elevators_locked[i];
-                    // Only check elevators that are Moving or DoorOpen.
-                    if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
-                        if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
-                            if elapsed >= Duration::from_secs(10) {
-                                let dead_elevator = known_elevators_locked.get(i).unwrap();
-                                println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
-                                for elevator in known_elevators_locked.iter(){
-                                    udp_handler_clone.send(&elevator.inn_address, &msg);
-                                }
-                            }
-                        }
-                    }
-                }
-        
-
-                {   
-                    let known_elevators_locked_clone = known_elevators_locked.clone();
-                    drop(known_elevators_locked);
-                    let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
-                    if system_state_clone.me_id == locked_master_id{
-                        print!("BROADCASTING WORLDVIEW _____________________");
-                        //MASTER WORLDVIEW BROADCAST
-                        let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked_clone.clone()));
-                        for elevator in known_elevators_locked_clone.iter(){
-                            udp_handler_clone.send(&elevator.inn_address, &worldview);
-                        }
-
-                        //master_worldview(&system_state_clone);
-                    }
-                }
-            }
-    });
-    
-    
-    
+    // spawn thread that moniors for dead elevator and broadcasts worldview
+    elevator_wrapper::spawn_elevator_monitor_thread(system_state.clone(), udp_handler.clone());
 
     let master_id_clone = system_state.master_id.lock().unwrap().clone();
     println!("The master is assigned as: {}",master_id_clone);

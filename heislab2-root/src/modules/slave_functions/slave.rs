@@ -252,6 +252,10 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: SocketAddr, state: &
 ///
 pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
     
+    //If i am the master, i am alive
+    if state.me_id == state.master_id.lock().unwrap().clone(){
+        return;
+    }      
 
     //Get time of last lifesign
     let last_lifesign_locked = state.lifesign_master.lock().unwrap();

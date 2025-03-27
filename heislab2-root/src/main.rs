@@ -240,7 +240,7 @@ fn main() -> std::io::Result<()> {
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                        
+
                         if !cab_clone.queue.is_empty(){
                             if cab_clone.current_floor == (cab_clone.queue.get(0)).unwrap().floor{
                                 known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
@@ -253,16 +253,16 @@ fn main() -> std::io::Result<()> {
                         for elevator in known_elevators_locked.iter(){
                             let send_successfull = udphandler.send(&elevator.inn_address, &ordercomplete);
 
-                            if send_successfull {handle_order_completed(&ordercomplete,
+                            if !send_successfull {handle_order_completed(&ordercomplete,
                                 Arc::clone(&system_state),
                                 io_channels.light_update_tx.clone()
                                 );}
-        
                         }
 
                         if cab_clone.queue.is_empty(){
                         println!("No orders in this elevators queue");
                         }
+
                         let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                             for elevator in known_elevators_locked.iter(){

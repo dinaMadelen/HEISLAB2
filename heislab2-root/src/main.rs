@@ -340,7 +340,7 @@ fn main() -> std::io::Result<()> {
                 }else {
                     if known_elevators_locked.get(0).unwrap().status == Status::Stop{
                         known_elevators_locked.get_mut(0).unwrap().alive=true;
-                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
                         send_new_online(&system_state_clone);

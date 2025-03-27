@@ -372,7 +372,6 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             return;
         }
     };
-
  
     //Remove it from all orders
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
@@ -852,10 +851,20 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
             //Dead elevator gets set to dead and slave
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id){
             elevator.alive = false;
             elevator.role = Role::Slave;
             println!("ID:{} set to offline.", cab.id);
-            let mut master_id = state.master_id.lock().unwrap();
+        } else{
+            println!("Elevator ID:{} not found in known elevators.", cab.id);
+        }
+        drop(known_elevators_locked);
+        
+
+        let mut known_elevators_cloned = state.known_elevators.lock().unwrap().clone();
+        println!("The master died setting new master");
+        if let Some(elevator) = known_elevators_cloned.iter_mut().find(|e| e.id == cab.id){
+            let master_id = state.master_id.lock().unwrap();
             if elevator.id == *master_id{
                 println!("The master died, check master failure will handle this");
             }
@@ -870,8 +879,38 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
             set_new_master(known_elevators_locked.get(0).unwrap(), &state);
         };
         */
+                println!("The master died setting new master");
+                
+
+                //SORT THE LIST AND FIND THE CAB ThAT IS ALIVE WITH LOWEST ID TO SET TO MASTER
+                //NOT ALLOWED TO CLONE
+                let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
+                let mut known_alive_elevators: Vec<Cab> = known_elevators_clone.iter().filter(|e| e.alive).cloned().collect();
+                known_alive_elevators.sort_by_key(|cab| cab.id);
+
+                // Make sure to avoid mutex conflict before function
+                drop(master_id);
+
+                //SET NEW MASTER TO THE ONE THAT IS ALIVE WITH LOWEST ID
+                set_new_master(&mut known_alive_elevators.get(0).unwrap().clone(), &state)
+            }
+
+            //IF I AM THE NEW MASTER REDISTRIBUTE ORDERS
+            let master_id_locked = state.master_id.lock().unwrap();
+            if state.me_id == *master_id_locked{
+                let dead_elevators_hall_orders: Vec<Order> = elevator.queue
+                    .iter()
+                    .filter(|order| order.order_type == HALL_UP || order.order_type == HALL_DOWN)
+                    .cloned() // convert &Order to Order
+                    .collect();
+
+                reassign_orders(&dead_elevators_hall_orders, &state, udp_handler, order_update_tx);
+            }
+        }
+        
 
         // Throw away all orders except cab orders from the offline elevator
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
             
             elevator.queue.retain(|o| o.order_type == CAB);
@@ -1186,7 +1225,7 @@ pub fn confirm_recived(msg:&UdpMsg, state: &Arc<SystemState>) -> bool {
 
         if waiting_for_confirmation.all_confirmed{
             println!("Confirmation checked message with checksum {}, all acks recvied", checksum);
-            //Remove message
+            //Remove messages 
             sent_messages_locked.retain(|m| m.message_hash != checksum);
             return true;
         }else{

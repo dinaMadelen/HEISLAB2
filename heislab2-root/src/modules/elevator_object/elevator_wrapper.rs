@@ -6,7 +6,7 @@ use crate::modules::{
     elevator_object::elevator_init::Elevator, 
     io::io_init::IoChannels, 
     udp_functions::udp::*,
-    master_functions::master::fix_multiple_masters_lowest_id_is_master,
+    master_functions::master::fix_master_issues,
     cab_object::elevator_status_functions::*
 };
 use super::elevator_init::SystemState;
@@ -23,8 +23,9 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
     const DEAD_ELEV_THRESHOLD:Duration = Duration::from_secs(10);
         spawn(move||{
                 loop{
-                    fix_multiple_masters_lowest_id_is_master(&system_state_clone);
-                    sleep(Duration::from_secs(3));
+                    // fix_multiple_masters_lowest_id_is_master(&system_state_clone);
+                    fix_master_issues(&system_state_clone, &udp_handler_clone);
+                    sleep(Duration::from_secs(1));
                     let now = SystemTime::now();
                     
                     // get known elevators
@@ -57,22 +58,16 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
                         }
                     }
             
-                    // clone elevator values from the locked mutex
-                    let known_elevators_locked_clone = known_elevators_locked.clone();
-                    
-                    // unlock the mutex
-                    drop(known_elevators_locked);
-
-                    // get master id
-                    let cloned_master_id = system_state_clone.master_id.lock().unwrap().clone();
+                    let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+                    let locked_master_id = system_state_clone.master_id.lock().unwrap();
                     
                     // skip the rest of the loop iteration if elevator is not master
-                    if !(system_state_clone.me_id == cloned_master_id) {continue;} 
+                    if !(system_state_clone.me_id == *locked_master_id) {continue;} 
 
                     // broadcast master worldview
                     print!("BROADCASTING WORLDVIEW _____________________");
-                    let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked_clone.clone()));
-                    for elevator in known_elevators_locked_clone.iter(){
+                    let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked.clone()));
+                    for elevator in known_elevators_locked.iter(){
                         udp_handler_clone.send(&elevator.inn_address, &worldview);
                     }
 

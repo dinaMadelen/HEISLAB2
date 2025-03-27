@@ -185,12 +185,40 @@ pub fn handle_floor_rx(
     drop(known_elevators_locked);
 }
 
+// pub fn handle_stop_rx(
+//     stop_rx_msg: bool,
+//     system_state_clone: Arc<SystemState>,
+//     elevator: & Elevator
+// ) -> () {
+//     println!("Stop button: {:#?}", stop_rx_msg);
+//     let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+//     if known_elevators_locked.is_empty(){
+//         println!("There are no elevators in the system")
+//     }else {
+//         if known_elevators_locked.get(0).unwrap().status == Status::Stop{
+//             known_elevators_locked.get_mut(0).unwrap().alive=true;
+//             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+//             drop(known_elevators_locked);
+//             // let mut system_state_clone = Arc::clone(&system_state_clone);
+//             send_new_online(&system_state_clone);
+//         }else{
+//             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
+//             //WHO CONTROLS THE LIGHTS
+//             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+//             known_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
+//             drop(known_elevators_locked);
+//             // let mut system_state_clone = Arc::clone(&system_state_clone);
+//             send_error_offline(&system_state_clone);
+//         }
+//     }
+// }
+
 pub fn handle_stop_rx(
     stop_rx_msg: bool,
     system_state_clone: Arc<SystemState>,
     elevator: & Elevator
 ) -> () {
-    println!("Stop button: {:#?}", stop_rx_msg);
+    println!("stop_rx_msg button: {:#?}", stop_rx_msg);
     let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
     if known_elevators_locked.is_empty(){
         println!("There are no elevators in the system")
@@ -199,15 +227,17 @@ pub fn handle_stop_rx(
             known_elevators_locked.get_mut(0).unwrap().alive=true;
             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
             drop(known_elevators_locked);
-            // let mut system_state_clone = Arc::clone(&system_state_clone);
+            let mut system_state_clone = Arc::clone(&system_state_clone);
             send_new_online(&system_state_clone);
+
         }else{
             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
+            
             //WHO CONTROLS THE LIGHTS
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             known_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
             drop(known_elevators_locked);
-            // let mut system_state_clone = Arc::clone(&system_state_clone);
+            let mut system_state_clone = Arc::clone(&system_state_clone);
             send_error_offline(&system_state_clone);
         }
     }

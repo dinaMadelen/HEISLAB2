@@ -16,6 +16,7 @@ pub mod modules{
         pub mod elevator_queue_handling;
         pub mod elevator_light_function;
         pub mod elevator_status_functions;
+        pub mod cab_wrapper;
     }
 
     pub mod system_status;
@@ -33,6 +34,7 @@ pub mod modules{
     pub mod udp_functions{
         pub mod udp;
         pub mod udp_test;
+        pub mod udp_wrapper;
     }
     
     pub mod system_init;

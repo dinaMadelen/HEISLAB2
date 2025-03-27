@@ -26,46 +26,34 @@ use udp_functions::udp::UdpData;
 
 use heislab2_root::modules::io::io_init::*;
 
+use udp_functions::udp_wrapper;
+use heislab2_root::modules::cab_object::cab_wrapper;
 
 
 fn main() -> std::io::Result<()> {
-    //--------------INIT ELEVATOR------------
-    // Check boot function in system Init
+    //----------------
+    // Initialization
+    //----------------
+    // initialize elevator
     let elev_num_floors = 4;
     let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
-
-    //Dummy message to have an empty message in current worldview 
-    let boot_worldview =  UdpMsg {
-        header: UdpHeader {
-            sender_id: 0,
-            message_type: MessageType::Worldview,
-            checksum: 0,
-        },
-        data: UdpData::Checksum(0),
-    };
-
     println!("Elevator started:\n{:#?}", elevator);
 
-    //--------------INIT ELEVATOR FINISH------------
+    // create dummy empty worldview message 
+    let boot_worldview = udp_wrapper::create_empty_worldview_msg();
 
-    // --------------INIT CAB---------------
-    let system_state = Arc::new(boot());
+    // initialize system state
+    let system_state = initialize_system_state();
 
-    //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
-    //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
-    
-    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
-    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);
-    
-    let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
-    println!("me id is {}",system_state.me_id);
-    //Make free cab
-    let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
-    cab.turn_off_lights(elevator.clone());
+    // create socket addresses
+    inn_addr = udp_wrapper::create_socket_address(3700, system_state.me_id);
+    out_addr = udp_wrapper::create_socket_address(3800, system_state.me_id);
 
-    //---------------INIT UDP HANDLER-------------------
+    // initialize cab
+    let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone(), 3700, 3800)?;
+
+    // initialize udp handler
     let udphandler = Arc::new(init_udp_handler(cab.clone()));
-    //-------------INIT UDP HANDLER FINISH-----------------
 
     //Lock free cab into captivity :(
     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();

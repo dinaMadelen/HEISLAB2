@@ -106,7 +106,7 @@ impl Cab{
                     }
             } else {
                 if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor){
-                else if next_floor > self.current_floor {
+                if next_floor > self.current_floor {
                     self.set_status(Status::Moving, elevator.clone()); 
                     elevator.motor_direction(DIRN_UP);
                         

@@ -108,82 +108,73 @@ fn main() -> std::io::Result<()> {
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
-    
+    let master_id_clone = system_state.master_id.lock().unwrap().clone();
+    println!("The master is assigned as: {}",master_id_clone);
+
+     //SEND MESSAGE TO EVERYONE THAT YOU ARE ALIVE
+    let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
+    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+    drop(known_elevators_locked);
+   
+    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+    for port in 3701..3705{
+        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
+        udphandler.send(&inn_addr, &msg);
+    }
+    drop(known_elevators_locked);
+    // END SEND I ALIVE
+
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
     let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
             loop{
-                fix_multiple_masters_lowest_id_is_master(&system_state_clone);
-                sleep(Duration::from_secs(3));
+                fix_master_issues(&system_state_clone, &udp_handler_clone);
+
+                sleep(Duration::from_secs(1));
                 let now = SystemTime::now();
                 
                 // Iterate in reverse order so that removing elements doesn't affect things
-                
-                let  known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-                for i in (0..known_elevators_locked.len()).rev() {
-                    let elevator = &known_elevators_locked[i];
-                    // Only check elevators that are Moving or DoorOpen.
-                    if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
-                        if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
-                            if elapsed >= Duration::from_secs(10) {
-                                let dead_elevator = known_elevators_locked.get(i).unwrap();
-                                println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
-                                for elevator in known_elevators_locked.iter(){
-                                    udp_handler_clone.send(&elevator.inn_address, &msg);
+                {
+                    let  known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+                    for i in (0..known_elevators_locked.len()).rev() {
+                        let elevator = &known_elevators_locked[i];
+                        // Only check elevators that are Moving or DoorOpen.
+                        if elevator.status == Status::Moving || elevator.status == Status::DoorOpen {
+                            if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
+                                if elapsed >= Duration::from_secs(10) {
+                                    let dead_elevator = known_elevators_locked.get(i).unwrap();
+                                    println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
+                                    let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
+                                    for elevator in known_elevators_locked.iter(){
+                                        udp_handler_clone.send(&elevator.inn_address, &msg);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-        
+                
 
                 {   
-                    let known_elevators_locked_clone = known_elevators_locked.clone();
-                    drop(known_elevators_locked);
-                    let locked_master_id = system_state_clone.master_id.lock().unwrap().clone();
-                    if system_state_clone.me_id == locked_master_id{
+                    let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+                    let locked_master_id = system_state_clone.master_id.lock().unwrap();
+                    if system_state_clone.me_id == *locked_master_id{
                         print!("BROADCASTING WORLDVIEW _____________________");
                         //MASTER WORLDVIEW BROADCAST
-                        let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked_clone.clone()));
-                        for elevator in known_elevators_locked_clone.iter(){
+                        let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked.clone()));
+                        for elevator in known_elevators_locked.iter(){
                             udp_handler_clone.send(&elevator.inn_address, &worldview);
                         }
-
                         //master_worldview(&system_state_clone);
                     }
                 }
+                sleep(Duration::from_secs(1));
+                check_master_failure(&system_state_clone, &udp_handler_clone);
             }
     });
-    
-    
-    
 
-    let master_id_clone = system_state.master_id.lock().unwrap().clone();
-    println!("The master is assigned as: {}",master_id_clone);
-
-    let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-    drop(known_elevators_locked);
-
-    //SEND MESSAGE TO EVERYONE THAT YOU ARE ALIVE
-    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    for port in 3700..3799{
-        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
-        udphandler.send(&inn_addr, &msg);
-    }
-    drop(known_elevators_locked);
-    
-    
-    //STARTING CHECK MASTER FAILURE THREAD
-    let system_state_clone = Arc::clone(&system_state);
-    let udp_handler_clone = Arc::clone(&udphandler);
-    spawn(move||{
-        check_master_failure(&system_state_clone, &udp_handler_clone);
-    });
-    
 
     //STARTING A LOOP TO MAKE SURE ALL ELEVATORS ALWAYS FINISH THEIR QUEUE
     let system_state_clone = Arc::clone(&system_state);

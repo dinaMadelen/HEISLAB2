@@ -248,13 +248,13 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: SocketAddr, state: &
 ///
 /// Returns - bool - returns `true` if master is dead, repeats untill master is dead.
 ///
-pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
+pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
 
 
     loop{
 
         //Wait 5sec
-        sleep(Duration::from_millis(5000));
+        sleep(Duration::from_millis(3000));
         //Check if this is the master.
         let master_id_locked = state.master_id.lock().unwrap();
         if state.me_id == *master_id_locked{
@@ -271,12 +271,20 @@ pub fn check_master_failure(state: &Arc<SystemState>) -> bool {
         drop(last_lifesign_locked);
 
         //Check age of new lifesign
-        if  last_lifesign.elapsed() > Duration::from_millis(10000) {
-            println!("No lifesign from master recived from Master in last 5sec, electing new master");
-            let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-            set_new_master(known_elevators_locked.get_mut(0).unwrap(),state)
+        if  last_lifesign.elapsed() > Duration::from_millis(3000) {
+            println!("No lifesign from master recived from Master in last 3sec, electing new master");
+            //ITERATE THROUGH ELEVATORS, SET OLD MASTER TO DEAD AND RETRIEVE THE CAB STRUCT THAT WAS THE MASTER
+            let master_id_clone = state.master_id.lock().unwrap().clone();
+
+            //BROADCAST DEATH OF THE MASTER
+            let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
+
+            let dead_elevator: Vec<Cab> = known_elevators_clone.iter().filter(|cab| cab.id == master_id_clone).cloned().collect();
+            let msg = make_udp_msg(state.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.get(0).unwrap().clone()));
+            for elevator in known_elevators_clone.iter(){
+                udp_handler.send(&elevator.inn_address, &msg);
+            }
         }
-        
     }    
 }
 

@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -92,6 +92,8 @@ fn main() -> std::io::Result<()> {
     
     // -------------------SET MASTER ID FINISHED------------------
 
+
+    // -------------INIT RECIEVER-----------------
     let udphandler_clone = Arc::clone(&udphandler);
     spawn(move||{
         loop{
@@ -109,12 +111,10 @@ fn main() -> std::io::Result<()> {
     
     //ELEVATORMONITOR!!!
     let system_state_clone = Arc::clone(&system_state);
-    let elevator_clone = elevator.clone();
     let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
             loop{
                 fix_multiple_masters_lowest_id_is_master(&system_state_clone);
-                
                 sleep(Duration::from_secs(3));
                 let now = SystemTime::now();
                 
@@ -170,17 +170,18 @@ fn main() -> std::io::Result<()> {
     //SEND MESSAGE TO EVERYONE THAT YOU ARE ALIVE
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    for port in 3701..3705{
+    for port in 3700..3799{
         let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
         udphandler.send(&inn_addr, &msg);
     }
     drop(known_elevators_locked);
     
     
-    //STARTING CHECK MASTER FAILURE
+    //STARTING CHECK MASTER FAILURE THREAD
     let system_state_clone = Arc::clone(&system_state);
+    let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
-        check_master_failure(&system_state_clone);
+        check_master_failure(&system_state_clone, &udp_handler_clone);
     });
     
 
@@ -207,15 +208,7 @@ fn main() -> std::io::Result<()> {
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
-            /* 
-            recv(world_view_update_rx) -> a => {
-                let world_view = a.unwrap();
-                //Add to own wv then ack
-                
-                let msg = make_udp_msg(cab.id, MessageType::Ack, UdpData::None);
-                udp_broadcast(&msg);
-            },
-            */
+            
             recv(io_channels.light_update_rx) -> a => {
                 //Turn onn all lights in own queue
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();

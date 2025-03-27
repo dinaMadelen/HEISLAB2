@@ -58,8 +58,8 @@ use std::thread;
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
-use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_multiple_masters_lowest_id_is_master,Role,correct_master_worldview, reassign_orders};
+use crate::modules::cab_object::cab::{Cab, Status};
+use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_multiple_masters_lowest_id_is_master,Role,correct_master_worldview, reassign_orders, self};
 use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure, set_new_master};
 use crate::modules::system_status::WaitingConfirmation;
 
@@ -848,31 +848,54 @@ pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &
 
     if let UdpData::Cab(cab) = &msg.data {
 
-        
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
+        if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id){
             elevator.alive = false;
             println!("ID:{} set to offline.", cab.id);
-            let mut master_id = state.master_id.lock().unwrap();
-            if elevator.id == *master_id{
-                println!("The master died setting new master");
-                //*master_id = 255;
-            }
-        } else {
+        } else{
             println!("Elevator ID:{} not found in known elevators.", cab.id);
         }
+        drop(known_elevators_locked);
+        
 
-        //DET UNDER SKAL VÆRE NOE SKJEKK
-        /* 
-        if let master_id = state.master_id.lock().unwrap().clone() == 255{
-            let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
-            set_new_master(known_elevators_locked.get(0).unwrap(), &state);
-        };
-        */
+        let mut known_elevators_cloned = state.known_elevators.lock().unwrap().clone();
+        println!("The master died setting new master");
+        if let Some(elevator) = known_elevators_cloned.iter_mut().find(|e| e.id == cab.id){
+            let master_id = state.master_id.lock().unwrap();
+            if elevator.id == *master_id{
+                println!("The master died setting new master");
+                
+
+                //SORT THE LIST AND FIND THE CAB ThAT IS ALIVE WITH LOWEST ID TO SET TO MASTER
+                //NOT ALLOWED TO CLONE
+                let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
+                let mut known_alive_elevators: Vec<Cab> = known_elevators_clone.iter().filter(|e| e.alive).cloned().collect();
+                known_alive_elevators.sort_by_key(|cab| cab.id);
+
+                // Make sure to avoid mutex conflict before function
+                drop(master_id);
+
+                //SET NEW MASTER TO THE ONE THAT IS ALIVE WITH LOWEST ID
+                set_new_master(&mut known_alive_elevators.get(0).unwrap().clone(), &state)
+            }
+
+            //IF I AM THE NEW MASTER REDISTRIBUTE ORDERS
+            let master_id_locked = state.master_id.lock().unwrap();
+            if state.me_id == *master_id_locked{
+                let dead_elevators_hall_orders: Vec<Order> = elevator.queue
+                    .iter()
+                    .filter(|order| order.order_type == HALL_UP || order.order_type == HALL_DOWN)
+                    .cloned() // convert &Order to Order
+                    .collect();
+
+                reassign_orders(&dead_elevators_hall_orders, &state, udp_handler, order_update_tx);
+            }
+        }
+        
 
         // Throw away all orders except cab orders from the offline elevator
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) {
-            
             elevator.queue.retain(|o| o.order_type == CAB);
         }
 

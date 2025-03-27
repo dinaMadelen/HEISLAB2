@@ -755,17 +755,18 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("New elevator online, ID: {}", msg.header.sender_id);
 
     //Lock active elevaotrs
-    let known_elevators_locked = state.known_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
     // Check if elevator is already active
     if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && e.alive) {
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
-    }else if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && !e.alive){
+    }else if let Some(cab) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id && !e.alive){
+        cab.alive=true;
+        return true;
         println!("Elevator ID: is set alive, already known elevator");
     }
 
-    
     //Release active elevators
     drop(known_elevators_locked); 
 
@@ -801,7 +802,6 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
     println!("Added new elevator ID {}.", msg.header.sender_id);
     return true;
 }
-
 
 /// handle_error_worldview
 /// # Arguments:

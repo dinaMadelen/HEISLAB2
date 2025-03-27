@@ -32,7 +32,7 @@ use crate::modules::master_functions::master;
 use crate::modules::udp_functions::udp::{UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::cab_object::elevator_status_functions::Status;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::slave_functions::slave::reboot_program;
+use crate::modules::slave_functions::slave::{reboot_program, set_new_master};
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
 use crate::modules::elevator_object::alias_lib::{CAB,DIRN_DOWN, DIRN_STOP};
@@ -477,32 +477,91 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 ///
 /// Returns - Some(bool) - returns false if the ID is its own, returns true if it keeps the master if the ID is higher than the sender, reboots if it is lower.
 ///
-pub fn fix_multiple_masters_lowest_id_is_master(state: &Arc<SystemState>) {
-    // Lock the known_elevators so we can mutate them.
-    let mut known_elevators = state.known_elevators.lock().unwrap();
-    // Gather references to all elevators that are currently Master.
-    let mut masters: Vec<&mut Cab> = known_elevators.iter_mut().filter(|cab| cab.role == Role::Master).collect();
+pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
+    // Make lowest id alive the master id
+    {
+        // Lock master_id first.
+        let mut master_id_guard = state.master_id.lock().unwrap();
+        // Then lock known_elevators.
+        let mut known_elevators = state.known_elevators.lock().unwrap();
 
-    // If more than one master is found
-    if masters.len() > 1 {
-        masters.sort_by_key(|cab| cab.id);
-        let chosen_master_id = masters[0].id;
-        println!(
-            "Multiple masters detected. Keeping elevator {} as master.",
-            chosen_master_id
-        );
-        let mut master_id = state.master_id.lock().unwrap();
-        *master_id = chosen_master_id;
+        // Gather mutable references to all elevators marked as Master.
+        let mut masters: Vec<&mut Cab> = known_elevators
+            .iter_mut()
+            .filter(|cab| cab.role == Role::Master)
+            .collect();
 
-        // all other masters to slave.
-        for cab in masters.iter_mut().skip(1) {
-            println!("Reassigning elevator {} from master to slave.", cab.id);
-            cab.role = Role::Slave;
+        if masters.len() > 1 {
+            // Multiple masters found.
+            masters.sort_by_key(|cab| cab.id);
+            let chosen_master = &masters[0];
+            let chosen_master_id = chosen_master.id;
+            println!(
+                "Multiple masters detected. Keeping elevator {} as master.",
+                chosen_master_id
+            );
+
+            // Set the shared master id.
+            *master_id_guard = chosen_master_id;
+
+            // Reassign all other masters to slave.
+            for cab in masters.iter_mut().skip(1) {
+                println!("Reassigning elevator {} from master to slave.", cab.id);
+                cab.role = Role::Slave;
+            }
+        } else if masters.is_empty() {
+            // No elevator is master.
+            println!("No masters alive, setting new master.");
+            // Find all alive elevators.
+            let mut alive_elevators: Vec<&mut Cab> = known_elevators
+                .iter_mut()
+                .filter(|cab| cab.alive)
+                .collect();
+            alive_elevators.sort_by_key(|cab| cab.id);
+            if let Some(new_master) = alive_elevators.first_mut() {
+                new_master.role = Role::Master;
+                *master_id_guard = new_master.id;
+            }
+        } else {
+            // Exactly one master exists.
+            println!("No multiple-master conflict detected.");
         }
-    } else {
-        // Either zero or exactly one master, so no conflict.
-        println!("No multiple-master conflict detected.");
+
+        // Broadcast the current master.
+        if let Some(master_elevator) = known_elevators
+            .iter()
+            .find(|cab| cab.id == *master_id_guard)
+        {
+            let msg = make_udp_msg(
+                state.me_id,
+                MessageType::NewMaster,
+                UdpData::Cab(master_elevator.clone()),
+            );
+            for elevator in known_elevators.iter() {
+                udp_handler.send(&elevator.inn_address, &msg);
+            }
+        }
+        // Both locks (master_id and known_elevators) are released here.
     }
 
-    // Lock is dropped here automatically when `known_elevators` goes out of scope.
+    // Ensure our own role is correct.
+    {
+        let master_id = *state.master_id.lock().unwrap();
+        let mut known_elevators = state.known_elevators.lock().unwrap();
+        if state.me_id == master_id {
+            // Make sure the elevator with the lowest id in the shared state is set as master.
+            if let Some(elevator) = known_elevators.iter_mut().min_by_key(|e| e.id) {
+                elevator.role = Role::Master;
+                let msg = make_udp_msg(
+                    state.me_id,
+                    MessageType::NewMaster,
+                    UdpData::Cab(elevator.clone()),
+                );
+                for elevator in known_elevators.iter() {
+                    udp_handler.send(&elevator.inn_address, &msg);
+                }
+            }
+        }
+        // Lock is released here.
+    }
 }

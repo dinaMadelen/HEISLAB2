@@ -185,7 +185,7 @@ fn main() -> std::io::Result<()> {
     let obstruction_tx_clone = io_channels.obstruction_rx.clone();
     spawn(move|| {
         loop{
-            sleep(Duration::from_secs(1));
+            sleep(Duration::from_millis(100));
             
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){

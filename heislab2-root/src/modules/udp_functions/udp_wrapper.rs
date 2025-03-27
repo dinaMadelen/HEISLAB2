@@ -49,3 +49,22 @@ pub fn spawn_udp_reciever_thread(udphandler_clone: Arc<UdpHandler>, system_state
         }
     });
 }
+
+pub fn broadcast_alive_msg(udphandler_clone: Arc<UdpHandler>, system_state_clone: Arc<SystemState>) -> () {
+    // get known elevators
+    let  known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+    // get cab
+    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+
+    // create message 
+    let msg = make_udp_msg(system_state_clone.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+    // define port range
+    let start_port: u16 = 3700;
+    let end_port: u16 = 3799;
+    let port_range = start_port..end_port;
+    // broadcast message at specified port range
+    for port in port_range{
+        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
+        udphandler_clone.send(&inn_addr, &msg);
+    }
+}

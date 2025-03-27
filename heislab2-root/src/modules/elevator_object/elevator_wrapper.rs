@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::modules::elevator_object::elevator_init::Elevator;
+use crate::modules::{elevator_object::elevator_init::Elevator, io::io_init::IoChannels};
 use super::elevator_init::SystemState;
 
 /// Goes down until a floor is found
@@ -70,4 +70,37 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
 
                 }
         });
+}
+
+pub fn spawn_queue_finish_thread(
+    system_state_clone: Arc<SystemState>, 
+    udp_handler_clone: Arc<UdpHandler>, 
+    elevator_clone: Elevator,
+    io_channels_clone: IoChannels
+) -> () {
+    // clone relevant io channels
+    let door_tx_clone = io_channels_clone.door_tx;
+    let obstruction_tx_clone = io_channels_clone.obstruction_rx;
+    spawn(move|| {
+        // loop forever
+        loop{
+            sleep(Duration::from_secs(1));
+            
+            // get known elevators
+            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+            // skip rest of loop iteration if the queue is empty
+            if (known_elevators_locked.get_mut(0).unwrap().queue.is_empty()){continue;}
+
+            // go to next floor
+            known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
+            
+            // turn on lights in queue
+            known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator_clone.clone());
+
+            // print status
+            known_elevators_locked.get_mut(0).unwrap().print_status();
+            
+            drop(known_elevators_locked);
+        }
+    });
 }

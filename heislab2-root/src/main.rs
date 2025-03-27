@@ -29,9 +29,9 @@ use udp_functions::udp::UdpData;
 
 use heislab2_root::modules::io::io_init::*;
 
-use udp_functions::udp_wrapper;
-use heislab2_root::modules::cab_object::cab_wrapper;
-use heislab2_root::modules::elevator_object::elevator_wrapper;
+use heislab2_root::modules::udp_functions::udp_wrapper::*;
+use heislab2_root::modules::elevator_object::elevator_wrapper::*;
+use heislab2_root::modules::cab_object::cab_wrapper::*;
 
 
 fn main() -> std::io::Result<()> {
@@ -50,8 +50,8 @@ fn main() -> std::io::Result<()> {
     let system_state = initialize_system_state();
 
     // create socket addresses
-    inn_addr = udp_wrapper::create_socket_address(3700, system_state.me_id);
-    out_addr = udp_wrapper::create_socket_address(3800, system_state.me_id);
+    let inn_addr = udp_wrapper::create_socket_address(3700, system_state.me_id);
+    let out_addr = udp_wrapper::create_socket_address(3800, system_state.me_id);
 
     // initialize cab
     let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone(), 3700, 3800)?;
@@ -72,8 +72,7 @@ fn main() -> std::io::Result<()> {
     master_wrapper::set_master_id(system_state.clone())?;
 
     // spawn udp reciever
-    let udphandler_clone = udphandler.clone();
-    spawn_udp_reciever_thread(udphandler.clone(), system_state.clone(), io_channels.clone());
+    udp_wrapper::spawn_udp_reciever_thread(udphandler.clone(), system_state.clone(), io_channels.clone());
 
     // go down until the elevator finds a floor
     elevator_wrapper::go_down_until_floor_found(&mut elevator, DIRN_DOWN);
@@ -81,50 +80,22 @@ fn main() -> std::io::Result<()> {
     // spawn thread that moniors for dead elevator and broadcasts worldview
     elevator_wrapper::spawn_elevator_monitor_thread(system_state.clone(), udp_handler.clone());
 
-    let master_id_clone = system_state.master_id.lock().unwrap().clone();
-    println!("The master is assigned as: {}",master_id_clone);
+    // print master ID
+    master_wrapper::print_master_id(system_state.clone());
 
-    let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-    drop(known_elevators_locked);
+    // broadcast i am alive message
+    udp_wrapper::broadcast_alive_msg(udphandler.clone(), system_state.clone());
 
-    //SEND MESSAGE TO EVERYONE THAT YOU ARE ALIVE
-    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    for port in 3700..3799{
-        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
-        udphandler.send(&inn_addr, &msg);
-    }
-    drop(known_elevators_locked);
+    // spawn thread that monitors for master failure
+    master_wrapper::spawn_master_failure_check_thread(system_state.clone(), udp_handler.clone());
     
-    
-    //STARTING CHECK MASTER FAILURE THREAD
-    let system_state_clone = Arc::clone(&system_state);
-    let udp_handler_clone = Arc::clone(&udphandler);
-    spawn(move||{
-        check_master_failure(&system_state_clone, &udp_handler_clone);
-    });
-    
-
-    //STARTING A LOOP TO MAKE SURE ALL ELEVATORS ALWAYS FINISH THEIR QUEUE
-    let system_state_clone = Arc::clone(&system_state);
-    let elevator_clone = elevator.clone();
-    let door_tx_clone = io_channels.door_tx.clone();
-    let obstruction_tx_clone = io_channels.obstruction_rx.clone();
-    spawn(move|| {
-        loop{
-            sleep(Duration::from_secs(1));
-            
-            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-            if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
-                known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator_clone.clone());
-            }
-
-            known_elevators_locked.get_mut(0).unwrap().print_status();
-            drop(known_elevators_locked);
-        }
-    });
+    // spawn a loop that makes sure that the elevators alway finish their queues 
+    elevator_wrapper::spawn_queue_finish_thread(
+        system_state.clone(),
+        udphandler.clone(),
+        elevator.clone(),
+        io_channels.clone()
+    );
 
     // ------------------ MAIN LOOP ---------------------
     loop {

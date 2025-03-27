@@ -19,3 +19,14 @@ pub fn set_master_id(system_state_clone: Arc<SystemState>) -> Result<()> {
 
     Ok(())
 }
+
+pub fn print_master_id(system_state_clone: Arc<SystemState>) -> () {
+    let master_id_clone = system_state_clone.master_id.lock().unwrap().clone();
+    println!("The master is assigned as: {}",master_id_clone);
+}
+
+pub fn spawn_master_failure_check_thread(system_state_clone: Arc<SystemState>, udp_handler_clone: Arc<UdpHandler>) -> () {
+        spawn(move||{
+            check_master_failure(&system_state_clone, &udp_handler_clone);
+        });
+}

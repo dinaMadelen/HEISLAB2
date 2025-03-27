@@ -1,22 +1,17 @@
-//--------------------
-// Module description
-//--------------------
-//! This module contains functions that wrap different UDP functionality
-
-
-//---------
-// Imports
-//---------
 // public crates
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::{
+    net::{SocketAddr, IpAddr, Ipv4Addr},
+    thread::*,
+    sync::Arc
+};
 
 // project crates
-use crate::modules::{io::io_init::IoChannels, udp_functions::udp::*};
+use crate::modules::{
+    io::io_init::IoChannels, 
+    udp_functions::udp::*,
+    system_status::SystemState
+};
 
-
-//-----------
-// Functions
-//-----------
 /// Generates a UDP message contaiting a empty worldview
 pub fn create_empty_worldview_msg() -> UdpMsg {
     UdpMsg {
@@ -45,7 +40,7 @@ pub fn spawn_udp_reciever_thread(udphandler_clone: Arc<UdpHandler>, system_state
     spawn(move||{
         loop{
             let handler = udphandler_clone.clone(); 
-            handler.receive(60000, &system_state_clone, io_channels_clone.order_update_tx, io_channels_clone.light_update_tx);
+            handler.receive(60000, &system_state_clone, io_channels_clone.order_update_tx.clone(), io_channels_clone.light_update_tx.clone());
         }
     });
 }

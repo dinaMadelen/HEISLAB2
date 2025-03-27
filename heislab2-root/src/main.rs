@@ -1,98 +1,68 @@
-use std::thread::*;
-use std::time::*;
+use std::{
+    thread::*,
+    time::*,
+    sync::Arc,
+    net::{SocketAddr, IpAddr, Ipv4Addr}
+};
+
 use crossbeam_channel as cbc;
-use heislab2_root::modules::cab_object::cab_wrapper::add_cab_to_sys_state;
-use heislab2_root::modules::master_functions::master_wrapper;
-use heislab2_root::modules::udp_functions::udp_wrapper::spawn_udp_reciever_thread;
-//use heislab2_root::modules::io::io_init;
-//use heislab2_root::modules::master_functions::master::handle_slave_failure;
-use std::sync::Arc;
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
-use heislab2_root::modules::elevator_object::*;
-use alias_lib::{DIRN_DOWN, DIRN_STOP};
-use elevator_init::Elevator;
-use heislab2_root::modules::*;
-
-
-use cab_object::*;
-use cab::Cab;
-use elevator_status_functions::Status;
-use order_object::order_init::Order;
-use slave_functions::slave::*;
-use master_functions::master::*;
-use system_init::*;
-
-
-use heislab2_root::modules::udp_functions::udp::*;
-use udp_functions::udp::UdpData;
-
-use heislab2_root::modules::io::io_init::*;
-
-use heislab2_root::modules::udp_functions::udp_wrapper::*;
-use heislab2_root::modules::elevator_object::elevator_wrapper::*;
-use heislab2_root::modules::cab_object::cab_wrapper::*;
+use heislab2_root::modules::{
+    udp_functions::{
+        udp::*, 
+        udp_wrapper::*
+    },
+    cab_object::{
+        cab_wrapper::*,
+        elevator_status_functions::Status,
+    }, 
+    io::io_init::*,
+    system_init::*,
+    master_functions::{
+        master::*,
+        master_wrapper::*
+    },
+    slave_functions::slave::*,
+    elevator_object::{
+        alias_lib::DIRN_DOWN,
+        elevator_init::Elevator,
+        elevator_wrapper::*
+    },
+    order_object::order_init::Order
+};
 
 
 fn main() -> std::io::Result<()> {
-    //----------------
-    // Initialization
-    //----------------
     // initialize elevator
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
-    println!("Elevator started:\n{:#?}", elevator);
+    let elev_server_port = 15_657;
+    let elevator = initialize_elevator(elev_server_port, elev_num_floors);
 
     // create dummy empty worldview message 
-    let boot_worldview = udp_wrapper::create_empty_worldview_msg();
+    // let boot_worldview = udp_wrapper::create_empty_worldview_msg();
 
-    // initialize system state
     let system_state = initialize_system_state();
 
     // create socket addresses
-    let inn_addr = udp_wrapper::create_socket_address(3700, system_state.me_id);
-    let out_addr = udp_wrapper::create_socket_address(3800, system_state.me_id);
+    let inn_addr = create_socket_address(3700, system_state.me_id);
+    let out_addr = create_socket_address(3800, system_state.me_id);
 
-    // initialize cab
-    let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone(), 3700, 3800)?;
-
-    // initialize udp handler
+    // initialize cab and support systems
+    let cab = initialize_cab(elev_num_floors, &system_state, elevator.clone(), inn_addr, out_addr)?;
     let udphandler = initialize_udp_handler(cab.clone());
-
-    // add cab to system state 
-    add_cab_to_sys_state(sysstem_state.clone(), cab)?;
-
-    // initialize io channels
     let io_channels = IoChannels::new(&elevator);
 
-    // clone system state
-    let system_state_clone = system_state.clone();
-    
-    // set master id
-    master_wrapper::set_master_id(system_state.clone())?;
-
-    // spawn udp reciever
-    udp_wrapper::spawn_udp_reciever_thread(udphandler.clone(), system_state.clone(), io_channels.clone());
-
-    // go down until the elevator finds a floor
-    elevator_wrapper::go_down_until_floor_found(&mut elevator, DIRN_DOWN);
-    
-    // spawn thread that moniors for dead elevator and broadcasts worldview
-    elevator_wrapper::spawn_elevator_monitor_thread(system_state.clone(), udp_handler.clone());
-
-    // print master ID
-    master_wrapper::print_master_id(system_state.clone());
-
-    // broadcast i am alive message
-    udp_wrapper::broadcast_alive_msg(udphandler.clone(), system_state.clone());
-
-    // spawn thread that monitors for master failure
-    master_wrapper::spawn_master_failure_check_thread(system_state.clone(), udp_handler.clone());
-    
-    // spawn a loop that makes sure that the elevators alway finish their queues 
-    elevator_wrapper::spawn_queue_finish_thread(
+    // initial setup work
+    add_cab_to_sys_state(system_state.clone(), cab);
+    set_master_id(system_state.clone());
+    spawn_udp_reciever_thread(udphandler.clone(), system_state.clone(), io_channels.clone());
+    go_down_until_floor_found(&elevator, DIRN_DOWN);
+    spawn_elevator_monitor_thread(system_state.clone(), udphandler.clone());
+    print_master_id(system_state.clone());
+    broadcast_alive_msg(udphandler.clone(), system_state.clone());
+    spawn_master_failure_check_thread(system_state.clone(), udphandler.clone());
+    spawn_queue_finish_thread(
         system_state.clone(),
-        udphandler.clone(),
         elevator.clone(),
         io_channels.clone()
     );

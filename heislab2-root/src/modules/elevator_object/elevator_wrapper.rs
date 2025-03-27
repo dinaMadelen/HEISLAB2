@@ -1,10 +1,18 @@
-use std::time::Duration;
+use std::time::*;
+use std::sync::Arc;
+use std::thread::*;
 
-use crate::modules::{elevator_object::elevator_init::Elevator, io::io_init::IoChannels};
+use crate::modules::{
+    elevator_object::elevator_init::Elevator, 
+    io::io_init::IoChannels, 
+    udp_functions::udp::*,
+    master_functions::master::fix_multiple_masters_lowest_id_is_master,
+    cab_object::elevator_status_functions::*
+};
 use super::elevator_init::SystemState;
 
 /// Goes down until a floor is found
-pub fn go_down_until_floor_found(elevator: &mut Elevator, dirn: u8) -> () {
+pub fn go_down_until_floor_found(elevator: &Elevator, dirn: u8) -> () {
     if elevator.floor_sensor().is_none() {
         elevator.motor_direction(dirn);
     }
@@ -35,7 +43,7 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
                         // only executes if duration since last lifesign is fetched
                         if let Ok(elapsed) = now.duration_since(elevator.last_lifesign) {
                             // if time elapsed is below threshold, skip current iteration
-                            if (elapsed < DEAD_ELEV_THRESHOLD) {continue;} 
+                            if elapsed < DEAD_ELEV_THRESHOLD {continue;} 
                             
                             // get dead elevator
                             let dead_elevator = known_elevators_locked.get(elev_index).unwrap();
@@ -74,7 +82,6 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
 
 pub fn spawn_queue_finish_thread(
     system_state_clone: Arc<SystemState>, 
-    udp_handler_clone: Arc<UdpHandler>, 
     elevator_clone: Elevator,
     io_channels_clone: IoChannels
 ) -> () {
@@ -89,7 +96,7 @@ pub fn spawn_queue_finish_thread(
             // get known elevators
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             // skip rest of loop iteration if the queue is empty
-            if (known_elevators_locked.get_mut(0).unwrap().queue.is_empty()){continue;}
+            if known_elevators_locked.get_mut(0).unwrap().queue.is_empty() {continue;}
 
             // go to next floor
             known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
@@ -103,4 +110,11 @@ pub fn spawn_queue_finish_thread(
             drop(known_elevators_locked);
         }
     });
+}
+
+pub fn initialize_elevator(port: i32, elev_num_floors: u8) -> Elevator {
+    let elev_server_port = format!("localhost:{}", port);
+    let elevator = Elevator::init(&elev_server_port, elev_num_floors).unwrap();
+    println!("Elevator started:\n{:#?}", elevator);
+    elevator
 }

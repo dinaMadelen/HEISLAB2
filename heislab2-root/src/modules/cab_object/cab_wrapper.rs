@@ -3,12 +3,11 @@
 //---------
 // public crates
 use std::sync::Arc;
-use std::os::unix::net::SocketAddr;
+use std::net::SocketAddr;
 
 // project crates
 use crate::modules::system_status::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::udp_functions::udp_wrapper;
 use crate::modules::elevator_object::elevator_init::Elevator;
 
 
@@ -35,11 +34,11 @@ pub fn initialize_cab(
 } 
 
 /// Pushes a newly created cab to system state
-pub fn add_cab_to_sys_state(sys_state_clone: Arc<SystemState>, cab: Cab) -> Result<()> {
-    let mut known_elevators_locked = system_state_clone.known_elevators.lock()?;
+pub fn add_cab_to_sys_state(system_state_clone: Arc<SystemState>, cab: Cab) -> () {
+    let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
     known_elevators_locked.push(cab);
     drop(known_elevators_locked);
 
-    println!("Cab initialized:\n{:#?}", elevator);
-    Ok(())
+    // println!("Cab initialized:\n{:#?}", elevator);
+    println!("Cab initialized");
 }

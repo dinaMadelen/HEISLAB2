@@ -2,22 +2,27 @@
 // Imports
 //---------
 // public crates
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    thread::*
+};
 
 // project crates
-use crate::modules::system_status::SystemState;
-use crate::modules::cab_object::cab::Cab;
-use crate::modules::udp_functions::udp_wrapper;
-use crate::modules::elevator_object::elevator_init::Elevator;
+use crate::modules::{
+    system_status::SystemState,
+    slave_functions::slave::{
+        set_new_master, 
+        check_master_failure
+    },
+    udp_functions::udp::UdpHandler
+};
 
-pub fn set_master_id(system_state_clone: Arc<SystemState>) -> Result<()> {
-    let mut known_elevators_locked = system_state_clone.known_elevators.lock()?;
+pub fn set_master_id(system_state_clone: Arc<SystemState>) -> () {
+    let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
     let mut cab_clone = known_elevators_locked.get_mut(0).unwrap().clone();
     drop(known_elevators_locked);
 
     set_new_master(&mut cab_clone, &system_state_clone);
-
-    Ok(())
 }
 
 pub fn print_master_id(system_state_clone: Arc<SystemState>) -> () {

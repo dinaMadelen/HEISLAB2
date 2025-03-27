@@ -95,10 +95,12 @@ fn main() -> std::io::Result<()> {
 
     // -------------INIT RECIEVER-----------------
     let udphandler_clone = Arc::clone(&udphandler);
+    let order_update_clone = io_channels.order_update_tx.clone();
+    let light_update_clone = io_channels.light_update_tx.clone();
     spawn(move||{
         loop{
             let handler = Arc::clone(&udphandler_clone); 
-            handler.receive(60000, &system_state_clone, io_channels.order_update_tx.clone(), io_channels.light_update_tx.clone());
+            handler.receive(60000, &system_state_clone, order_update_clone.clone(), light_update_clone.clone());
         }
     });
     // -------------INIT RECIEVER FINISHED-----------------
@@ -274,11 +276,17 @@ fn main() -> std::io::Result<()> {
                     let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         for elevator in known_elevators_locked.iter(){
-                            udphandler.send(&elevator.inn_address, &msg);
+                        
+                            let send_successfull = udphandler.send(&elevator.inn_address, &msg);
+
+                            if !send_successfull {handle_new_request(&msg,
+                                                                     Arc::clone(&system_state),
+                                                                     Arc::clone(&udphandler), 
+                                                                     io_channels.order_update_tx.clone(), 
+                                                                     io_channels.light_update_tx.clone());
+                                                }
                         }
                     drop(known_elevators_locked);
-                   
-
                 }
 
                 //cab.turn_on_queue_lights(elevator.clone());

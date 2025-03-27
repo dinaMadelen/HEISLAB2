@@ -100,6 +100,8 @@ impl Cab{
                 } else if next_floor == self.current_floor{
                     elevator.motor_direction(DIRN_STOP);  
                     self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
+                } else if self.queue.is_empty(){
+                    elevator.motor_direction(DIRN_STOP);
                 }
 
     

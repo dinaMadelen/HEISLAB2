@@ -541,6 +541,11 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 ///
 pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg,udp_handler: Arc<UdpHandler>) {
 
+    // My worldview
+    if state.me_id == msg.header.sender_id{
+        return;
+    }
+
     println!("Updating worldview...");
 
     //Update last lifesign and last worldview

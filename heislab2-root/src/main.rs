@@ -165,11 +165,7 @@ fn main() -> std::io::Result<()> {
                     if system_state_clone.me_id == *locked_master_id{
                         print!("BROADCASTING WORLDVIEW _____________________");
                         //MASTER WORLDVIEW BROADCAST
-                        let worldview = make_udp_msg(system_state_clone.me_id, MessageType::Worldview, UdpData::Cabs(known_elevators_locked.clone()));
-                        for elevator in known_elevators_locked.iter(){
-                            udp_handler_clone.send(&elevator.inn_address, &worldview);
-                        }
-                        //master_worldview(&system_state_clone);
+                        master_worldview(&system_state_clone);
                     }
                 }
                 sleep(Duration::from_secs(1));

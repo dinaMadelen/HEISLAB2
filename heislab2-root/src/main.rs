@@ -274,7 +274,7 @@ fn main() -> std::io::Result<()> {
                 {   
                     //Broadcast new request
                     let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
-                    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                    let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
                         for elevator in known_elevators_locked.iter(){
                         
                             let send_successfull = udphandler.send(&elevator.inn_address, &msg);

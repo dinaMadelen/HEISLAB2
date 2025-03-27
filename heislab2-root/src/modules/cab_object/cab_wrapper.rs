@@ -33,3 +33,6 @@ pub fn initialize_cab(
 
     Ok(cab)
 } 
+
+/// Pushes a newly created cab to system state
+pub fn add_cab_to_sys_state()

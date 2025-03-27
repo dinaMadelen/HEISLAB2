@@ -53,7 +53,7 @@ fn main() -> std::io::Result<()> {
     let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone(), 3700, 3800)?;
 
     // initialize udp handler
-    let udphandler = Arc::new(init_udp_handler(cab.clone()));
+    let udphandler = initialize_udp_handler(cab.clone());
 
     //Lock free cab into captivity :(
     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();

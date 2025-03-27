@@ -16,7 +16,10 @@ use heislab2_root::modules::{
         cab_wrapper::*,
         elevator_status_functions::Status,
     }, 
-    io::io_init::*,
+    io::{
+        io_init::*,
+        io_handlers::*
+    },
     system_init::*,
     master_functions::{
         master::*,
@@ -71,69 +74,15 @@ fn main() -> std::io::Result<()> {
     loop {
         cbc::select! {
             
-            recv(io_channels.light_update_rx) -> a => {
-                //Turn onn all lights in own queue
-                let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone() );
-                drop(known_elevators_locked);
+            recv(io_channels.light_update_rx) -> _light_update_rx_msg => {
+                handle_light_update_rx(system_state.clone(), elevator.clone());
             },
-
-            recv(io_channels.order_update_rx) -> a => {
-                //ASSUME THE ORDER ALREADY IS ADDED TO QUEUE
-                //Mulig denne er for tidlig
-                let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                if known_elevators_locked.is_empty(){
-
-                }else{
-                    println!("current queue: {:?}",known_elevators_locked.get_mut(0).unwrap().queue);
-                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                    if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle {
-                        let imalive = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                        for elevator in known_elevators_locked.iter(){
-                            udphandler.send(&elevator.inn_address, &imalive);
-                        }
-                        //udp_broadcast(&imalive);
-                    }
-                    known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                    drop(known_elevators_locked);
-                }
+            recv(io_channels.order_update_rx) -> _order_update_rx_msg => {
+                handle_order_update_rx(system_state.clone(),udphandler.clone(),elevator.clone(), io_channels.clone());
             },
-            
-            recv(io_channels.door_rx) -> a => {
-                let door_signal = a.unwrap();
-                if door_signal {
-                        elevator.door_light(false);
-                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
-                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                        if !cab_clone.queue.is_empty(){
-                            if cab_clone.current_floor == (cab_clone.queue.get(0)).unwrap().floor{
-                                known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
-                            }
-                        }
-                        let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
-                        if cab_clone.queue.is_empty(){
-                        println!("No orders in this elevators queue");
-                    }else {
-                        
-                        
-                    }
-                    drop(known_elevators_locked);
-                    
-
-                    let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
-                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        for elevator in known_elevators_locked.iter(){
-                            udphandler.send(&elevator.inn_address, &ordercomplete);
-                            udphandler.send(&elevator.inn_address, &msg);
-                        }
-                    known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                    drop(known_elevators_locked);
-                                  
-                    
-                }
+            recv(io_channels.door_rx) -> door_rx_msg => {
+                handle_door_rx(system_state.clone(), udphandler.clone(), io_channels.clone(), door_rx_msg.unwrap(), &elevator);
             },
-
             recv(io_channels.call_rx) -> a => {
                 let call_button = a.unwrap();
                 println!("{:#?}", call_button);
@@ -166,7 +115,7 @@ fn main() -> std::io::Result<()> {
                             udphandler.send(&elevator.inn_address, &msg);
                         }
                     }
-                } 
+                }
                 drop(known_elevators_locked);
             },
 

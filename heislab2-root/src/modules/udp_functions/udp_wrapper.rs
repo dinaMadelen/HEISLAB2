@@ -63,3 +63,18 @@ pub fn broadcast_alive_msg(udphandler_clone: Arc<UdpHandler>, system_state_clone
         udphandler_clone.send(&inn_addr, &msg);
     }
 }
+
+pub fn send_im_alive(udphandler_clone: Arc<UdpHandler>, system_state_clone: Arc<SystemState>) -> () {
+    // get elevators
+    let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+    // clone cab
+    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+
+    // craft "i am alive" message
+    let imalive = make_udp_msg(system_state_clone.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+
+    // send to all known elevators
+    for elevator in known_elevators_locked.iter(){
+        udphandler_clone.send(&elevator.inn_address, &imalive);
+    }
+}

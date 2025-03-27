@@ -119,6 +119,7 @@ fn main() -> std::io::Result<()> {
     drop(known_elevators_locked);
    
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+    println!("Dette er 121 i main");
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
     for port in 3701..3705{
         let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
@@ -353,7 +354,6 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
-                        println!("DETTE ER LINJE 355 I MAIN");
                         send_new_online(&system_state_clone);
 
                     }else{

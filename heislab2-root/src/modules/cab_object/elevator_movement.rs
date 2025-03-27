@@ -79,8 +79,7 @@ impl Cab{
                             order.floor == self.current_floor &&
                             ((self.direction == DIRN_UP && order.order_type == HALL_UP) ||
                             (self.direction == DIRN_DOWN && order.order_type == HALL_DOWN) ||
-                            (order.order_type == CAB))
-                            }) 
+                            (order.order_type == CAB))}) 
                             {
                             //Move the driveby order to the front of the queue
                             let driveby_order= self.queue.remove(db_order_index);
@@ -105,26 +104,27 @@ impl Cab{
                             elevator.motor_direction(DIRN_STOP);
                         }
                     }
-                }} else {
-                    if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor){
-                        if next_floor > self.current_floor {
-                            self.set_status(Status::Moving, elevator.clone()); 
-                            elevator.motor_direction(DIRN_UP);
-                                
-                        } else if next_floor < self.current_floor {
-                            self.set_status(Status::Moving, elevator.clone());  //Bytt ut med send status
-                            elevator.motor_direction(DIRN_DOWN);
-
-                        } else if next_floor == self.current_floor{
-                                elevator.motor_direction(DIRN_STOP);  
-                                self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
-                            }
-                    }
-                    
                 }
+            } else {
+                if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor){
+                    if next_floor > self.current_floor {
+                        self.set_status(Status::Moving, elevator.clone()); 
+                        elevator.motor_direction(DIRN_UP);
+                            
+                    } else if next_floor < self.current_floor {
+                        self.set_status(Status::Moving, elevator.clone());  //Bytt ut med send status
+                        elevator.motor_direction(DIRN_DOWN);
+
+                    } else if next_floor == self.current_floor{
+                            elevator.motor_direction(DIRN_STOP);  
+                            self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
+                        }
+                }
+                
+            }
             
-        } else{
-            elevator.motor_direction(DIRN_STOP); 
+        } else {
+            
         }
     }
 }    

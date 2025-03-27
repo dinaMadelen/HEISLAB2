@@ -2,7 +2,6 @@
 //! This module provides structs and functions for the master node
 //! 
 //! ## The structs includes:
-//! - **Worldview**
 //! - **Role**
 //! 
 //! ## The functions includes:
@@ -121,6 +120,8 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     // Remove orders that are being handeld
     if !already_handeld.is_empty() {
         not_handeld = new_order.into_iter().filter(|o| !already_handeld.contains(o)).collect();
+    }else{
+        not_handeld = new_order;
     }
     
     // Release known_elevators
@@ -138,8 +139,6 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     // Broadcast message
     return udp_handler.ensure_broadcast(&message,state,5);
 }
-
-
 
 /// correct_master_worldview
 /// Compare message and send out the corrected worldview (union of the recived and current worldview)
@@ -162,7 +161,6 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
         println!("List of missing cabs is empty");
         return false;
     }
-
 
     // Compare elevators to missing orders list
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();

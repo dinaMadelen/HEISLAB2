@@ -240,11 +240,6 @@ fn main() -> std::io::Result<()> {
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                        if !cab_clone.queue.is_empty(){
-                            if cab_clone.current_floor == (cab_clone.queue.get(0)).unwrap().floor{
-                                known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
-                            }
-                        }
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
                         let known_elevators_clone = system_state.known_elevators.lock().unwrap().clone();

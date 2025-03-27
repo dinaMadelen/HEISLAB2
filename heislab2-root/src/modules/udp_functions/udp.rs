@@ -170,6 +170,7 @@ impl UdpHandler {
                 entry.all_confirmed = true;
             }
             println!("This is the only elevator in system, skipping ACK wait.");
+            return false;
         }
         drop(known_elevators_locked);
         
@@ -458,12 +459,14 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                         &state.me_id
                     }
                 };
+
                 let success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
                 
                 if !success{
                     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
                     known_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());
                 }
+
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             } 
         }       

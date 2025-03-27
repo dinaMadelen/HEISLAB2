@@ -342,22 +342,19 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().alive=true;
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         drop(known_elevators_locked);
-                        let mut system_state_clone = Arc::clone(&system_state);
+                        let system_state_clone = Arc::clone(&system_state);
                         send_new_online(&system_state_clone);
 
                     }else{
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         
                         //WHO CONTROLS THE LIGHTS
-                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().turn_off_lights(elevator.clone());
                         drop(known_elevators_locked);
-                        let mut system_state_clone = Arc::clone(&system_state);
+                        let system_state_clone = Arc::clone(&system_state);
                         send_error_offline(&system_state_clone);
                     }
                     
-
-
 
                 }
                 

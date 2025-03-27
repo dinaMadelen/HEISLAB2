@@ -251,12 +251,11 @@ fn main() -> std::io::Result<()> {
                         for elevator in known_elevators_clone.iter(){
                                 let success = udphandler.send(&elevator.inn_address, &ordercomplete);
                                 udphandler.send(&elevator.inn_address, &msg);
-                                if !success {handle_order_completed(&msg,
+
+                                if !success {handle_order_completed(&ordercomplete,
                                     Arc::clone(&system_state),
                                     io_channels.order_update_tx.clone(), 
-                                );
-
-                                }
+                                );}
                         }
 
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();

@@ -46,14 +46,10 @@ fn main() -> std::io::Result<()> {
 
     // initialize cab
     let system_state = initialize_system_state();
-
-    //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
-    //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
     let mut cab = cab_wrapper::initialize_cab(elev_num_floors, &system_state, elevator.clone())?;
 
-    //---------------INIT UDP HANDLER-------------------
+    // initialize udp handler
     let udphandler = Arc::new(init_udp_handler(cab.clone()));
-    //-------------INIT UDP HANDLER FINISH-----------------
 
     //Lock free cab into captivity:(
     let mut active_elevators_locked = system_state.active_elevators.lock().unwrap();

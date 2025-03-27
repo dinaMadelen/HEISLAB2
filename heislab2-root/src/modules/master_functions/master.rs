@@ -482,6 +482,7 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
     {
         // Lock master_id first.
         let mut master_id_guard = state.master_id.lock().unwrap();
+        let old_master_id = master_id_guard.clone();
         // Then lock known_elevators.
         let mut known_elevators = state.known_elevators.lock().unwrap();
 
@@ -527,20 +528,21 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             println!("No multiple-master conflict detected.");
         }
 
-        // Broadcast the current master.
-        if let Some(master_elevator) = known_elevators
-            .iter()
-            .find(|cab| cab.id == *master_id_guard)
-        {
-            let msg = make_udp_msg(
-                state.me_id,
-                MessageType::NewMaster,
-                UdpData::Cab(master_elevator.clone()),
-            );
-            for elevator in known_elevators.iter() {
-                udp_handler.send(&elevator.inn_address, &msg);
+        if !(old_master_id == *master_id_guard){
+            if let Some(master_elevator) = known_elevators.iter().find(|cab| cab.id == *master_id_guard)
+            {
+                let msg = make_udp_msg(
+                    state.me_id,
+                    MessageType::NewMaster,
+                    UdpData::Cab(master_elevator.clone()),
+                );
+                for elevator in known_elevators.iter() {
+                    udp_handler.send(&elevator.inn_address, &msg);
+                }
             }
         }
+       
+        
         // Both locks (master_id and known_elevators) are released here.
     }
 

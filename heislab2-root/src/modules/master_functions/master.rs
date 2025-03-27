@@ -475,9 +475,10 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
                 score -= 10; 
             }
 
+
         // Idle elevators are prefered over busy elevators
         }else if elevator.status == Status::Idle { 
-            score += 20;
+            score += 30;
         }else if elevator.status == Status::Error {
             score -= 10000
         }
@@ -486,7 +487,7 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
         }
 
         // Shorter queue gets priority, Less is better
-        score -= elevator.queue.len() as i32 * 5; 
+        score -= elevator.queue.len() as i32 * 10; 
 
         scores.push((elevator.id, score));
     }

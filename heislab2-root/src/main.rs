@@ -190,7 +190,8 @@ fn main() -> std::io::Result<()> {
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
                 known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator_clone.clone());
+                let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
+                known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator_clone.clone());
             }
 
             known_elevators_locked.get_mut(0).unwrap().print_status();
@@ -206,7 +207,8 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.light_update_rx) -> a => {
                 //Turn onn all lights in own queue
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone() );
+                let all_orders = system_state.all_orders.lock().unwrap().clone();
+                known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator.clone());
                 drop(known_elevators_locked);
             },
 
@@ -323,7 +325,8 @@ fn main() -> std::io::Result<()> {
                     elevator.motor_direction(DIRN_STOP);
                 }
                 known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
+                let all_orders = system_state.all_orders.lock().unwrap().clone();
+                known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator.clone());
                 drop(known_elevators_locked);
 
 
@@ -382,7 +385,8 @@ fn main() -> std::io::Result<()> {
                     }else{
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
                         known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                        known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator.clone());
+                        let all_orders = system_state.all_orders.lock().unwrap().clone();
+                        known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator.clone());
                     }
                     drop(known_elevators_locked);
                 }

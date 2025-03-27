@@ -805,6 +805,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
         num_floors: msg_elevator.num_floors,
         id: msg_elevator.id,
         current_floor: msg_elevator.current_floor,
+        last_served_floor: msg_elevator.last_served_floor,
         queue: msg_elevator.queue.clone(),
         status: msg_elevator.status.clone(),
         direction: msg_elevator.direction.clone(),

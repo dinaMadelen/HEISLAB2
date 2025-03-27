@@ -234,9 +234,9 @@ fn main() -> std::io::Result<()> {
             },
             
             recv(io_channels.door_rx) -> a => {
+                 // DENNE HAR BLITT ENDRET KRIS_________________________________
                 let door_signal = a.unwrap();
                 if door_signal {
-                    // DENNE HAR BLITT ENDRET KRIS_________________________________
                         elevator.door_light(false);
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
@@ -248,7 +248,7 @@ fn main() -> std::io::Result<()> {
                             let known_elevators = system_state.known_elevators.lock().unwrap();
                             known_elevators.iter().map(|e| e.inn_address).collect()
                         };
-.
+
                         for addr in elevator_addresses {
                             let success = udphandler.send(&addr, &ordercomplete);
                             udphandler.send(&addr, &msg);

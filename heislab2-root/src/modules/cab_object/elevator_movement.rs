@@ -40,7 +40,7 @@ impl Cab{
                     Err(cbc::TryRecvError::Empty) => {
                         // No obstruction or nothing received: close door
                         let now = SystemTime::now();
-                        if (now.duration_since(start_time).unwrap() > Duration::from_secs(3)) && (cabclone.status != Status::Obstruction) {
+                        if (now.duration_since(start_time).unwrap() > Duration::from_secs(2)) && (cabclone.status != Status::Obstruction) {
                             println!("No obstruction, closing doors");
                             break;
                         }
@@ -69,7 +69,7 @@ impl Cab{
          // Only attempt to change floors if we are moving or idle and there is at least one order.
     if (self.status == Status::Moving || self.status == Status::Idle) && !self.queue.is_empty() {
         // If we are idle (and about to depart), update last_served_floor.
-        
+
         // The "target" floor for stop decisions:
         // When idle, we use the current floor. When moving, we use the last floor we stopped at.
         let effective_floor = if self.status == Status::Moving {

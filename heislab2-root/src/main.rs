@@ -146,19 +146,12 @@ fn main() -> std::io::Result<()> {
             /* ------- --- -- NEW ORDER UPDATE  -- ----  ------*/
             recv(io_channels.order_update_rx) -> a => {
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                if known_elevators_locked.is_empty() 
-                {
-                    /*         DO NOTHING      */
-                }
-                else
-                {
+                if !known_elevators_locked.is_empty() {
+
                     println!("Current queue: {:?}",known_elevators_locked.get_mut(0).unwrap().queue);
 
                     /*      GET A SENDABLE CLONE OF CAB     */
-                    let cab_clone = known_elevators_locked.get(0)
-                                                        .unwrap()
-                                                        .clone();
-
+                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
 
                     /* IF ELEVATOR STATUS IDLE SEND AN "IM ALIVE" MESSAGE TO SYSTEM TO UPDATE SYSTEM OF CURRENT STATE */
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle 
@@ -214,7 +207,7 @@ fn main() -> std::io::Result<()> {
                             });
                         }  
                         drop(all_orders_locked);
-                        /* DROP TO AVOID RACE */
+                        // Drop due to long time til next use.
 
                         let known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         let cab_clone_removed = known_elevators_locked.get(0).unwrap().clone();
@@ -244,12 +237,27 @@ fn main() -> std::io::Result<()> {
                 println!("{:#?}", call_button);
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor, call_button.call);
-                {   
+                
+                {
+                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                    for elevator in known_elevators_locked.iter_mut(){
+                        
+                        // add to queue, high priority
+                        if (elevator.id == system_state.me_id) && (new_order.order_type == CAB){
+                            if elevator.queue.len()>1{
+                                elevator.queue.insert(1,new_order.clone());
+                            }else {
+                                elevator.queue.insert(0,new_order.clone());
+                            }
+                        }
+                    }
                     
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
-                    let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
+                   
                         for elevator in known_elevators_locked.iter(){
-                        
+                            
+
+                                    
                             let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
                             if !send_successfull{handle_new_request(&new_req_msg,

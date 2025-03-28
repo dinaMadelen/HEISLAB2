@@ -739,7 +739,7 @@ pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     let cab_to_be_master = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
     }else{
-        println!("Couldnt read OrderComplete message");
+        println!("Couldnt read NewMaster message");
         return;
     };
 

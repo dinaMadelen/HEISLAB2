@@ -252,7 +252,7 @@ fn main() -> std::io::Result<()> {
                             });
                         }
                         drop(all_orders_locked);
-                        // LA TIL DETTE CHRIS END
+                        // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- -
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
@@ -263,9 +263,9 @@ fn main() -> std::io::Result<()> {
                         };
 
                         for addr in elevator_addresses {
-                            //FJERNET NOE HER KRIS
+                            //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
                             udphandler.send(&addr, &ordercomplete);
-                            udphandler.send(&addr, &msg);
+                            udphandler.send(&addr, &msg); //
                         }          
                     
                 }

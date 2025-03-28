@@ -245,7 +245,7 @@ pub fn master_worldview(state:&Arc<SystemState>) -> bool{
     println!("Starting worldview");
 
     let known_cabs = state.known_elevators.lock().unwrap().clone();
-    
+    todo!("MAKE THIS BROADCAST TO ALL!");
     println!("preparing to send");
     let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
     return udp_broadcast(&message);

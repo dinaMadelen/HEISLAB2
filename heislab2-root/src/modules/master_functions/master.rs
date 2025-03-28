@@ -577,25 +577,4 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
         
         // Both locks (master_id and known_elevators) are released here.
     }
-
-    // Ensure our own role is correct.
-    {
-        let master_id = *state.master_id.lock().unwrap();
-        let mut known_elevators = state.known_elevators.lock().unwrap();
-        if state.me_id == master_id {
-            // Make sure the elevator with the lowest id in the shared state is set as master.
-            if let Some(elevator) = known_elevators.iter_mut().min_by_key(|e| e.id) {
-                elevator.role = Role::Master;
-                let msg = make_udp_msg(
-                    state.me_id,
-                    MessageType::NewMaster,
-                    UdpData::Cab(elevator.clone()),
-                );
-                for elevator in known_elevators.iter() {
-                    udp_handler.send(&elevator.inn_address, &msg);
-                }
-            }
-        }
-        // Lock is released here.
-    }
 }

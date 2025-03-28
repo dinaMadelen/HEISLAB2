@@ -365,9 +365,11 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
     };
 
     if let Some(completed_order) = completed_cab.queue.first() {
+        /* THE FIRST ELEMENT IS THE COMPLETED ORDER */
         let completed_order = completed_order.clone();
         let mut all_orders_locked = state.all_orders.lock().unwrap();
-    
+        
+        /* FIND INDEX OF THE COMPLETED ORDER AND REMOVE */
         if let Some(index) = all_orders_locked.iter().position(|order| *order == completed_order) {
             all_orders_locked.remove(index);
         }

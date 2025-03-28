@@ -29,7 +29,7 @@ fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
     // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
    
-    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
 
     println!("Elevator started:\n{:#?}", elevator);
 
@@ -243,11 +243,13 @@ fn main() -> std::io::Result<()> {
                         
                     }else {
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
                         drop(known_elevators_locked);
 
-                        // REMOVE FROM OWN ALL ORDERS
+                        /*       FIRST REMOVE FROM OWN ALL ORDERS      */
                         let mut all_orders_locked = system_state.all_orders.lock().unwrap();
                         if completed_order.order_type == CAB {
                             if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
@@ -259,11 +261,11 @@ fn main() -> std::io::Result<()> {
                             });
                         }  
                         drop(all_orders_locked);
+                        /* DROP TO AVOID RACE */
 
                         let known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-
-                        let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));
+                        let cab_clone_removed = known_elevators_locked.get(0).unwrap().clone();
+                        let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone_removed.clone()));
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
 
@@ -273,7 +275,6 @@ fn main() -> std::io::Result<()> {
                         };
 
                         for addr in elevator_addresses {
-                            
                             udphandler.send(&addr, &ordercomplete);
                             udphandler.send(&addr, &alive_msg); 
                         }

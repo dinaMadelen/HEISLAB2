@@ -74,12 +74,10 @@ impl Cab{
             if self.status == Status::Idle {
                 self.last_served_floor = self.current_floor;
             }
-            // We'll use current_floor as our effective floor for deciding stops.
             let effective_floor = self.current_floor;
     
             if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
-                // Check if any order in the queue matches the effective floor,
-                // but if we're moving, ignore orders for the floor we just left.
+                
                 let should_stop = self.queue.iter().any(|order| {
                     if self.status == Status::Moving && order.floor == self.last_served_floor {
                         false

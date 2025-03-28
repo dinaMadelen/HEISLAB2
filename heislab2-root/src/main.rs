@@ -196,7 +196,7 @@ fn main() -> std::io::Result<()> {
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
-            
+            /* ------- --- -- HVIS VI FÅR EN NY LIGHT UPDATE  -- ----  ------*/
             recv(io_channels.light_update_rx) -> a => {
                 //Turn onn all lights in own queue
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
@@ -204,7 +204,7 @@ fn main() -> std::io::Result<()> {
             },
 
 
-            /* ------- --- -- HVIS VI FÅR EN NY OPPDATERING  -- ----  ------*/
+            /* ------- --- -- HVIS VI FÅR EN NY ORDER UPDATE  -- ----  ------*/
             recv(io_channels.order_update_rx) -> a => {
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.is_empty() 
@@ -241,15 +241,16 @@ fn main() -> std::io::Result<()> {
 
             },
             
+            /* ------- --- -- HVIS VI FÅR EN NY DOOR UPDATE  -- ----  ------*/
             recv(io_channels.door_rx) -> a => {
-                /* RETRIEVE SIGNAL */
+                /* Retrieve signal */
                 let door_closed = a.unwrap();
                 
                 /* If door is open do nothing*/
                 if door_closed {
-                    
+
                     elevator.door_light(false);
-                    /* Retrieve */
+                    /* Retrieve known elevators l*/
                     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
 
                     if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){

@@ -240,7 +240,7 @@ pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(state:&Arc<SystemState>, udphandler: UdpHandler) -> bool{
+pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -> bool{
 
     println!("Starting worldview");
 

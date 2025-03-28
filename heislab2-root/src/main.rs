@@ -167,7 +167,7 @@ fn main() -> std::io::Result<()> {
                         drop(locked_master_id);
                         print!("BROADCASTING WORLDVIEW _____________________");
                         //MASTER WORLDVIEW BROADCAST
-                        master_worldview(&worldview_system_state);
+                        master_worldview(&worldview_system_state, &udp_handler_clone.clone());
                     }
                 }
                 sleep(Duration::from_secs(1));

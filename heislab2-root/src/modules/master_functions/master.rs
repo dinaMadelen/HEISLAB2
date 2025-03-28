@@ -164,15 +164,15 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
         return false;
     }
 
-    // Compare elevators to missing orders list
-    let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
+    // Compare elevators to missing orders list, lock the known_elevators 
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
     for missing_elevator in discrepancy_cabs.iter() {
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
-                if !elevator.queue.contains(&order) {
-                    elevator.queue.push(order.clone());
-                    println!("Added missing order {:?} to elevator {}", order.floor, elevator.id);
-                    changes_made = true;
+                if !elevator.queue.contains(order) {
+                   elevator.queue.push(order.clone());
+                   println!("Added missing order {:?} to elevator {}", order.floor, elevator.id);
+                   changes_made = true;
                 }
             }
         } else {
@@ -240,20 +240,16 @@ pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -> bool{
+pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>){
 
     println!("Starting worldview");
 
     let known_cabs = state.known_elevators.lock().unwrap().clone();
-    
 
     let worldview_msg = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs.clone()));
     for elevator in known_cabs.iter(){
         udphandler.send(&elevator.inn_address, &worldview_msg);
     }
-    println!("preparing to broadcast");
-    let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
-    return udp_broadcast(&message);
 }
 
 // Give away master role, NOT NEEDED, KILL INSTEAD
@@ -579,5 +575,26 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
        
         
         // Both locks (master_id and known_elevators) are released here.
+    }
+
+    // Ensure our own role is correct.
+    {
+        let master_id = *state.master_id.lock().unwrap();
+        let mut known_elevators = state.known_elevators.lock().unwrap();
+        if state.me_id == master_id {
+            // Make sure the elevator with the lowest id in the shared state is set as master.
+            if let Some(elevator) = known_elevators.iter_mut().min_by_key(|e| e.id) {
+                elevator.role = Role::Master;
+                let msg = make_udp_msg(
+                    state.me_id,
+                    MessageType::NewMaster,
+                    UdpData::Cab(elevator.clone()),
+                );
+                for elevator in known_elevators.iter() {
+                    udp_handler.send(&elevator.inn_address, &msg);
+                }
+            }
+        }
+        // Lock is released here.
     }
 }

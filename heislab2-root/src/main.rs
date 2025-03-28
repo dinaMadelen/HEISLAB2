@@ -25,6 +25,8 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
+    // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
     let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
@@ -225,9 +227,35 @@ fn main() -> std::io::Result<()> {
             recv(io_channels.door_rx) -> a => {
                  // DENNE HAR BLITT ENDRET KRIS_________________________________
                 let door_signal = a.unwrap();
+                // let completed_order: Order;
                 if door_signal {
                         elevator.door_light(false);
                         // LA TIL DETTE CHRIS
+                        if let Some(cab) = known_elevators_locked.get_mut(0) {
+                            if cab.queue.is_empty() {
+                                let completed_order = cab.queue.remove(0);
+                                // cab.lights(completed_order.floor, completed_order.order_type, elevator);
+                                cab.lights(cab.queue.clone(), elevator.clone());
+                            // }
+                        // }
+
+                        // let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                        // elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
+
+
+                        let mut all_orders_locked = system_state.all_orders.lock().unwrap();
+                        if completed_order.order_type == CAB {
+                            if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+                                all_orders_locked.remove(index);
+                            }
+                        } else {
+                            all_orders_locked.retain(|order| {
+                                !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
+                            });
+                        }
+                        drop(all_orders_locked);
+                        // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- -
+                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
                         if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
                             
@@ -251,6 +279,14 @@ fn main() -> std::io::Result<()> {
                                 known_elevators.iter().map(|e| e.inn_address).collect()
                             };
 
+                        for addr in elevator_addresses {
+                            //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
+                            udphandler.send(&addr, &ordercomplete);
+                            udphandler.send(&addr, &alive_msg); 
+                        }          
+                    }
+                }
+                        
                             for addr in elevator_addresses {
                                 udphandler.send(&addr, &ordercomplete);
                                 udphandler.send(&addr, &alive_msg); 
@@ -291,7 +327,7 @@ fn main() -> std::io::Result<()> {
                         
                             let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
-                            if !send_successfull {handle_new_request(&new_req_msg,
+                            if !send_successfull{handle_new_request(&new_req_msg,
                                                                      Arc::clone(&system_state),
                                                                      Arc::clone(&udphandler), 
                                                                      io_channels.order_update_tx.clone(), 
@@ -396,7 +432,7 @@ fn main() -> std::io::Result<()> {
                     if obstr{
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Obstruction,elevator.clone());
                     }else{
-                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
+                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                         known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                         drop(known_elevators_locked);
                         let mut known_elevators_clone = system_state.known_elevators.lock().unwrap().clone();

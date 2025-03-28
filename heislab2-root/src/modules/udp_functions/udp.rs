@@ -40,16 +40,12 @@
 
 #[allow(unused_imports)]
 #[allow(unused_variables)]
-#[allow(non_camel_case_types)]
-
-//----------------------------------------------Imports
-use std::net::{IpAddr,SocketAddr, UdpSocket};
-//use std::ops::DerefMut;                        // https://doc.rust-lang.org/std/net/struct.UdpSocket.html       
+#[allow(non_camel_case_types)]                  // https://doc.rust-lang.org/std/net/struct.UdpSocket.html       
 use serde::{Deserialize, Serialize};            // https://serde.rs/impl-serialize.html         //Add to Cargo.toml file, Check comment above
                                                 // https://docs.rs/serde/latest/serde/ser/trait.Serialize.html#tymethod.serialize
 use bincode;                                    // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use crc32fast::Hasher;                          // Add to Cargo.toml file, Check comment above  //Add to Cargo,toml Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
-use std::sync::Arc;                     // https://doc.rust-lang.org/std/sync/struct.Mutex.html
+use std::sync::Arc;                             // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 
 
 use crate::modules::order_object::order_init::Order;
@@ -89,16 +85,16 @@ pub enum MessageType {
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
 //UDP Header
 pub struct UdpHeader {
-    pub sender_id: u8,             // ID of the sender of the message.
-    pub message_type: MessageType, // ID for what kind of message it is, e.g. Button press, or Update queue.
-    pub checksum: u32,         // Hash of data to check message integrity.
+    pub sender_id: u8,              // ID of the sender of the message.
+    pub message_type: MessageType,  // ID for what kind of message it is, e.g. Button press, or Update queue.
+    pub checksum: u32,               // Hash of data to check message integrity.
 }
 
 #[derive(Debug, Serialize, PartialEq, Deserialize, Clone)] // this is needed to serialize message
 //UDP Message Struct
 pub struct UdpMsg {
-    pub header: UdpHeader,       // Header struct containing information about the message itself
-    pub data: UdpData,        // Data so be sent.
+    pub header: UdpHeader,          // Header struct containing information about the message itself
+    pub data: UdpData,              // Data so be sent.
 }
 
 
@@ -115,9 +111,10 @@ pub enum UdpData {
 ///make_udp_msg
 /// 
 /// # Arguments:
-/// 
+/// * `sender_id` - u8 - Id of sender
 /// * `message_type` - MessageType - what kind of message, check enum MessageType
 /// * `message` - Vec<Cab> The message to be sendt
+/// 
 /// # Returns:
 ///
 /// Returns -UdpMsg- The message that has been generated.
@@ -215,7 +212,7 @@ fn data_valid_for_type(msg: &UdpMsg) -> bool {
 /// 
 /// # Arguments:
 /// 
-/// * `data` - &Vec<elevator> - refrence to list of elevators.
+/// * `data` - &UdpData - refrenence to data to be send, see UdpData
 /// 
 /// # Returns:
 ///
@@ -285,10 +282,10 @@ pub fn udp_ack(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,
 /// 
 /// # Arguments:
 /// 
-/// * `target_adress` - SocketAddr - .
-/// * `original_msg` - &UdpMsg - .
-/// * `sender_id` - u8 - .
-/// * `udp_handler` -&UdpHandler- 
+/// * `target_adress` - SocketAddr - .the socket you are sending to
+/// * `original_msg` - &UdpMsg - . the original message
+/// * `sender_id` - u8 - id of cab
+/// * `udp_handler` -&UdpHandler- udphandler for sending messages over udp
 ///  
 /// # Returns:
 ///
@@ -319,7 +316,7 @@ pub fn udp_nak(target_address: SocketAddr, original_msg: &UdpMsg, sender_id: u8,
 /// 
 /// # Returns:
 ///
-/// Returns - None - .
+/// Returns - bool - `true` if succesful else `false`.
 ///
 pub fn udp_broadcast(msg: &UdpMsg) -> bool {
     let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind socket for broadcast");
@@ -343,8 +340,18 @@ pub fn udp_broadcast(msg: &UdpMsg) -> bool {
     return false;
 }  
 
-
-//Check if the subnet matches.
+//same subnet
+//Check if the sender is from the same subnet.
+/// 
+/// # Arguments:
+/// 
+/// * `local` - IpAddr - ip of your computer.
+/// * `remote` - IpAddr - if of sender
+/// 
+/// # Returns:
+///
+/// Returns - bool - `true` if succesful same subnet.
+///
 pub fn same_subnet(local: IpAddr, remote: IpAddr) -> bool {
 
     match (local, remote) {
@@ -362,6 +369,18 @@ pub fn same_subnet(local: IpAddr, remote: IpAddr) -> bool {
 }
 
 
+//confirm recived
+//Check if all acks has been recived for a Udpmessage
+/// 
+/// # Arguments:
+/// 
+/// * `msg` - &UdpMsg - refrence to original message
+/// * `state` - &Arc<SystemState> - Current systemstate
+/// 
+/// # Returns:
+///
+/// Returns - bool - `true` if succesful same subnet.
+///
 pub fn confirm_recived(msg:&UdpMsg, state: &Arc<SystemState>) -> bool {
     
     let checksum = msg.header.checksum;

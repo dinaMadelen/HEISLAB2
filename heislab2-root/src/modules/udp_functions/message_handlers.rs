@@ -97,7 +97,12 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
         // Lock the known elevators and find the elevator that matches the sender id.
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(sender_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
-            sender_elevator.queue.insert(1,new_order.clone());
+            if sender_elevator.queue.len()>1{
+                sender_elevator.queue.insert(1,new_order.clone());
+            }else {
+                sender_elevator.queue.insert(0,new_order.clone());
+
+            }
             if sender_elevator.id == state.me_id{
                 light_update_tx.send(sender_elevator.queue.clone()).unwrap();
             }
@@ -658,7 +663,8 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_t
 
 pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
     //Extract updated cab data from message
-    let updated_cab = if let UdpData::Cab(cab) = &msg.data{
+
+     let mut updated_cab = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
     }else{
         println!("Couldnt read ImAlive message");

@@ -201,7 +201,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
         let mut all_orders = state.all_orders.lock().unwrap();
         // Add each missing order if it is not already present.
         for order in &missing_orders_total {
-            if !all_orders.contains(&order){
+            if !all_orders.contains(&order) && !(order.order_type == CAB) {
                 all_orders.push(order.clone());
             }
         }

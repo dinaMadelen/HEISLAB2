@@ -388,9 +388,10 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             all_orders_locked.remove(index);
         }
     } else {
-        all_orders_locked.retain(|order| {
-            !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
-        });
+        if let Some(index) = all_orders_locked.iter().position(|order| 
+            order.floor == completed_order.floor && order.order_type == completed_order.order_type) {
+            all_orders_locked.remove(index);
+        }
     }
             
 }

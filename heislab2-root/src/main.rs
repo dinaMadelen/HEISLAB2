@@ -146,7 +146,7 @@ fn main() -> std::io::Result<()> {
             loop{
                 fix_master_issues(&system_state_clone, &udp_handler_clone);
 
-                sleep(Duration::from_millis(200));
+                sleep(Duration::from_millis(400));
                 let now = SystemTime::now();
                 
                 // Iterate in reverse order so that removing elements doesn't affect things
@@ -181,7 +181,7 @@ fn main() -> std::io::Result<()> {
                         master_worldview(&worldview_system_state, &udp_handler_clone.clone());
                     }
                 }
-                sleep(Duration::from_millis(200));
+                sleep(Duration::from_millis(400));
                 check_master_failure(&system_state_clone, &udp_handler_clone);
             }
     });

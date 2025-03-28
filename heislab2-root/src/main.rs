@@ -118,13 +118,12 @@ fn main() -> std::io::Result<()> {
     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
     drop(known_elevators_locked);
    
-    println!("121 I main");
-    let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    println!("Linje 123 i main");
+    
+    let new_online_msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
     for port in 3701..3705{
         let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
-        udphandler.send(&inn_addr, &msg);
+        udphandler.send(&inn_addr, &new_online_msg);
     }
     drop(known_elevators_locked);
     // END SEND I ALIVE
@@ -150,9 +149,9 @@ fn main() -> std::io::Result<()> {
                                 if elapsed >= Duration::from_secs(10) {
                                     let dead_elevator = known_elevators_locked.get(i).unwrap();
                                     println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                    let msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
+                                    let Error_offline_msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
                                     for elevator in known_elevators_locked.iter(){
-                                        udp_handler_clone.send(&elevator.inn_address, &msg);
+                                        udp_handler_clone.send(&elevator.inn_address, &Error_offline_msg);
                                     }
                                 }
                             }
@@ -251,7 +250,7 @@ fn main() -> std::io::Result<()> {
 
                         for addr in elevator_addresses {
                             let success = udphandler.send(&addr, &ordercomplete);
-                            udphandler.send(&addr, &msg);
+                            udphandler.send(&addr, &ordercomplete);
 
                             if !success {
                                 handle_order_completed(&ordercomplete,
@@ -276,13 +275,13 @@ fn main() -> std::io::Result<()> {
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
                     //DETTE ER ENDRA _________________________________
-                    let msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
+                    let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
                         for elevator in known_elevators_locked.iter(){
                         
-                            let send_successfull = udphandler.send(&elevator.inn_address, &msg);
+                            let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
-                            if !send_successfull {handle_new_request(&msg,
+                            if !send_successfull {handle_new_request(&new_req_msg,
                                                                      Arc::clone(&system_state),
                                                                      Arc::clone(&udphandler), 
                                                                      io_channels.order_update_tx.clone(), 
@@ -302,9 +301,9 @@ fn main() -> std::io::Result<()> {
                 }else if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle{
                     known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Moving{
-                        let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(known_elevators_locked.get(0).unwrap().clone()));
+                        let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(known_elevators_locked.get(0).unwrap().clone()));
                         for elevator in known_elevators_locked.iter(){
-                            udphandler.send(&elevator.inn_address, &msg);
+                            udphandler.send(&elevator.inn_address, &alive_msg);
                         }
                     }
                 } 
@@ -334,9 +333,9 @@ fn main() -> std::io::Result<()> {
                 //Broadcast new state
                 let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-                let msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
+                let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone));
                     for elevator in known_elevators_locked.iter(){
-                        udphandler.send(&elevator.inn_address, &msg);
+                        udphandler.send(&elevator.inn_address, &alive_msg);
                        }
                 drop(known_elevators_locked);
                 
@@ -355,7 +354,6 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
-                        println!("Linje 358 i main");
                         send_new_online(&system_state_clone);
 
                     }else{

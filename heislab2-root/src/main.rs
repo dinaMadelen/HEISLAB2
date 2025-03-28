@@ -241,6 +241,7 @@ fn main() -> std::io::Result<()> {
                         
                         // LA TIL DETTE CHRIS
                         let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                        drop(known_elevators_locked);
                         elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
 
 
@@ -255,7 +256,8 @@ fn main() -> std::io::Result<()> {
                             });
                         }
                         drop(all_orders_locked);
-                        // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- -
+                        // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- - -    -   -       -   -              -
+                        let known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
 
                         let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));

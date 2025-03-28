@@ -165,6 +165,7 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
     }
 
     // Compare elevators to missing orders list
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
     for missing_elevator in discrepancy_cabs.iter() {
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         //Add missing orders to cabs
@@ -249,13 +250,18 @@ pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(state:&Arc<SystemState>) -> bool{
+pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -> bool{
 
     println!("Starting worldview");
 
     let known_cabs = state.known_elevators.lock().unwrap().clone();
-    todo!("MAKE THIS BROADCAST TO ALL!");
-    println!("preparing to send");
+    
+
+    let worldview_msg = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs.clone()));
+    for elevator in known_cabs.iter(){
+        udphandler.send(&elevator.inn_address, &worldview_msg);
+    }
+    println!("preparing to broadcast");
     let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
     return udp_broadcast(&message);
 }

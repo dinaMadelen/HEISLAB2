@@ -28,7 +28,8 @@ use crate::modules::master_functions::master;
 #[allow(unused_variables)]
 
 //-----------------------IMPORTS------------------------------------------------------------
-use crate::modules::udp_functions::udp::{UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
+use crate::modules::udp_functions::udp::{UdpMsg, UdpData,MessageType,udp_broadcast,make_udp_msg};
+use crate::modules::udp_functions::udp_handler_init::UdpHandler;
 use crate::modules::cab_object::elevator_status_functions::Status;
 use crate::modules::cab_object::cab::Cab;
 use crate::modules::slave_functions::slave::{reboot_program, set_new_master};
@@ -578,6 +579,7 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
     }
 
     // Ensure our own role is correct.
+    /*
     {
         let master_id = *state.master_id.lock().unwrap();
         let mut known_elevators = state.known_elevators.lock().unwrap();
@@ -597,4 +599,5 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
         }
         // Lock is released here.
     }
+    */
 }

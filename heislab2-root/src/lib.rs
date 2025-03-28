@@ -33,6 +33,9 @@ pub mod modules{
     pub mod udp_functions{
         pub mod udp;
         pub mod udp_test;
+        pub mod message_handlers;
+        pub mod udp_handler_init;
+        
     }
     
     pub mod system_init;

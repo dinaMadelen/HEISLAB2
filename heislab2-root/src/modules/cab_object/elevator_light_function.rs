@@ -11,15 +11,9 @@ use crossbeam_channel as cbc;
 use std::sync::Arc;
 use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 
-use crate::modules::master_functions::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
-use crate::modules::elevator_object::alias_lib::{CAB};
+use crate::modules::elevator_object::alias_lib::CAB;
 
-
-use std::thread::sleep;
-use std::time::Duration; //https://doc.rust-lang.org/std/time/struct.Instant.html
-use std::env; // Used for reboot function
-use std::process::{Command, exit}; //Used for reboot function
 
 
 
@@ -63,7 +57,7 @@ impl Cab{
                     elevator.call_button_light(order.floor, order.order_type, false);
                     }
                 }
-            }
+            } 
         }
     }
 

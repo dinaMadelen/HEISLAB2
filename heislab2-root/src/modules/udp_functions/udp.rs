@@ -307,8 +307,8 @@ impl UdpHandler {
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
                     MessageType::NewOnline => {thread::spawn(move ||{handle_new_online(&msg_clone, passable_state)});},
-                    MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
-                    MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
+                    MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state, &udp_handler_clone, &tx_clone)});},
+                    MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, &tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
                     MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_order_completed(&msg_clone, passable_state, light_update_tx_clone);}});},
                     MessageType::NewRequest => {thread::spawn(move || {handle_new_request(&msg_clone,passable_state, udp_handler_clone,tx_clone, light_update_tx_clone)});},
                     MessageType::NewMaster => {thread::spawn(move ||{ handle_new_master(&msg_clone, passable_state)});},
@@ -373,7 +373,7 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
         }
     };
  
-    //Remove it from all orders
+    //Remove it from elevator orders
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
     if let Some(elevator) = known_elevators_locked.iter_mut().find(|e|e.id==completed_cab.id){
         if let Some(index) = elevator.queue.iter().position(|o|*o == completed_order){
@@ -381,7 +381,7 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             println!("Removed completed order {:?} from ID:{}",completed_order,elevator.id);
         }
     }
-
+    
     let mut all_orders_locked = state.all_orders.lock().unwrap();
     if completed_order.order_type == CAB {
         if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
@@ -393,6 +393,7 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             all_orders_locked.remove(index);
         }
     }
+
             
 }
 
@@ -414,7 +415,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     let mut all_orders_locked = state.all_orders.lock().unwrap(); 
     
     all_orders_locked.push(new_order.clone());
-    drop(all_orders_locked); // This one sounds scary
+    drop(all_orders_locked);
 
     //Check if this elevator is master 
     let master_id_clone = state.master_id.lock().unwrap().clone();
@@ -740,7 +741,7 @@ pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     let cab_to_be_master = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
     }else{
-        println!("Couldnt read NewMaster message");
+        println!("Couldnt read OrderComplete message");
         return;
     };
 
@@ -844,7 +845,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
 ///
 /// Returns -None- .
 ///
-pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
+pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: &Arc<UdpHandler>, order_update_tx: &cbc::Sender<Vec<Order>>) {
     println!("EROR: Worldview error reported by ID: {}", msg.header.sender_id);
 
     // List of orders from sender
@@ -856,7 +857,7 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
     };
 
     // Compare and correct worldview based on received data
-    if correct_master_worldview(&mut missing_orders, &state) {
+    if correct_master_worldview(&mut missing_orders, &state, udp_handler, &order_update_tx) {
         println!("Worldview corrected based on report from ID: {}", msg.header.sender_id);
     } else {
         println!("ERROR: Failed to correct worldview");
@@ -877,8 +878,8 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
 pub fn handle_error_offline(
     msg: &UdpMsg,
     state: Arc<SystemState>,
-    udp_handler: &UdpHandler,
-    order_update_tx: cbc::Sender<Vec<Order>>,
+    udp_handler: &Arc<UdpHandler>,
+    order_update_tx: &cbc::Sender<Vec<Order>>,
 ) {
     
 

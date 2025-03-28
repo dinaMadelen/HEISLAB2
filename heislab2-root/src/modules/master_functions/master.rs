@@ -154,7 +154,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemState>) -> bool {
+pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemState>,udp_handler: &Arc<UdpHandler>, order_update_tx: &cbc::Sender<Vec<Order>>) -> bool {
     println!("Correcting worldview for master");
 
     let mut changes_made = false;
@@ -192,6 +192,30 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
             }
                 println!("Added missing orders from {} to state.all_orders", missing_elevator.id);
         }
+
+        
+        let known_elevators_locked = state.known_elevators.lock().unwrap();
+        // Collect all known elevator orders into a flat Vec
+        let distributed_orders: Vec<Order> = known_elevators_locked
+            .iter()
+            .flat_map(|cab| cab.queue.iter().cloned())
+            .collect();
+        
+       //Swap mutex
+        drop(known_elevators_locked);
+        all_orders_locked = state.all_orders.lock().unwrap();
+
+        
+        // Find orders in all_orders that are NOT in distributed orders
+        let missing_orders: Vec<Order> = all_orders_locked
+            .iter()
+            .filter(|order| !distributed_orders.contains(order))
+            .cloned()
+            .collect();
+        
+        drop(all_orders_locked);
+
+        reassign_orders(&missing_orders,state,udp_handler,order_update_tx);
     }
 
     return changes_made;
@@ -317,7 +341,7 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 /// 
 /// returns `true`, if successfull and `false` if failed.
 ///
-pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
+pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &Arc<UdpHandler>, order_update_tx: &cbc::Sender<Vec<Order>>) -> bool {
     
     // Copy value in mutexes
     let mut all_orders = state.all_orders.lock().unwrap().clone();

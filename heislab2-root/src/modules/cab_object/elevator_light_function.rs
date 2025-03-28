@@ -21,6 +21,7 @@ impl Cab{
             }
         }
     }
+    
     pub fn lights(&mut self, order_vec: Vec<Order>,  elevator:Elevator){
         // Turn off lights for orders that are no longer in the new order vector.
         for floors in 0..(self.num_floors) {

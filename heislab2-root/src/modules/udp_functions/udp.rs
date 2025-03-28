@@ -50,20 +50,14 @@ use serde::{Deserialize, Serialize};            // https://serde.rs/impl-seriali
 use bincode;                                    // https://docs.rs/bincode/latest/bincode/      //Add to Cargo.toml file, Check comment above
 use crc32fast::Hasher;                          // Add to Cargo.toml file, Check comment above  //Add to Cargo,toml Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
 //use sha2::{Digest, Sha256};                     // https://docs.rs/sha2/latest/sha2/            //Add to Cargo.toml file, Check comment above
-use std::time::{Duration,Instant, SystemTime};              // https://doc.rust-lang.org/std/time/struct.Duration.html
+use std::time::{Duration};              // https://doc.rust-lang.org/std/time/struct.Duration.html
 // use std::thread::sleep;                      // https://doc.rust-lang.org/std/thread/fn.sleep.html
 use std::sync::{Mutex,Arc};                     // https://doc.rust-lang.org/std/sync/struct.Mutex.html
-use crossbeam_channel as cbc;
-
 
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_master_issues,Role,correct_master_worldview, reassign_orders};
-use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure, set_new_master};
 use crate::modules::system_status::WaitingConfirmation;
-
-
 
 pub use crate::modules::elevator_object::*;
 pub use elevator_init::Elevator;

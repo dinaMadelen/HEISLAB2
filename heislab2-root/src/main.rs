@@ -65,7 +65,6 @@ fn main() -> std::io::Result<()> {
     spawn_elevator_monitor_thread(system_state.clone(), udphandler.clone());
     print_master_id(system_state.clone());
     broadcast_alive_msg(udphandler.clone(), system_state.clone());
-    spawn_master_failure_check_thread(system_state.clone(), udphandler.clone());
     spawn_queue_finish_thread(
         system_state.clone(),
         elevator.clone(),

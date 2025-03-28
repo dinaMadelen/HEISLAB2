@@ -158,6 +158,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
     let mut worldview_missing_orders = false;
 
+    let mut missing_orders_total: Vec<Order> = Vec::new();
     // Compare recived worldview to known elevators
     for wv_elevator in new_worldview{
 
@@ -165,8 +166,6 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
-
-
             let known_queue=elevator.queue.clone();
 
             //No new orders
@@ -183,9 +182,12 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
             //Found missing order, add them to queue
             let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)).cloned().collect();
+
             if !missing_orders.is_empty() {
                 println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
-                elevator.queue.extend(missing_orders);
+                elevator.queue.extend(missing_orders.clone());
+
+                missing_orders_total.extend(missing_orders);
             }
 
         } else{
@@ -194,8 +196,17 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             known_elevators_locked.push(wv_elevator.clone());
             worldview_missing_orders = true;
         }
-    
         drop(known_elevators_locked);
+        
+        let mut all_orders = state.all_orders.lock().unwrap();
+        // Add each missing order if it is not already present.
+        for order in &missing_orders_total {
+            if !all_orders.contains(&order){
+                all_orders.push(order.clone());
+            }
+        }
+        drop(all_orders);
+        
 
     } 
     

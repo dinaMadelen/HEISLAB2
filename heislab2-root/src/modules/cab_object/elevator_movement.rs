@@ -63,39 +63,24 @@ impl Cab{
          
      
     pub fn go_next_floor(&mut self, door_tx: cbc::Sender<bool>, obstruction_rx: cbc::Receiver<bool>, elevator:Elevator) {
-    if self.status == Status::DoorOpen  {
-        // Update last_served_floor here before starting to move.
-        self.last_served_floor = self.current_floor;
-    }
-
-    // Only attempt to change floors if we are Moving or Idle and there is at least one order.
-    if (self.status == Status::Moving || self.status == Status::Idle) && !self.queue.is_empty() {
-        // When idle (about to depart), update last_served_floor.
-        if self.status == Status::Idle {
+        if self.status == Status::DoorOpen  {
+            // Update last_served_floor here before starting to move.
             self.last_served_floor = self.current_floor;
         }
-        // We'll use current_floor as our effective floor for deciding stops.
-        let effective_floor = self.current_floor;
-
-        if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
-            // Check if any order in the queue matches the effective floor,
-            // but if we're moving, ignore orders for the floor we just left.
-            let should_stop = self.queue.iter().any(|order| {
-                if self.status == Status::Moving && order.floor == self.last_served_floor {
-                    false
-                } else {
-                    order.floor == effective_floor &&
-                    (
-                        (self.direction == DIRN_UP   && order.order_type == HALL_UP) ||
-                        (self.direction == DIRN_DOWN && order.order_type == HALL_DOWN) ||
-                        (order.order_type == CAB)
-                    )
-                }
-            });
-
-            if should_stop {
-                // Find the matching order and bring it to the front.
-                if let Some((db_order_index, _)) = self.queue.iter().enumerate().find(|(_, order)| {
+    
+        // Only attempt to change floors if we are Moving or Idle and there is at least one order.
+        if (self.status == Status::Moving || self.status == Status::Idle) && !self.queue.is_empty() {
+            // When idle (about to depart), update last_served_floor.
+            if self.status == Status::Idle {
+                self.last_served_floor = self.current_floor;
+            }
+            // We'll use current_floor as our effective floor for deciding stops.
+            let effective_floor = self.current_floor;
+    
+            if let Some(next_floor) = self.queue.first().map(|first_item| first_item.floor) {
+                // Check if any order in the queue matches the effective floor,
+                // but if we're moving, ignore orders for the floor we just left.
+                let should_stop = self.queue.iter().any(|order| {
                     if self.status == Status::Moving && order.floor == self.last_served_floor {
                         false
                     } else {
@@ -106,39 +91,54 @@ impl Cab{
                             (order.order_type == CAB)
                         )
                     }
-                }) {
-                    let driveby_order = self.queue.remove(db_order_index);
-                    self.queue.insert(0, driveby_order);
-                    println!(
-                        "Stopping at floor {} because order in queue matches effective floor {}.",
-                        effective_floor, effective_floor
-                    );
-                    elevator.motor_direction(DIRN_STOP);
-                    self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
-                    // Update current_floor now that we've stopped.
-                    self.current_floor = effective_floor;
+                });
+    
+                if should_stop {
+                    // Find the matching order and bring it to the front.
+                    if let Some((db_order_index, _)) = self.queue.iter().enumerate().find(|(_, order)| {
+                        if self.status == Status::Moving && order.floor == self.last_served_floor {
+                            false
+                        } else {
+                            order.floor == effective_floor &&
+                            (
+                                (self.direction == DIRN_UP   && order.order_type == HALL_UP) ||
+                                (self.direction == DIRN_DOWN && order.order_type == HALL_DOWN) ||
+                                (order.order_type == CAB)
+                            )
+                        }
+                    }) {
+                        let driveby_order = self.queue.remove(db_order_index);
+                        self.queue.insert(0, driveby_order);
+                        println!(
+                            "Stopping at floor {} because order in queue matches effective floor {}.",
+                            effective_floor, effective_floor
+                        );
+                        elevator.motor_direction(DIRN_STOP);
+                        self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
+                        // Update current_floor now that we've stopped.
+                        self.current_floor = effective_floor;
+                    }
+                } else {
+                    // If no order demands a stop at the effective floor, command movement.
+                    if next_floor > self.current_floor {
+                        self.set_status(Status::Moving, elevator.clone());
+                        elevator.motor_direction(DIRN_UP);
+                    } else if next_floor < self.current_floor {
+                        self.set_status(Status::Moving, elevator.clone());
+                        elevator.motor_direction(DIRN_DOWN);
+                    } else if next_floor == self.current_floor {
+                        // Should only occur if we have just arrived.
+                        elevator.motor_direction(DIRN_STOP);
+                        self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
+                        self.current_floor = next_floor;
+                    }
                 }
             } else {
-                // If no order demands a stop at the effective floor, command movement.
-                if next_floor > self.current_floor {
-                    self.set_status(Status::Moving, elevator.clone());
-                    elevator.motor_direction(DIRN_UP);
-                } else if next_floor < self.current_floor {
-                    self.set_status(Status::Moving, elevator.clone());
-                    elevator.motor_direction(DIRN_DOWN);
-                } else if next_floor == self.current_floor {
-                    // Should only occur if we have just arrived.
-                    elevator.motor_direction(DIRN_STOP);
-                    self.try_close_door(door_tx, obstruction_rx.clone(), elevator.clone());
-                    self.current_floor = next_floor;
-                }
+                elevator.motor_direction(DIRN_STOP);
             }
         } else {
+            // If there are no orders, ensure the elevator is stopped.
             elevator.motor_direction(DIRN_STOP);
         }
-    } else {
-        // If there are no orders, ensure the elevator is stopped.
-        elevator.motor_direction(DIRN_STOP);
-    }
 }
 }    

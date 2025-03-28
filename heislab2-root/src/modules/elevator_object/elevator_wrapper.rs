@@ -89,23 +89,17 @@ pub fn spawn_queue_finish_thread(
     spawn(move|| {
         // loop forever
         loop{
-            sleep(Duration::from_secs(1));
+            sleep(Duration::from_millis(100));
             
-            // get known elevators
-            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-            // skip rest of loop iteration if the queue is empty
-            if known_elevators_locked.get_mut(0).unwrap().queue.is_empty() {continue;}
-
-            // go to next floor
-            known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
             
-            // turn on lights in queue
-            let queue_clone = known_elevators_locked.get_mut(0).unwrap().queue.clone();
-            known_elevators_locked.get_mut(0).unwrap().lights(queue_clone, elevator_clone.clone());
+            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap().clone();
+            if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
+                known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
+                let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
+                known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator_clone.clone());
+            }
 
-            // print status
             known_elevators_locked.get_mut(0).unwrap().print_status();
-            
             drop(known_elevators_locked);
         }
     });

@@ -666,11 +666,7 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_t
 
 
 pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
-    //Extract updated cab data from message
-
-    for elevator in state.known_elevators.lock().unwrap().iter_mut().filter(|e| !e.alive && msg.header.sender_id == e.id) {
-        elevator.alive = true;
-    }
+    //Extract updated cab data from messagehandle_ack
 
      let mut updated_cab = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()

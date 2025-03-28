@@ -1,32 +1,24 @@
-use std::thread::*;
-use std::time::*;
 use crossbeam_channel as cbc;
-//use heislab2_root::modules::io::io_init;
-//use heislab2_root::modules::master_functions::master::handle_slave_failure;
-use std::sync::Arc;
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::{
+    thread::*,
+    time::*,
+    sync::Arc,
+    net::{SocketAddr, IpAddr, Ipv4Addr},
+};
 
-use heislab2_root::modules::elevator_object::*;
-use alias_lib::{DIRN_DOWN, DIRN_STOP};
-use elevator_init::Elevator;
-use heislab2_root::modules::*;
-
-// TEST IF STUFF WORKS
-
-use cab_object::*;
-use cab::Cab;
-use elevator_status_functions::Status;
-use order_object::order_init::Order;
-use slave_functions::slave::*;
-use master_functions::master::*;
-use system_init::*;
-
-
-use heislab2_root::modules::udp_functions::udp::*;
-use udp_functions::udp::UdpData;
-
-use heislab2_root::modules::io::io_init::*;
-
+use heislab2_root::modules::{
+    *,
+    cab_object::elevator_status_functions::Status,
+    order_object::order_init::Order,
+    slave_functions::slave::*,
+    master_functions::master::*,
+    elevator_object::elevator_init::Elevator,
+    udp_functions::udp::*,
+    io::io_init::*,
+    elevator_object::alias_lib::{DIRN_DOWN, DIRN_STOP},
+    system_init::*,
+    cab_object::cab::Cab,
+};
 
 
 fn main() -> std::io::Result<()> {
@@ -52,8 +44,6 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CAB---------------
     let system_state = Arc::new(boot());
 
-    //OBS!!! This is localhost, aka only localy on the computer, cant send between computers on tha same net, check Cab.rs
-    //let new_cab = Cab::init(&inn_addr, &out_addr, 4, 2, &mut state)?;
     
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);

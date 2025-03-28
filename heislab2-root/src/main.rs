@@ -118,6 +118,7 @@ fn main() -> std::io::Result<()> {
     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
     drop(known_elevators_locked);
    
+    println!("121 I main");
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
     for port in 3701..3705{
@@ -345,7 +346,7 @@ fn main() -> std::io::Result<()> {
                 println!("Stop button: {:#?}", stop);
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.is_empty(){
-                    println!("There are no elevators in the system")
+                    println!("There are no elevators in the system");
                 }else {
                     if known_elevators_locked.get(0).unwrap().status == Status::Stop{
                         known_elevators_locked.get_mut(0).unwrap().alive=true;

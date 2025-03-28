@@ -381,7 +381,7 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             println!("Removed completed order {:?} from ID:{}",completed_order,elevator.id);
         }
     }
-    
+
     let mut all_orders_locked = state.all_orders.lock().unwrap();
     if completed_order.order_type == CAB {
         if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {

@@ -453,50 +453,45 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
 /// Retruns - Vec<u8> - a list of i IDs in decending order from best fit to worst fit.
 ///
 pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
-
-    // Vec<Cab.ID, Score> Higher score = better alternative
-    let mut scores: Vec<(u8, i32)> = Vec::new(); 
-
-    // Give score to all active elevators
+    let mut scores: Vec<(u8, i32)> = Vec::new();
     for elevator in elevators {
         let mut score = 0;
 
-        // Distance to the order (lower is better)
-        score -= 10*(elevator.current_floor as i32 - order.floor as i32).abs();
+        // Distance: closer floors get a higher score.
+        let distance = (elevator.current_floor as i32 - order.floor as i32).abs();
+        score -= 10 * distance;
 
-        // Direction compatibility
+        // Direction compatibility: reward if moving in the right direction.
         if elevator.status == Status::Moving {
-            if (elevator.direction == DIRN_UP && elevator.current_floor < order.floor) || 
-               (elevator.direction == DIRN_UP && elevator.current_floor > order.floor) {
-                // Reward for moving towards the floor
-                score += 10; 
+            if (elevator.direction == DIRN_UP && elevator.current_floor < order.floor)
+                || (elevator.direction == DIRN_DOWN && elevator.current_floor > order.floor)
+            {
+                score += 10;
             } else {
-                // Penalty if moving away from the floor
-                score -= 10; 
+                score -= 10;
             }
-
-
-        // Idle elevators are prefered over busy elevators
-        }else if elevator.status == Status::Idle { 
+        } else if elevator.status == Status::Idle {
+            // Idle elevators are preferred.
             score += 30;
-        }else if elevator.status == Status::Error {
-            score -= 10000
+        } else if elevator.status == Status::Error {
+            score -= 10000;
         }
-        if elevator.alive == false{
+
+        // If elevator is not alive, heavy penalty.
+        if !elevator.alive {
             score -= 20000;
         }
-
-        // Shorter queue gets priority, Less is better
-        score -= elevator.queue.len() as i32 * 10; 
+        // Shorter queue gets priority.
+        score -= 10 * elevator.queue.len() as i32;
 
         scores.push((elevator.id, score));
     }
 
-    // Sort by score
+    // Sort in descending order 
     scores.sort_by(|a, b| b.1.cmp(&a.1));
 
-    // Return Vec<u8> of IDs in decending order from best to worst option  https://doc.rust-lang.org/std/iter/struct.Map.html
-    return scores.into_iter().map(|(id, _score)| id).collect();
+    // Return only the elevator IDs in sorted order.
+    scores.into_iter().map(|(id, _)| id).collect()
 }
 
 /// handle_multiple_masters

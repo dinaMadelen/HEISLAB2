@@ -237,7 +237,6 @@ fn main() -> std::io::Result<()> {
                         elevator.door_light(false);
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
-                        known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);

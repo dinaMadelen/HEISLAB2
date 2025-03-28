@@ -67,14 +67,17 @@ pub fn handle_door_rx(system_state_clone: Arc<SystemState>,
     elevator: &Elevator
 ) -> () {
     let door_signal = door_rx_msg;
+    elevator.door_light(false);
+    // LA TIL DETTE CHRIS
+   
     if door_signal {
         elevator.door_light(false);
         // LA TIL DETTE CHRIS
-        let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap().clone();
+        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
         if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
             
         }else {
-            let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+            let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
 
             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
             let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
@@ -83,7 +86,7 @@ pub fn handle_door_rx(system_state_clone: Arc<SystemState>,
 
             elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
 
-            let mut all_orders_locked = system_state_clone.all_orders.lock().unwrap();
+            let mut all_orders_locked = system_state.all_orders.lock().unwrap();
             if completed_order.order_type == CAB {
                 if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
                     all_orders_locked.remove(index);
@@ -94,28 +97,27 @@ pub fn handle_door_rx(system_state_clone: Arc<SystemState>,
                 });
             }
             drop(all_orders_locked);
-            
-            // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- - -    -   -       -   -              -
-            let known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
+            let known_elevators_locked = system_state.known_elevators.lock().unwrap();
             let cab_clone = known_elevators_locked.get(0).unwrap().clone();
 
-            let alive_msg = make_udp_msg(system_state_clone.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));
-            let ordercomplete = make_udp_msg(system_state_clone.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
+            let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));
+            let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
             drop(known_elevators_locked);
 
             let elevator_addresses: Vec<_> = {
-                let known_elevators = system_state_clone.known_elevators.lock().unwrap();
+                let known_elevators = system_state.known_elevators.lock().unwrap();
                 known_elevators.iter().map(|e| e.inn_address).collect()
             };
 
             for addr in elevator_addresses {
                 //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
-                udphandler_clone.send(&addr, &ordercomplete);
-                udphandler_clone.send(&addr, &alive_msg); 
+                udphandler.send(&addr, &ordercomplete);
+                udphandler.send(&addr, &alive_msg); 
             }  
         }
-        
+      
     }
+}
         
 }
 

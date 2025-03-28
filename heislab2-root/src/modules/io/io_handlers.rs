@@ -31,10 +31,8 @@ use crate::modules::{
 /// Turns on the lights for its own queue
 pub fn handle_light_update_rx(system_state_clone: Arc<SystemState>, elevator_clone: Elevator) -> () {
     //Turn onn all lights in own queue
-    let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
-    let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
-    known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator_clone);
-    drop(known_elevators_locked);
+    let mut known_elevators_clone = system_state_clone.known_elevators.lock().unwrap().clone();
+    known_elevators_clone.get_mut(0).unwrap().lights(&system_state_clone.clone(), elevator_clone);
 }
 
 /// Is called when input is detected in the order upate rx channel
@@ -188,9 +186,11 @@ pub fn handle_floor_rx(
         elevator.motor_direction(DIRN_STOP);
     }
     known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels_clone.door_tx.clone(),io_channels_clone.obstruction_rx.clone(),elevator.clone());
-    let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
-    known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator.clone());
+
     drop(known_elevators_locked);
+    let mut known_elevators_clone = system_state_clone.known_elevators.lock().unwrap().clone();
+    known_elevators_clone.get_mut(0).unwrap().lights(&system_state_clone.clone(), elevator.clone());
+    
 
 
     //Broadcast new state
@@ -250,8 +250,6 @@ pub fn handle_obstruction_rx(
         }else{
             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle,elevator.clone());
             known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels_clone.door_tx,io_channels_clone.obstruction_rx,elevator.clone());
-            let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
-            known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator.clone());
         }
         drop(known_elevators_locked);
     }

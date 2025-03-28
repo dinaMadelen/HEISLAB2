@@ -238,9 +238,12 @@ fn main() -> std::io::Result<()> {
                         elevator.door_light(false);
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
-
+                        
                         // LA TIL DETTE CHRIS
                         let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                        elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
+
+
                         let mut all_orders_locked = system_state.all_orders.lock().unwrap();
                         if completed_order.order_type == CAB {
                             if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {

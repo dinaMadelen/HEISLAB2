@@ -37,25 +37,11 @@ use crate::modules::system_status::SystemState;
 use crate::modules::elevator_object::alias_lib::{CAB, DIRN_DOWN, DIRN_UP};
 use crossbeam_channel as cbc;
 
-
 use serde::{Serialize, Deserialize};
 use std::sync::Arc;
 
-/* 
-//-----------------------GLOBAL VARIABLES---------------------------------------------------
-static mut FAILED_ORDERS: Option<Arc<Mutex<Vec<Order>>>> = None;
-*/
-
-
 //-----------------------STRUCTS------------------------------------------------------------
 
-/*  Not used
-/// A struct that holds all the active elevators aswell as all active lights
-pub struct Worldview{
-    elevators: Vec<Cab>,
-    lights: Vec<u8>,
-}
-*/
 /// All possible roles of a node
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Role{
@@ -147,8 +133,10 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 /// 
 /// # Arguments:
 /// 
-/// * `missing_orders` - Vec<Cab> - List of elevators with errors in queues.
-/// * `known_elevators` - &mut Vec<Cab> - Refrence to master elevator.
+/// * `missing_orders` - &Vec<Cab> - refrence to a list of elevators with errors in queues.
+/// * `state` - &Arc<SystemState> - Refrence to the systemstate
+/// * `udp_handler``- &Arc<UdpHandler> - handler for sending udp messages
+/// * `order_update_tx` - &cbc::Sender<Vec<Order>> - crossbeam channel to update lights.
 /// 
 /// # Returns:
 ///
@@ -222,53 +210,14 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
 }
 
 
-/// generate_worldview
-/// Create worldview from list of active elevators
-/// finds active lights from orders of active elevators
-/// 
-/// # Arguments:
-/// 
-/// * `known_elevators` - &Vec<Cab> - Refrence to list of active elevators
-/// 
-/// # Returns:
-///
-/// Returns - Worldview- Returns a worldview struct.
-///
-
-
-/*Not used
-pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
-
-    // Find active lights
-    let mut lights = Vec::new();
-    for elevator in known_elevators {
-
-        for order in &elevator.queue {
-            let floor = order.floor;
-            if !lights.contains(&floor) {
-                lights.push(floor);
-            }
-        }
-    }
-    
-    lights.sort();
-    // No duplicates
-    lights.dedup();
-
-    return Worldview {
-        elevators: known_elevators.clone(), 
-        lights,                       
-    };
-}
-*/
-
 
 /// master_worldview
 /// Compare message and send out the corrected worldview (union of the recived and current worldview)
 /// 
 /// # Arguments:
 /// 
-/// * `state` - SsytemState - Refrence to list of active elevators(mutex, see SysState).
+/// * `state` - SystemState - Refrence to state of the system struct see SystemState).
+/// * `UdpHandler` - Handler for sending udp messages. 
 /// 
 /// # Returns:
 ///
@@ -290,19 +239,6 @@ pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -
     return udp_broadcast(&message);
 }
 
-// Give away master role, NOT NEEDED, KILL INSTEAD
-/*
-fn relinquish_master(master: &mut Cab) -> bool {
-
-    let message = make_udp_msg(master.ID, MessageType::RelinquishMaster, vec![]);
-    udp_broadcast(&socket, &message);
-
-    master.status = Cab.status::Error;
-    return true;
-}
-*/
-
-
 /// handle_slave_failure
 /// Handle slave failure, take action to secure service for orders when a slave goes offline
 /// 
@@ -312,12 +248,12 @@ fn relinquish_master(master: &mut Cab) -> bool {
 /// * `elevators` - &mut Vec<Cab> - refrence to the vector containing the active elevators.
 /// * `state` - &mut SystemState - mutable refrence to the systemstate
 /// * `udp_handler` - refrence to the handler that should send message.
+/// * `order_update_tx` -cbc::Sender<Vec<Order>>)-  crossbeam channel to notify other threads
 /// 
 /// # Returns: 
 /// 
 /// Returns - bool - `true` if orders have been succsessfully distributed and elevator har been removed from active elevators
 /// else returns `false`
-///
 ///
 pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>)  -> bool {
 
@@ -326,16 +262,16 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
     return reassign_elevator_orders(slave_id, state, &udp_handler, order_update_tx.clone());
 }
 
-
-
-/// Reassign failed orders
+/// reassign orders
 /// Reassigns a or more orders from one elevator to active elevators
+/// it also tries to reassign messages that currently have no dedicated elevator
 ///  
 /// # Arguments:
 /// 
 /// * `orders` - &Vec<u8> - refrence to list of orders to be distributed.
 /// * `state` - mutable refrence to system state
 /// * `udp_handler` - &UdpHandler> - refrence to the handler that should send the order.
+/// * `order_update_tx` - &order_update_tx-  crossbeamchannel for messagepassing between threads.
 /// 
 /// # Returns:
 /// 
@@ -401,6 +337,20 @@ pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handle
 }
 
 
+/// Reassign elevator orders
+/// Reassigns all non cab calls from one cab, distributed amongst all active active
+///  
+/// # Arguments:
+/// 
+/// * `error_cab_id` - u8 - id of the elevator that who's orders are being reassigned
+/// * `state` - mutable refrence to system state
+/// * `udp_handler` - &UdpHandler> - refrence to the handler that should send the order.
+/// * `order_update_tx` - &order_update_tx-  crossbeamchannel for messagepassing between threads.
+/// 
+/// # Returns:
+/// 
+/// returns `true`, if successfull and `false` if failed.
+///
 pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
     
     //Changing elevator from active elevators to inactive
@@ -413,7 +363,6 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
         println!("Error: can't find elevator ID {}, in known list", error_cab_id);
     }
     
-
     //Find this elevator
     if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == error_cab_id) {
         let mut assigned = true;
@@ -466,9 +415,6 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
         println!("Couldnt find ID:{}, in active elevators", error_cab_id);
         }
 
-
-    
-
     let failed_orders_locked = state.all_orders.lock().unwrap();
     if failed_orders_locked.is_empty() {
         println!("All failed orders are redistributed");
@@ -479,7 +425,7 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
     }
     
 }
-
+/// best to worst elevator
 /// Cost function that returns order to the best fitting elevators from best to worst alternative.
 ///  
 /// # Arguments:
@@ -489,7 +435,7 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
 /// 
 /// # Returns:
 ///
-/// Retruns - Vec<u8> - a list of i IDs in decending order from best fit to worst fit.
+/// Retruns - Vec<u8> - a list of IDs in decending order from best fit to worst fit.
 ///
 pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
     let mut scores: Vec<(u8, i32)> = Vec::new();
@@ -533,14 +479,14 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
     scores.into_iter().map(|(id, _)| id).collect()
 }
 
-/// handle_multiple_masters
+/// fix master issues
 /// If for some reason more than master is active, forexample race during election or one didnt recive the first message from new master.
 /// master with lowest ID keeps the role, the rest become slaves.
 /// 
 /// # Arguments:
 /// 
 /// * `stae` - &mut SystemState - mutable refrence to the systemstate.
-/// * `sender` - &u8 - refrence to the ID of the master it is comparing to.
+/// * `udp_handlerr` - &u8 - refrence to udp handler to send udp messages.
 /// 
 /// # Returns:
 ///
@@ -614,9 +560,6 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
                 }
             }
         }
-       
-        
-        // Both locks (master_id and known_elevators) are released here.
     }
 
     // Ensure our own role is correct.
@@ -637,6 +580,5 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
                 }
             }
         }
-        // Lock is released here.
     }
 }

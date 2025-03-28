@@ -59,7 +59,7 @@ use std::thread;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::elevator_object::elevator_init::SystemState;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_multiple_masters_lowest_id_is_master,Role,correct_master_worldview, reassign_orders};
+use crate::modules::master_functions::master::{give_order, best_to_worst_elevator,fix_master_issues,Role,correct_master_worldview, reassign_orders};
 use crate::modules::slave_functions::slave::{update_from_worldview, check_master_failure, set_new_master};
 use crate::modules::system_status::WaitingConfirmation;
 
@@ -170,6 +170,7 @@ impl UdpHandler {
                 entry.all_confirmed = true;
             }
             println!("This is the only elevator in system, skipping ACK wait.");
+            return false;
         }
         drop(known_elevators_locked);
         
@@ -250,7 +251,6 @@ impl UdpHandler {
 
         //Lock socket from udp.handler
         let sock = self.receiver_socket.lock().expect("Failed to lock receiver socket");
-
         //Set timeout for reciving messages (How long are you willing to wait)
         sock.set_read_timeout(Some(Duration::from_millis(max_wait as u64))).expect("Failed to set timeout for socket");
         let mut buffer = [0; 1024];
@@ -306,7 +306,7 @@ impl UdpHandler {
                     MessageType::Ack => {thread::spawn(move || {handle_ack(&msg_clone, passable_state)});},
                     MessageType::Nak => {thread::spawn(move || {handle_nak(&msg_clone, passable_state, &sender, udp_handler_clone)});},
                     MessageType::NewOrder => {thread::spawn(move || {handle_new_order(&msg_clone, &sender, passable_state, udp_handler_clone, light_update_tx_clone,tx_clone)});},
-                    MessageType::NewOnline => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_new_online(&msg_clone, passable_state);}});},
+                    MessageType::NewOnline => {thread::spawn(move ||{handle_new_online(&msg_clone, passable_state)});},
                     MessageType::ErrorWorldview => {thread::spawn(move || {handle_error_worldview(&msg_clone, passable_state)});},
                     MessageType::ErrorOffline => {handle_error_offline(&msg, passable_state, &self, tx_clone);},  // Some Error here, not sure what channel should be passed compiler says: "argument #4 of type `crossbeam_channel::Sender<Vec<Order>>` is missing"
                     MessageType::OrderComplete => {thread::spawn(move || {if !(&msg_clone.header.sender_id == &passable_state.me_id){handle_order_completed(&msg_clone, passable_state, light_update_tx_clone);}});},
@@ -380,14 +380,19 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             elevator.queue.remove(index);
             println!("Removed completed order {:?} from ID:{}",completed_order,elevator.id);
         }
-
     }
+
     let mut all_orders_locked = state.all_orders.lock().unwrap();
-    if let Some(index) = all_orders_locked.iter().position(|o| *o == completed_order) {
-        all_orders_locked.remove(index);
+    if completed_order.order_type == CAB {
+        if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+            all_orders_locked.remove(index);
+        }
+    } else {
+        all_orders_locked.retain(|order| {
+            !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
+        });
     }
-
-    
+            
 }
 
 
@@ -459,16 +464,19 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                         &state.me_id
                     }
                 };
+
                 let success = give_order(*best_elevator, vec![&new_order], &state, &udp_handler);
-                /* 
+                
                 if !success{
                     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
                     known_elevators_locked.get_mut(0).unwrap().queue.push(new_order.clone());
-                }*/
+                }
+
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
             } 
         }       
     }
+    println!("THIS ORDER UPDATE 2 of 4");
     order_update_tx.send(vec![new_order.clone()]).unwrap();
 }
 
@@ -527,6 +535,11 @@ pub fn make_udp_msg(sender_id: u8,message_type: MessageType, message: UdpData) -
 /// Returns - None - .
 ///
 pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg,udp_handler: Arc<UdpHandler>) {
+
+    // My worldview
+    if state.me_id == msg.header.sender_id{
+        return;
+    }
 
     println!("Updating worldview...");
 
@@ -714,25 +727,41 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
 /// Returns -None- .
 ///
 pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
-    println!("New master detected, ID: {}", msg.header.sender_id);
+    let master_id = state.master_id.lock().unwrap().clone();
+    let known_master_id = state.master_id.lock().unwrap().clone();
+    if  !(known_master_id == master_id){
+        println!("New master detected, ID: {}", msg.header.sender_id);
+
+    let cab_to_be_master = if let UdpData::Cab(cab) = &msg.data{
+        cab.clone()
+    }else{
+        println!("Couldnt read NewMaster message");
+        return;
+    };
 
     // Set current master's role to Slave
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
     if let Some(current_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
         println!("Changing current master (ID: {}) to slave.", current_master.id);
         current_master.role = Role::Slave;
-        current_master.alive =false;
     } else {
         println!("ERROR: No active master found.");
     }
 
     // Set new master
-    if let Some(new_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == msg.header.sender_id) {
-        println!("Updating elevator ID {} to Master.", msg.header.sender_id);
+    if let Some(new_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == cab_to_be_master.id) {
+        println!("Updating elevator ID {} to Master.", cab_to_be_master.id);
         new_master.role = Role::Master;
+
+        let mut master_id = state.master_id.lock().unwrap();
+        *master_id = cab_to_be_master.id;
+        drop(master_id);
+
     } else {
         println!("Error: Elevator ID {} not found in active list.", msg.header.sender_id);
     }
+    }
+    
 }
 
 /// handle_new_online
@@ -754,17 +783,18 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
 
     // Check if elevator is already active
     if known_elevators_locked.iter().any(|e| e.id == msg.header.sender_id && e.alive) {
+  
         println!("Elevator ID:{} is already active.", msg.header.sender_id);
         return true;
     }else if let Some(cab) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id && !e.alive){
         cab.alive=true;
-        return true;
         println!("Elevator ID: is set alive, already known elevator");
+        return true;
     }
 
     //Release active elevators
     drop(known_elevators_locked); 
-
+    
     let msg_elevator = if let UdpData::Cab(cab) = &msg.data {
         cab
     } else {
@@ -781,6 +811,7 @@ pub fn handle_new_online(msg: &UdpMsg, state: Arc<SystemState>) -> bool {
         num_floors: msg_elevator.num_floors,
         id: msg_elevator.id,
         current_floor: msg_elevator.current_floor,
+        last_served_floor: msg_elevator.last_served_floor,
         queue: msg_elevator.queue.clone(),
         status: msg_elevator.status.clone(),
         direction: msg_elevator.direction.clone(),
@@ -838,64 +869,105 @@ pub fn handle_error_worldview(msg: &UdpMsg, state: Arc<SystemState>) {
 ///
 /// Returns - None - .
 ///
-pub fn handle_error_offline(msg: &UdpMsg,state: Arc<SystemState> ,udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) {
-    println!("Elevator {} went offline. Reassigning orders", msg.header.sender_id);
-    if let UdpData::Cab(cab) = &msg.data 
-    {
-        {
-            let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-            //Dead elevator gets set to dead and slave
-            if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id){
-                elevator.alive = false;
-                elevator.role = Role::Slave;
-                println!("ID:{} set to offline.", cab.id);
+pub fn handle_error_offline(
+    msg: &UdpMsg,
+    state: Arc<SystemState>,
+    udp_handler: &UdpHandler,
+    order_update_tx: cbc::Sender<Vec<Order>>,
+) {
+    
 
-            } 
-            else
-            {
-                println!("Elevator ID:{} not found in known elevators.", cab.id);
-            }
+    if let UdpData::Cab(ref cab) = msg.data {
+        // Update the shared state directly without cloning.
+        println!("Elevator {} went offline. Reassigning orders", cab.id);
+
+        let mut known_elevators = state.known_elevators.lock().unwrap();
+        if let Some(elevator) = known_elevators.iter_mut().find(|e| e.id == cab.id) {
+            elevator.alive = false;
+            elevator.role = Role::Slave;
+            println!("Elevator ID:{} set to offline.", cab.id);
+        } else {
+            println!("Elevator ID:{} not found in known elevators.", cab.id);
+            return;
         }
-        
-        let mut known_elevators_cloned = state.known_elevators.lock().unwrap().clone();
-        if let Some(elevator) = known_elevators_cloned.iter_mut().find(|e| e.id == cab.id)
-        {
-            let master_id_clone = state.master_id.lock().unwrap().clone();
-            if elevator.id == master_id_clone
-            {
-                //SORTING ELEVATORS INTO A LIST OF ALIVE ELEVETORS BY ID
-                let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
-                let mut known_alive_elevators: Vec<Cab> = known_elevators_clone.iter().filter(|e| e.alive).cloned().collect();
-                known_alive_elevators.sort_by_key(|cab| cab.id);
-                
-                //SET NEW MASTER TO THE ONE THAT IS ALIVE WITH LOWEST ID
-                set_new_master(&mut known_alive_elevators.get(0).unwrap().clone(), &state);
-            }
+        drop(known_elevators);
+        //
 
-            //IF I AM THE NEW MASTER REDISTRIBUTE ORDERS
-            let master_id_clone = state.master_id.lock().unwrap().clone();
-            if state.me_id == master_id_clone
-            {
-                let dead_elevators_hall_orders: Vec<Order> = elevator.queue
-                    .iter()
-                    .filter(|order| order.order_type == HALL_UP || order.order_type == HALL_DOWN)
-                    .cloned() // convert &Order to Order
+        // Check if the offline elevator was the master.
+        let was_master = {
+            let known_elevators = state.known_elevators.lock().unwrap();
+            if let Some(elevator) = known_elevators.iter().find(|e| e.id == cab.id) {
+                let master_id = *state.master_id.lock().unwrap();
+                elevator.id == master_id
+            } else {
+                false
+            }
+        };
+
+        // If the offline elevator was the master, choose a new master.
+        if was_master {
+            let new_master_id_opt = {
+                let mut known_elevators = state.known_elevators.lock().unwrap();
+                // Filter the alive elevators.
+                let mut alive_elevators: Vec<&mut Cab> = known_elevators
+                    .iter_mut()
+                    .filter(|e| e.alive)
                     .collect();
-                println!("______I AM MASTER REASSIGNING ORDERS____");
-                reassign_orders(&dead_elevators_hall_orders, &state, udp_handler, order_update_tx);
+                // Sort by ID so the one with the lowest ID comes first.
+                alive_elevators.sort_by_key(|e| e.id);
+                alive_elevators.get(0).map(|e| e.id)
+            };
+
+
+            if let Some(new_master_id) = new_master_id_opt {
+                // Update the master id in the shared state.
+                {
+                    let mut master_id_lock = state.master_id.lock().unwrap();
+                    *master_id_lock = new_master_id;
+                }
+                println!("Master offline, set new master to ID: {}", new_master_id);
+                // Optionally, broadcast the new master status here.
+            } else {
+                println!("No alive elevators found to set as new master.");
             }
         } 
         else 
         {
             println!("Elevator ID:{} not found in known elevators.", cab.id);
         }
-        
-        // Throw away all orders except cab orders from the offline elevator
+
+        // If this elevator is the new master, reassign orders.
         {
-            let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-            if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == cab.id) 
-            {
-                elevator.queue.retain(|o| o.order_type == CAB);
+            let master_id = *state.master_id.lock().unwrap();
+            if state.me_id == master_id {
+                let orders_to_reassign = {
+                    let known_elevators = state.known_elevators.lock().unwrap();
+                    // Find the offline elevator and collect its hall orders.
+                    if let Some(elevator) = known_elevators.iter().find(|e| e.id == cab.id) {
+                        elevator
+                            .queue
+                            .iter()
+                            .filter(|order| order.order_type == HALL_UP || order.order_type == HALL_DOWN)
+                            .cloned()
+                            .collect::<Vec<Order>>()
+                    } else {
+                        Vec::new()
+                    }
+                };
+                if !orders_to_reassign.is_empty() {
+                    println!("I am master, reassigning orders: {:?}", orders_to_reassign);
+                    reassign_orders(&orders_to_reassign, &state, udp_handler, order_update_tx);
+                } else {
+                    println!("No hall orders found for reassignment.");
+                }
+            }
+        }
+
+        // Finally, remove all orders except cab orders from the offline elevator.
+        {
+            let mut known_elevators = state.known_elevators.lock().unwrap();
+            if let Some(elevator) = known_elevators.iter_mut().find(|e| e.id == cab.id) {
+                elevator.queue.retain(|order| order.order_type == CAB);
             }
         }
     }

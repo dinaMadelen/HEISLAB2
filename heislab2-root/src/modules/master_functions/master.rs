@@ -2,7 +2,6 @@
 //! This module provides structs and functions for the master node
 //! 
 //! ## The structs includes:
-//! - **Worldview**
 //! - **Role**
 //! 
 //! ## The functions includes:
@@ -35,7 +34,7 @@ use crate::modules::cab_object::cab::Cab;
 // use crate::modules::slave_functions::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
-use crate::modules::elevator_object::alias_lib::{CAB, DIRN_DOWN, DIRN_STOP};
+use crate::modules::elevator_object::alias_lib::{CAB, DIRN_DOWN, DIRN_UP};
 use crossbeam_channel as cbc;
 
 
@@ -98,16 +97,41 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
             return false;
         }
     };
+    let mut already_handeld=Vec::new();
+    let mut not_handeld=Vec::new();
 
     // Clone necessary data before dropping mutex lock
     let mut elevator = known_elevators_locked[elevator_index].clone();
 
+    //Check if order is already being handeld
+    for order in &new_order {
+        if order.order_type != CAB {
+            //For all alive elevators
+            let alive_elevators: Vec<&Cab> = known_elevators_locked.iter().filter(|e| e.alive).collect();
+            for possible_other_server in alive_elevators{
+                // Elevator is alive, and has a cabcall or similar order, then we assume the order will be handeld by this elevator
+                if possible_other_server.queue.iter().any(|o: &Order| {o.floor == order.floor && (o.order_type == order.order_type)|| order.order_type == CAB}) {
+                    already_handeld.push(order.clone());
+                }
+            }
+        }
+    }
+    
+    // Remove orders that are being handeld
+    if !already_handeld.is_empty() {
+        not_handeld = new_order.into_iter().filter(|o| !already_handeld.contains(o)).collect();
+        println!("Order is covered by other orders, ignoring");
+    }else{
+        not_handeld = new_order;
+    }
+    
     // Release known_elevators
     drop(known_elevators_locked);
     
     // Add new orders to elevator
-    for order in new_order {
+    for order in not_handeld {
         elevator.queue.push(order.clone());
+        println!("Added order{} to ID:{}",order.floor,elevator.id);
     }
 
     // Inform rest of system that the order has been added
@@ -117,8 +141,6 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
     // Broadcast message
     return udp_handler.ensure_broadcast(&message,state,5);
 }
-
-
 
 /// correct_master_worldview
 /// Compare message and send out the corrected worldview (union of the recived and current worldview)
@@ -141,7 +163,6 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
         println!("List of missing cabs is empty");
         return false;
     }
-
 
     // Compare elevators to missing orders list
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
@@ -224,7 +245,7 @@ pub fn master_worldview(state:&Arc<SystemState>) -> bool{
     println!("Starting worldview");
 
     let known_cabs = state.known_elevators.lock().unwrap().clone();
-    
+    todo!("MAKE THIS BROADCAST TO ALL!");
     println!("preparing to send");
     let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
     return udp_broadcast(&message);
@@ -282,7 +303,21 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 /// returns `true`, if successfull and `false` if failed.
 ///
 pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
-    for order in orders {
+    
+    // Copy value in mutexes
+    let mut all_orders = state.all_orders.lock().unwrap().clone();
+    let mut known_elevators = state.known_elevators.lock().unwrap().clone();
+
+    // Find all orders currently assigned to any elevator
+    let all_assigned_orders: Vec<Order> = known_elevators.iter().flat_map(|e| e.queue.iter().cloned()).collect();
+
+    // Filter out orders that are already in any elevator's queue
+    let mut missing_orders = all_orders.iter().filter(|o| !all_assigned_orders.contains(o)).cloned().collect();
+
+    let mut combined_orders = orders.clone();
+    combined_orders.append(&mut missing_orders);
+
+    for order in combined_orders {
         
         let mut assigned = false;
 
@@ -418,50 +453,45 @@ pub fn reassign_elevator_orders(error_cab_id: u8 , state: &Arc<SystemState>, udp
 /// Retruns - Vec<u8> - a list of i IDs in decending order from best fit to worst fit.
 ///
 pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
-
-    // Vec<Cab.ID, Score> Higher score = better alternative
-    let mut scores: Vec<(u8, i32)> = Vec::new(); 
-
-
-    // Give score to all active elevators
+    let mut scores: Vec<(u8, i32)> = Vec::new();
     for elevator in elevators {
         let mut score = 0;
 
-        // Distance to the order (lower is better)
-        score -= 10*(elevator.current_floor as i32 - order.floor as i32).abs();
+        // Distance: closer floors get a higher score.
+        let distance = (elevator.current_floor as i32 - order.floor as i32).abs();
+        score -= 10 * distance;
 
-        // Direction compatibility
+        // Direction compatibility: reward if moving in the right direction.
         if elevator.status == Status::Moving {
-            if (elevator.direction == 1 && elevator.current_floor < order.floor) || 
-               (elevator.direction == -1 && elevator.current_floor > order.floor) {
-                // Reward for moving towards the floor
-                score += 10; 
+            if (elevator.direction == DIRN_UP && elevator.current_floor < order.floor)
+                || (elevator.direction == DIRN_DOWN && elevator.current_floor > order.floor)
+            {
+                score += 10;
             } else {
-                // Penalty if moving away from the floor
-                score -= 10; 
+                score -= 10;
             }
-
-        // Idle elevators are prefered over busy elevators
-        }else if elevator.status == Status::Idle { 
-            score += 20;
-        }else if elevator.status == Status::Error {
-            score -= 10000
+        } else if elevator.status == Status::Idle {
+            // Idle elevators are preferred.
+            score += 30;
+        } else if elevator.status == Status::Error {
+            score -= 10000;
         }
-        if elevator.alive == false{
+
+        // If elevator is not alive, heavy penalty.
+        if !elevator.alive {
             score -= 20000;
         }
-
-        // Shorter queue gets priority, Less is better
-        score -= elevator.queue.len() as i32 * 5; 
+        // Shorter queue gets priority.
+        score -= 10 * elevator.queue.len() as i32;
 
         scores.push((elevator.id, score));
     }
 
-    // Sort by score
+    // Sort in descending order 
     scores.sort_by(|a, b| b.1.cmp(&a.1));
 
-    // Return Vec<u8> of IDs in decending order from best to worst option  https://doc.rust-lang.org/std/iter/struct.Map.html
-    return scores.into_iter().map(|(id, _score)| id).collect();
+    // Return only the elevator IDs in sorted order.
+    scores.into_iter().map(|(id, _)| id).collect()
 }
 
 /// handle_multiple_masters
@@ -477,32 +507,93 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 ///
 /// Returns - Some(bool) - returns false if the ID is its own, returns true if it keeps the master if the ID is higher than the sender, reboots if it is lower.
 ///
-pub fn fix_multiple_masters_lowest_id_is_master(state: &Arc<SystemState>) {
-    // Lock the known_elevators so we can mutate them.
-    let mut known_elevators = state.known_elevators.lock().unwrap();
-    // Gather references to all elevators that are currently Master.
-    let mut masters: Vec<&mut Cab> = known_elevators.iter_mut().filter(|cab| cab.role == Role::Master).collect();
+pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
+    // Make lowest id alive the master id
+    {
+        // Lock master_id first.
+        let mut master_id_guard = state.master_id.lock().unwrap();
+        let old_master_id = master_id_guard.clone();
+        // Then lock known_elevators.
+        let mut known_elevators = state.known_elevators.lock().unwrap();
 
-    // If more than one master is found
-    if masters.len() > 1 {
-        masters.sort_by_key(|cab| cab.id);
-        let chosen_master_id = masters[0].id;
-        println!(
-            "Multiple masters detected. Keeping elevator {} as master.",
-            chosen_master_id
-        );
-        let mut master_id = state.master_id.lock().unwrap();
-        *master_id = chosen_master_id;
+        // Gather mutable references to all elevators marked as Master.
+        let mut masters: Vec<&mut Cab> = known_elevators
+            .iter_mut()
+            .filter(|cab| cab.role == Role::Master)
+            .collect();
 
-        // all other masters to slave.
-        for cab in masters.iter_mut().skip(1) {
-            println!("Reassigning elevator {} from master to slave.", cab.id);
-            cab.role = Role::Slave;
+        if masters.len() > 1 {
+            // Multiple masters found.
+            masters.sort_by_key(|cab| cab.id);
+            let chosen_master = &masters[0];
+            let chosen_master_id = chosen_master.id;
+            println!(
+                "Multiple masters detected. Keeping elevator {} as master.",
+                chosen_master_id
+            );
+
+            // Set the shared master id.
+            *master_id_guard = chosen_master_id;
+
+            // Reassign all other masters to slave.
+            for cab in masters.iter_mut().skip(1) {
+                println!("Reassigning elevator {} from master to slave.", cab.id);
+                cab.role = Role::Slave;
+            }
+        } else if masters.is_empty() {
+            // No elevator is master.
+            println!("No masters alive, setting new master.");
+            // Find all alive elevators.
+            let mut alive_elevators: Vec<&mut Cab> = known_elevators
+                .iter_mut()
+                .filter(|cab| cab.alive)
+                .collect();
+            alive_elevators.sort_by_key(|cab| cab.id);
+            if let Some(new_master) = alive_elevators.first_mut() {
+                new_master.role = Role::Master;
+                *master_id_guard = new_master.id;
+            }
+        } else {
+            // Exactly one master exists.
+            println!("No multiple-master conflict detected.");
         }
-    } else {
-        // Either zero or exactly one master, so no conflict.
-        println!("No multiple-master conflict detected.");
+
+        if !(old_master_id == *master_id_guard){
+            if let Some(master_elevator) = known_elevators.iter().find(|cab| cab.id == *master_id_guard)
+            {
+                let msg = make_udp_msg(
+                    state.me_id,
+                    MessageType::NewMaster,
+                    UdpData::Cab(master_elevator.clone()),
+                );
+                for elevator in known_elevators.iter() {
+                    udp_handler.send(&elevator.inn_address, &msg);
+                }
+            }
+        }
+       
+        
+        // Both locks (master_id and known_elevators) are released here.
     }
 
-    // Lock is dropped here automatically when `known_elevators` goes out of scope.
+    // Ensure our own role is correct.
+    {
+        let master_id = *state.master_id.lock().unwrap();
+        let mut known_elevators = state.known_elevators.lock().unwrap();
+        if state.me_id == master_id {
+            // Make sure the elevator with the lowest id in the shared state is set as master.
+            if let Some(elevator) = known_elevators.iter_mut().min_by_key(|e| e.id) {
+                elevator.role = Role::Master;
+                let msg = make_udp_msg(
+                    state.me_id,
+                    MessageType::NewMaster,
+                    UdpData::Cab(elevator.clone()),
+                );
+                for elevator in known_elevators.iter() {
+                    udp_handler.send(&elevator.inn_address, &msg);
+                }
+            }
+        }
+        // Lock is released here.
+    }
 }

@@ -6,7 +6,7 @@ use crate::modules::{
     elevator_object::elevator_init::Elevator, 
     io::io_init::IoChannels, 
     udp_functions::udp::*,
-    master_functions::master::fix_multiple_masters_lowest_id_is_master,
+    master_functions::master::fix_master_issues,
     cab_object::elevator_status_functions::*
 };
 use super::elevator_init::SystemState;
@@ -23,7 +23,7 @@ pub fn spawn_elevator_monitor_thread(system_state_clone: Arc<SystemState>, udp_h
     const DEAD_ELEV_THRESHOLD:Duration = Duration::from_secs(10);
         spawn(move||{
                 loop{
-                    fix_multiple_masters_lowest_id_is_master(&system_state_clone);
+                    fix_master_issues(&system_state_clone, &udp_handler_clone);
                     sleep(Duration::from_secs(3));
                     let now = SystemTime::now();
                     
@@ -102,7 +102,8 @@ pub fn spawn_queue_finish_thread(
             known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
             
             // turn on lights in queue
-            known_elevators_locked.get_mut(0).unwrap().turn_on_just_lights_in_queue(elevator_clone.clone());
+            let queue_clone = known_elevators_locked.get_mut(0).unwrap().queue.clone();
+            known_elevators_locked.get_mut(0).unwrap().lights(queue_clone, elevator_clone.clone());
 
             // print status
             known_elevators_locked.get_mut(0).unwrap().print_status();

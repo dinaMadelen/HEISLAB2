@@ -156,9 +156,7 @@ pub fn cancel_order(slave: &mut Cab, order: Order) -> bool {
 ///
 pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,udp_handler: Arc<UdpHandler>) -> bool {
 
-    let mut worldview_missing = false;
-
-    
+    let mut worldview_missing_orders = false;
 
     // Compare recived worldview to known elevators
     for wv_elevator in new_worldview{
@@ -175,7 +173,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
             //Check if elevator is alive or dead
             if elevator.alive != wv_elevator.alive{
-                worldview_missing = true;
+                worldview_missing_orders = true;
             }
 
             if known_queue == wv_elevator.queue{
@@ -184,7 +182,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             }
 
             //Found missing order, add them to queue
-            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)) .cloned().collect();
+            let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)).cloned().collect();
             if !missing_orders.is_empty() {
                 println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
                 elevator.queue.extend(missing_orders);
@@ -194,15 +192,14 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             // Add missing worldview elevator to active elevators
             println!("Found missing elevator, Adding new elevator ID {} from worldview.", wv_elevator.id);
             known_elevators_locked.push(wv_elevator.clone());
-            worldview_missing = true;
+            worldview_missing_orders = true;
         }
     
-        drop(known_elevators_locked)
+        drop(known_elevators_locked);
 
     } 
     
-
-    if worldview_missing{
+    if worldview_missing_orders{
 
         let master_id = state.master_id.lock().unwrap().clone();
         let known_elevators_locked = state.known_elevators.lock().unwrap().clone();
@@ -213,7 +210,8 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
         }
     }
 
-    return worldview_missing;
+    return worldview_missing_orders;
+    
 }
 
 /// Missing order in worldview, notify master that there is a missing order/orders
@@ -221,7 +219,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 /// # Arguments:
 /// 
 /// * `sender_id`  -u8- id of the sender
-/// * `master_adress` - String - Adress of the master. // NEED TO FIX THIS 
+/// * `master_adress` - String - 
 /// * `missing_orders` - &Vec<Cab> - refrence to the worldview that has more orders than the new worldview 
 /// * `udp_handler` - &UdpHandler - refrence to the handler that that handles the sending.
 /// 
@@ -250,44 +248,40 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: SocketAddr, state: &
 ///
 /// Returns - bool - returns `true` if master is dead, repeats untill master is dead.
 ///
-pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) -> bool {
+pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
+    
+    //If i am the master, i am alive
+    if state.me_id == state.master_id.lock().unwrap().clone(){
+        return;
+    }      
 
-
-    loop{
-
-        //Wait 5sec
-        sleep(Duration::from_millis(3000));
-        //Check if this is the master.
-        let master_id_locked = state.master_id.lock().unwrap();
-        if state.me_id == *master_id_locked{
-            //i am the master, no need to continue checking
-            return false
-        }
-        drop(master_id_locked);
+    //Get time of last lifesign
+    let last_lifesign_locked = state.lifesign_master.lock().unwrap();
     
 
+    //Check age of new lifesign
+    if  last_lifesign_locked.elapsed() > Duration::from_millis(3000) {
+        println!("No lifesign from master recived from Master in last 3sec, electing new master");
+        //ITERATE THROUGH ELEVATORS, SET OLD MASTER TO DEAD AND RETRIEVE THE CAB STRUCT THAT WAS THE MASTER
 
-        //Get time of last lifesign
-        let last_lifesign_locked = state.lifesign_master.lock().unwrap();
-        let last_lifesign = last_lifesign_locked.clone();
-        drop(last_lifesign_locked);
+        let master_id = state.master_id.lock().unwrap();
 
-        //Check age of new lifesign
-        if  last_lifesign.elapsed() > Duration::from_millis(3000) {
-            println!("No lifesign from master recived from Master in last 3sec, electing new master");
-            //ITERATE THROUGH ELEVATORS, SET OLD MASTER TO DEAD AND RETRIEVE THE CAB STRUCT THAT WAS THE MASTER
-            let master_id_clone = state.master_id.lock().unwrap().clone();
-
-            //BROADCAST DEATH OF THE MASTER
-            let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
-
-            let dead_elevator: Vec<Cab> = known_elevators_clone.iter().filter(|cab| cab.id == master_id_clone).cloned().collect();
-            let msg = make_udp_msg(state.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.get(0).unwrap().clone()));
-            for elevator in known_elevators_clone.iter(){
-                udp_handler.send(&elevator.inn_address, &msg);
-            }
+        //BROADCAST DEATH OF THE MASTER
+        let known_elevators = state.known_elevators.lock().unwrap();
+        let dead_elevator: Vec<Cab> = known_elevators.iter().filter(|cab| cab.id == *master_id).cloned().collect();
+        let msg = make_udp_msg(state.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.get(0).unwrap().clone()));
+        for elevator in known_elevators.iter(){
+            udp_handler.send(&elevator.inn_address, &msg);
         }
-    }    
+
+    }
+    drop(last_lifesign_locked);
+
+    let last_lifesign_locked = state.lifesign_master.lock().unwrap();
+    if  last_lifesign_locked.elapsed() > Duration::from_millis(10000){
+        let known_elevators_cloned = state.known_elevators.lock().unwrap().clone();
+        set_new_master(&mut known_elevators_cloned.get(0).unwrap().clone(), &state);
+    }
 }
 
 
@@ -302,51 +296,30 @@ pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) 
 ///
 /// Returns - None - .
 ///
-pub fn set_new_master(me: &mut Cab, state: &Arc<SystemState>){
-
-    sleep(Duration::from_millis(150*u64::from(me.id)));
+pub fn set_new_master(new_master: &mut Cab, state: &Arc<SystemState>){
     println!("Entered set new master");
-    let last_lifesign_locked = state.lifesign_master.lock().unwrap().clone();
-    if last_lifesign_locked.elapsed() > Duration::from_millis(5000){
-        //Set myself as master
-    
-        //Find master id
-        let master_id_locked = state.master_id.lock().unwrap();
-        let master_id=master_id_locked.clone();
-        drop(master_id_locked);
-        
-        //This causes deadlock since calling the cab already requires locking the mutex
-        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-        if let Some(old_master) = known_elevators_locked.iter_mut().find(|e| e.id == master_id) {
-            old_master.role = Role::Slave;
-            println!("Old master (ID: {}) set to Slave.", old_master.id);
 
-            
-        }
-        if let Some(new_master) = known_elevators_locked.iter_mut().find(|e|e.id == state.me_id){
-            new_master.role = Role::Master;
-            {
-                let mut master_id_locked = state.master_id.lock().unwrap();
-                *master_id_locked = state.me_id;
-            }
-            
-            println!("New master (ID: {}).", new_master.id);
-            let message = make_udp_msg(me.id,MessageType::NewMaster, UdpData::Cab(new_master.clone()));
-            udp_broadcast(&message);
-            drop(known_elevators_locked);
-        } else {
-            println!("ERROR: New master is not an active elevator");
-        }
-        
-    }else{
-        
-        //Someone sendt worldview, and became the new master
-        let last_worldview_locked=state.last_worldview.lock().unwrap().clone();
-        let last_worldview=last_worldview_locked.clone();
-        let mut master_id_locked=state.master_id.lock().unwrap();
-        *master_id_locked=last_worldview.header.sender_id;
-        drop(master_id_locked);
-    }    
+    let old_master_id = state.master_id.lock().unwrap().clone();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+
+    //MAKE SET OLD MASTER SLAVE
+    if let Some(old_master) = known_elevators_locked.iter_mut().find(|e| e.id == old_master_id) {
+        old_master.role = Role::Slave;
+        println!("Old master (ID: {}) set to Slave.", old_master.id);
+    }
+
+    //Find master id
+    let mut master_id_locked = state.master_id.lock().unwrap();
+    *master_id_locked =new_master.id;
+    drop(master_id_locked);
+
+    if let Some(new_master_cab) = known_elevators_locked.iter_mut().find(|e|e.id == new_master.id){
+        new_master_cab.role = Role::Master;
+        println!("New master (ID: {}).", new_master_cab.id);
+        drop(known_elevators_locked);
+    } else {
+        println!("ERROR: New master is not an active elevator");
+    }  
     
 }
 
@@ -380,7 +353,7 @@ pub fn send_new_online(state: &Arc<SystemState>) -> bool {
         // Create UdpMsg
         let data = UdpData::Cab(this_elevator.clone());
         let msg = make_udp_msg(this_elevator.id, MessageType::NewOnline, data);
-
+        println!("Creating NewOnline from function");
         // Broadcast the message to notify others that this elevator is online
         return udp_broadcast(&msg);
     } 

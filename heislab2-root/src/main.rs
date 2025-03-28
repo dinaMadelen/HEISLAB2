@@ -47,8 +47,8 @@ fn main() -> std::io::Result<()> {
     let system_state = initialize_system_state();
 
     // create socket addresses
-    let inn_addr = create_socket_address(3700, system_state.me_id);
-    let out_addr = create_socket_address(3800, system_state.me_id);
+    let inn_addr = create_socket_address(3701, system_state.me_id);
+    let out_addr = create_socket_address(3801, system_state.me_id);
 
     // initialize cab and support systems
     let cab = initialize_cab(elev_num_floors, &system_state, elevator.clone(), inn_addr, out_addr)?;
@@ -79,7 +79,7 @@ fn main() -> std::io::Result<()> {
                 handle_order_update_rx(system_state.clone(),udphandler.clone(),elevator.clone(), io_channels.clone());
             },
             recv(io_channels.door_rx) -> door_rx_msg => {
-                handle_door_rx(system_state.clone(), udphandler.clone(), io_channels.clone(), door_rx_msg.unwrap(), &elevator);
+                handle_door_rx(system_state.clone(), udphandler.clone(), door_rx_msg.unwrap(), &elevator);
             },
             recv(io_channels.call_rx) -> call_button_rx_msg => {
                 handle_call_rx(call_button_rx_msg.unwrap(), system_state.clone(), udphandler.clone(), io_channels.clone(), &elevator);

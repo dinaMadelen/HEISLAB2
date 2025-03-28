@@ -28,10 +28,11 @@ pub struct Cab {
     pub out_address: SocketAddr,  // UDP Adress for sending messages
     pub num_floors: u8,           // Isnt this the same for every elevator
     pub id: u8,                   // ID for this spesific elevaotr
-    pub current_floor: u8,        // Which floor the elevator was last registerd at      
+    pub current_floor: u8,
+    pub last_served_floor: u8,        // Which floor the elevator was last registerd at      
     pub queue: Vec<Order>,        // The current queue the elevator is servicing
     pub status: Status,          // Current status of the elevator
-    pub direction: i8,            // Current direction the elevator is headed
+    pub direction: u8,            // Current direction the elevator is headed
     pub role: Role,               // Current Role of this elevator
     pub last_lifesign: SystemTime,
     pub alive: bool
@@ -71,6 +72,7 @@ impl Cab {
                 num_floors,
                 id: set_id,
                 current_floor: 1,
+                last_served_floor: 8,
                 queue: Vec::new(),
                 status: Status::Idle,
                 direction: 0,

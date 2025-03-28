@@ -292,12 +292,26 @@ fn main() -> std::io::Result<()> {
                 println!("{:#?}", call_button);
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor, call_button.call);
-                {   
+                
+                {
+                    let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                    for elevator in known_elevators_locked.iter_mut(){
+                                                   // add to queue, high priority
+                        if (elevator.id == system_state.me_id) && (new_order.order_type == CAB){
+                            if elevator.queue.len()>1{
+                                elevator.queue.insert(1,new_order.clone());
+                            }else {
+                                elevator.queue.insert(0,new_order.clone());
+                            }
+                        }
+                    }
                     
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
-                    let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
+                   
                         for elevator in known_elevators_locked.iter(){
-                        
+                            
+
+                                    
                             let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
                             if !send_successfull{handle_new_request(&new_req_msg,

@@ -447,7 +447,7 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
         // Shorter queue gets priority.
         score -= 10 * elevator.queue.len() as i32;
 
-        println("{}score for id elevator.id",{},{});
+        println!("score: {}      for elevator.id:    {}",{score},{elevator.id});
 
         scores.push((elevator.id, score));
     }

@@ -238,6 +238,21 @@ fn main() -> std::io::Result<()> {
                         elevator.door_light(false);
                         let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+
+                        // LA TIL DETTE CHRIS
+                        let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
+                        let mut all_orders_locked = system_state.all_orders.lock().unwrap();
+                        if completed_order.order_type == CAB {
+                            if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+                                all_orders_locked.remove(index);
+                            }
+                        } else {
+                            all_orders_locked.retain(|order| {
+                                !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
+                            });
+                        }
+                        drop(all_orders_locked);
+                        // LA TIL DETTE CHRIS END
                         let cab_clone = known_elevators_locked.get(0).unwrap().clone();
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
@@ -248,21 +263,10 @@ fn main() -> std::io::Result<()> {
                         };
 
                         for addr in elevator_addresses {
-                            let success = udphandler.send(&addr, &ordercomplete);
+                            //FJERNET NOE HER KRIS
+                            udphandler.send(&addr, &ordercomplete);
                             udphandler.send(&addr, &msg);
-
-                            if !success {
-                                handle_order_completed(&ordercomplete,
-                                    Arc::clone(&system_state),
-                                    io_channels.order_update_tx.clone(),
-                                );
-                            }
-                        }
-
-                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
-                        drop(known_elevators_locked);
-                                  
+                        }          
                     
                 }
             },
@@ -281,10 +285,10 @@ fn main() -> std::io::Result<()> {
                             let send_successfull = udphandler.send(&elevator.inn_address, &msg);
 
                             if !send_successfull {handle_new_request(&msg,
-                                                                     Arc::clone(&system_state),
-                                                                     Arc::clone(&udphandler), 
-                                                                     io_channels.order_update_tx.clone(), 
-                                                                     io_channels.light_update_tx.clone());
+                                                    Arc::clone(&system_state),
+                                                    Arc::clone(&udphandler), 
+                                                    io_channels.order_update_tx.clone(), 
+                                                    io_channels.light_update_tx.clone());
                                                 }
                         }
                     drop(known_elevators_locked);

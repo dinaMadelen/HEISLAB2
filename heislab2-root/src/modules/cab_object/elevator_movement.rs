@@ -3,7 +3,6 @@
 
 use std::time::{Duration, SystemTime};
 use std::thread;
-use std::collections::VecDeque;
 use crossbeam_channel as cbc;
 
 use crate::modules::elevator_object::*;
@@ -21,7 +20,8 @@ impl Cab{
 
         self.set_status(Status::DoorOpen, elevator.clone());
         thread::spawn(move || {
-            println!("Doors opened");                let mut start_time = SystemTime::now();
+            println!("Doors opened");           
+            let mut start_time = SystemTime::now();
             loop {
                 // Wait 1 second before attempting to close
                     
@@ -31,7 +31,8 @@ impl Cab{
                          // obstruction: start loop again
                         println!("Obstruction detected, holding doors..");
                         cabclone.status = Status::Obstruction;
-                        start_time = SystemTime::now();                            continue;
+                        start_time = SystemTime::now();                            
+                        continue;
                         }
                     Ok(false) =>{
                         cabclone.status = Status::DoorOpen;

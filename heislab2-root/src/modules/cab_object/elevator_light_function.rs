@@ -2,7 +2,7 @@
 use crate::modules::elevator_object::elevator_init::Elevator; 
 use super::cab::Cab;
 use crate::modules::order_object::order_init::Order;
-use crate::modules::elevator_object::alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use crate::modules::elevator_object::alias_lib::{HALL_DOWN, HALL_UP};
 
 impl Cab{
     pub fn turn_on_hall_lights(&mut self,   elevator: Elevator, order_vec: Vec<Order>){

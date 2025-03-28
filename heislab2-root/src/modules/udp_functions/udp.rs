@@ -392,7 +392,6 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
             !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
         });
     }
-
             
 }
 

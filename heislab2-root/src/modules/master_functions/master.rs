@@ -189,45 +189,6 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
 }
 
 
-/// generate_worldview
-/// Create worldview from list of active elevators
-/// finds active lights from orders of active elevators
-/// 
-/// # Arguments:
-/// 
-/// * `known_elevators` - &Vec<Cab> - Refrence to list of active elevators
-/// 
-/// # Returns:
-///
-/// Returns - Worldview- Returns a worldview struct.
-///
-
-
-/*Not used
-pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
-
-    // Find active lights
-    let mut lights = Vec::new();
-    for elevator in known_elevators {
-
-        for order in &elevator.queue {
-            let floor = order.floor;
-            if !lights.contains(&floor) {
-                lights.push(floor);
-            }
-        }
-    }
-    
-    lights.sort();
-    // No duplicates
-    lights.dedup();
-
-    return Worldview {
-        elevators: known_elevators.clone(), 
-        lights,                       
-    };
-}
-*/
 
 
 /// master_worldview
@@ -486,6 +447,8 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
         // Shorter queue gets priority.
         score -= 10 * elevator.queue.len() as i32;
 
+        println("{}score for id elevator.id",{},{});
+
         scores.push((elevator.id, score));
     }
 
@@ -502,7 +465,7 @@ pub fn best_to_worst_elevator(order: &Order, elevators: &Vec<Cab>) -> Vec<u8> {
 /// 
 /// # Arguments:
 /// 
-/// * `stae` - &mut SystemState - mutable refrence to the systemstate.
+/// * `state` - &mut SystemState - mutable refrence to the systemstate.
 /// * `sender` - &u8 - refrence to the ID of the master it is comparing to.
 /// 
 /// # Returns:

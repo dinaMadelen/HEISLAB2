@@ -195,19 +195,12 @@ fn main() -> std::io::Result<()> {
             /* ------- --- -- NEW ORDER UPDATE  -- ----  ------*/
             recv(io_channels.order_update_rx) -> a => {
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                if known_elevators_locked.is_empty() 
-                {
-                    /*         DO NOTHING      */
-                }
-                else
-                {
+                if !known_elevators_locked.is_empty() {
+
                     println!("Current queue: {:?}",known_elevators_locked.get_mut(0).unwrap().queue);
 
                     /*      GET A SENDABLE CLONE OF CAB     */
-                    let cab_clone = known_elevators_locked.get(0)
-                                                        .unwrap()
-                                                        .clone();
-
+                    let cab_clone = known_elevators_locked.get(0).unwrap().clone();
 
                     /* IF ELEVATOR STATUS IDLE SEND AN "IM ALIVE" MESSAGE TO SYSTEM TO UPDATE SYSTEM OF CURRENT STATE */
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle 
@@ -263,7 +256,7 @@ fn main() -> std::io::Result<()> {
                             });
                         }  
                         drop(all_orders_locked);
-                        /* DROP TO AVOID RACE */
+                        // Drop due to long time til next use.
 
                         let known_elevators_locked = system_state.known_elevators.lock().unwrap();
                         let cab_clone_removed = known_elevators_locked.get(0).unwrap().clone();
@@ -297,7 +290,8 @@ fn main() -> std::io::Result<()> {
                 {
                     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                     for elevator in known_elevators_locked.iter_mut(){
-                                                   // add to queue, high priority
+                        
+                        // add to queue, high priority
                         if (elevator.id == system_state.me_id) && (new_order.order_type == CAB){
                             if elevator.queue.len()>1{
                                 elevator.queue.insert(1,new_order.clone());

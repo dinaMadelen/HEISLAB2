@@ -154,7 +154,7 @@ pub fn give_order(elevator_id: u8, new_order: Vec<&Order>, state: &Arc<SystemSta
 ///
 /// Returns - bool- `true` if the order was successfully acknowledged, otherwise `false`.
 ///
-pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemState>) -> bool {
+pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemState>,udp_handler: &Arc<UdpHandler>, order_update_tx: &cbc::Sender<Vec<Order>>) -> bool {
     println!("Correcting worldview for master");
 
     let mut changes_made = false;
@@ -165,8 +165,10 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
     }
 
     // Compare elevators to missing orders list
-    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
     for missing_elevator in discrepancy_cabs.iter() {
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        //Add missing orders to cabs
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
                 if !elevator.queue.contains(&order) {
@@ -175,14 +177,46 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
                     changes_made = true;
                 }
             }
+
         } else {
             println!(
                 "Warning: Elevator ID {} from missing_orders not found in active elevators",
                 missing_elevator.id
             );
         }
+        // Add missing orders to all orders 
+        let mut all_orders_locked = state.all_orders.lock().unwrap();
+        for order in &missing_elevator.queue {
+            if !all_orders_locked.contains(order) {
+                all_orders_locked.push(order.clone());
+            }
+                println!("Added missing orders from {} to state.all_orders", missing_elevator.id);
+        }
+
+        
+        let known_elevators_locked = state.known_elevators.lock().unwrap();
+        // Collect all known elevator orders into a flat Vec
+        let distributed_orders: Vec<Order> = known_elevators_locked
+            .iter()
+            .flat_map(|cab| cab.queue.iter().cloned())
+            .collect();
+        
+       //Swap mutex
+        drop(known_elevators_locked);
+        all_orders_locked = state.all_orders.lock().unwrap();
+
+        
+        // Find orders in all_orders that are NOT in distributed orders
+        let missing_orders: Vec<Order> = all_orders_locked
+            .iter()
+            .filter(|order| !distributed_orders.contains(order))
+            .cloned()
+            .collect();
+        
+        drop(all_orders_locked);
+
+        reassign_orders(&missing_orders,state,udp_handler,order_update_tx);
     }
-    drop(known_elevators_locked);
 
     return changes_made;
 }
@@ -240,13 +274,18 @@ pub fn generate_worldview(known_elevators: &Vec<Cab>) -> Worldview {
 ///
 /// Returns - bool- `true` if the order was successfully broadcasted, otherwise `false`.
 ///
-pub fn master_worldview(state:&Arc<SystemState>) -> bool{
+pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -> bool{
 
     println!("Starting worldview");
 
     let known_cabs = state.known_elevators.lock().unwrap().clone();
-    todo!("MAKE THIS BROADCAST TO ALL!");
-    println!("preparing to send");
+    
+
+    let worldview_msg = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs.clone()));
+    for elevator in known_cabs.iter(){
+        udphandler.send(&elevator.inn_address, &worldview_msg);
+    }
+    println!("preparing to broadcast");
     let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
     return udp_broadcast(&message);
 }
@@ -302,7 +341,7 @@ pub fn handle_slave_failure(slave_id: u8, elevators: &mut Vec<Cab>,state: &Arc<S
 /// 
 /// returns `true`, if successfull and `false` if failed.
 ///
-pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &UdpHandler, order_update_tx: cbc::Sender<Vec<Order>>) -> bool {
+pub fn reassign_orders(orders: &Vec<Order>, state: &Arc<SystemState>, udp_handler: &Arc<UdpHandler>, order_update_tx: &cbc::Sender<Vec<Order>>) -> bool {
     
     // Copy value in mutexes
     let mut all_orders = state.all_orders.lock().unwrap().clone();
@@ -513,6 +552,7 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
         // Lock master_id first.
         let mut master_id_guard = state.master_id.lock().unwrap();
         let old_master_id = master_id_guard.clone();
+        drop(master_id_guard);
         // Then lock known_elevators.
         let mut known_elevators = state.known_elevators.lock().unwrap();
 
@@ -533,7 +573,9 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             );
 
             // Set the shared master id.
+            let mut master_id_guard = state.master_id.lock().unwrap();
             *master_id_guard = chosen_master_id;
+            drop(master_id_guard);
 
             // Reassign all other masters to slave.
             for cab in masters.iter_mut().skip(1) {
@@ -551,13 +593,14 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             alive_elevators.sort_by_key(|cab| cab.id);
             if let Some(new_master) = alive_elevators.first_mut() {
                 new_master.role = Role::Master;
+                let mut master_id_guard = state.master_id.lock().unwrap();
                 *master_id_guard = new_master.id;
             }
         } else {
             // Exactly one master exists.
             println!("No multiple-master conflict detected.");
         }
-
+        let mut master_id_guard = state.master_id.lock().unwrap();
         if !(old_master_id == *master_id_guard){
             if let Some(master_elevator) = known_elevators.iter().find(|cab| cab.id == *master_id_guard)
             {

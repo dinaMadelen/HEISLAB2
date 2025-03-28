@@ -32,8 +32,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
-    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -133,10 +132,21 @@ fn main() -> std::io::Result<()> {
     let system_state_clone = Arc::clone(&system_state);
     let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
+            {   
+                let locked_master_id = system_state_clone.master_id.lock().unwrap();
+                let worldview_system_state=Arc::clone(&system_state_clone);
+                if system_state_clone.me_id == *locked_master_id{
+                    drop(locked_master_id);
+                    print!("BROADCASTING WORLDVIEW _____________________");
+                    //MASTER WORLDVIEW BROADCAST
+                    master_worldview(&worldview_system_state, &udp_handler_clone.clone());
+                }
+            }
+            sleep(Duration::from_millis(2000));   
             loop{
                 fix_master_issues(&system_state_clone, &udp_handler_clone);
 
-                sleep(Duration::from_secs(1));
+                sleep(Duration::from_millis(400));
                 let now = SystemTime::now();
                 
                 // Iterate in reverse order so that removing elements doesn't affect things
@@ -168,10 +178,10 @@ fn main() -> std::io::Result<()> {
                         drop(locked_master_id);
                         print!("BROADCASTING WORLDVIEW _____________________");
                         //MASTER WORLDVIEW BROADCAST
-                        master_worldview(&worldview_system_state);
+                        master_worldview(&worldview_system_state, &udp_handler_clone.clone());
                     }
                 }
-                sleep(Duration::from_secs(1));
+                sleep(Duration::from_millis(400));
                 check_master_failure(&system_state_clone, &udp_handler_clone);
             }
     });
@@ -238,53 +248,52 @@ fn main() -> std::io::Result<()> {
                 // let completed_order: Order;
                 if door_signal {
                         elevator.door_light(false);
-                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
-                        known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
-                        
                         // LA TIL DETTE CHRIS
-                        if let Some(cab) = known_elevators_locked.get_mut(0) {
-                            if cab.queue.is_empty() {
-                                let completed_order = cab.queue.remove(0);
-                                // cab.lights(completed_order.floor, completed_order.order_type, elevator);
-                                cab.lights(cab.queue.clone(), elevator.clone());
-                            // }
-                        // }
+                        let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
+                        if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
+                            
+                        }else {
+                            let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
 
-                        // let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
-                        // elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
+                            known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
+                            let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
 
+                            drop(known_elevators_locked);
 
-                        let mut all_orders_locked = system_state.all_orders.lock().unwrap();
-                        if completed_order.order_type == CAB {
-                            if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
-                                all_orders_locked.remove(index);
+                            elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
+
+                            let mut all_orders_locked = system_state.all_orders.lock().unwrap();
+                            if completed_order.order_type == CAB {
+                                if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+                                    all_orders_locked.remove(index);
+                                }
+                            } else {
+                                all_orders_locked.retain(|order| {
+                                    !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
+                                });
                             }
-                        } else {
-                            all_orders_locked.retain(|order| {
-                                !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
-                            });
+                            drop(all_orders_locked);
+                           
+                            // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- - -    -   -       -   -              -
+                            let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+                            let cab_clone = known_elevators_locked.get(0).unwrap().clone();
+
+                            let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));
+                            let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
+                            drop(known_elevators_locked);
+
+                            let elevator_addresses: Vec<_> = {
+                                let known_elevators = system_state.known_elevators.lock().unwrap();
+                                known_elevators.iter().map(|e| e.inn_address).collect()
+                            };
+
+                            for addr in elevator_addresses {
+                                //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
+                                udphandler.send(&addr, &ordercomplete);
+                                udphandler.send(&addr, &alive_msg); 
+                            }  
                         }
-                        drop(all_orders_locked);
-                        // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- -
-                        let cab_clone = known_elevators_locked.get(0).unwrap().clone();
-
-                        let alive_msg = make_udp_msg(system_state.me_id, MessageType::ImAlive, UdpData::Cab(cab_clone.clone()));
-                        let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
-                        drop(known_elevators_locked);
-
-                        let elevator_addresses: Vec<_> = {
-                            let known_elevators = system_state.known_elevators.lock().unwrap();
-                            known_elevators.iter().map(|e| e.inn_address).collect()
-                        };
-
-                        for addr in elevator_addresses {
-                            //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
-                            udphandler.send(&addr, &ordercomplete);
-                            udphandler.send(&addr, &alive_msg); 
-                        }          
-                    }
-                }
-                        
+                      
                 }
             },
 
@@ -297,17 +306,17 @@ fn main() -> std::io::Result<()> {
                     //DETTE ER ENDRA _________________________________
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
-                        for elevator in known_elevators_locked.iter(){
+                    for elevator in known_elevators_locked.iter(){
                         
-                            let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
+                        let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
-                            if !send_successfull{handle_new_request(&new_req_msg,
-                                                                     Arc::clone(&system_state),
-                                                                     Arc::clone(&udphandler), 
-                                                                     io_channels.order_update_tx.clone(), 
-                                                                     io_channels.light_update_tx.clone());
-                                                }
+                        if !send_successfull {handle_new_request(&new_req_msg,
+                             Arc::clone(&system_state),
+                             Arc::clone(&udphandler), 
+                             io_channels.order_update_tx.clone(), 
+                             io_channels.light_update_tx.clone());                    
                         }
+                    }
                     drop(known_elevators_locked);
                 }
 

@@ -217,6 +217,10 @@ pub fn handle_worldview(state: Arc<SystemState>, msg: &UdpMsg,udp_handler: Arc<U
 ///
 pub fn handle_ack(msg: &UdpMsg, state: Arc<SystemState>) {
     
+    for elevator in state.known_elevators.lock().unwrap().iter_mut().filter(|e| !e.alive && msg.header.sender_id == e.id) {
+        elevator.alive = true;
+    }
+
     let sender_id = msg.header.sender_id;
     let original_checksum = if let UdpData::Checksum(original_checksum) = &msg.data {
         *original_checksum
@@ -663,6 +667,10 @@ pub fn handle_remove_order(msg: &UdpMsg, state: Arc<SystemState>, light_update_t
 
 pub fn handle_im_alive(msg: &UdpMsg, state: Arc<SystemState>){
     //Extract updated cab data from message
+
+    for elevator in state.known_elevators.lock().unwrap().iter_mut().filter(|e| !e.alive && msg.header.sender_id == e.id) {
+        elevator.alive = true;
+    }
 
      let mut updated_cab = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()

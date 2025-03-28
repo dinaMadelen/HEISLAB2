@@ -1,3 +1,30 @@
+<<<<<<< HEAD
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use crossbeam_channel as cbc;
+use std::sync::Arc;
+use std::thread::*;
+use std::time::*;
+
+
+use heislab2_root::modules::elevator_object::*;
+use alias_lib::{DIRN_DOWN, DIRN_STOP};
+use heislab2_root::modules::*;
+use elevator_init::Elevator;
+
+
+use elevator_status_functions::Status;
+use order_object::order_init::Order;
+use master_functions::master::*;
+use slave_functions::slave::*;
+use system_init::*;
+use cab_object::*;
+use cab::Cab;
+
+
+use heislab2_root::modules::udp_functions::udp::*;
+use heislab2_root::modules::io::io_init::*;
+use udp_functions::udp::UdpData;
+=======
 use crossbeam_channel as cbc;
 use std::{
     thread::*,
@@ -19,25 +46,18 @@ use heislab2_root::modules::{
     system_init::*,
     cab_object::cab::Cab,
 };
+>>>>>>> 3f4fb327e52f52a0ce62479cfeceeba6b3b27f69
 
 
 fn main() -> std::io::Result<()> {
+
     //--------------INIT ELEVATOR------------
+
     // Check boot function in system Init
     let elev_num_floors = 4;
     // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
    
     let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
-
-    //Dummy message to have an empty message in current worldview 
-    let boot_worldview =  UdpMsg {
-        header: UdpHeader {
-            sender_id: 0,
-            message_type: MessageType::Worldview,
-            checksum: 0,
-        },
-        data: UdpData::Checksum(0),
-    };
 
     println!("Elevator started:\n{:#?}", elevator);
 
@@ -45,14 +65,17 @@ fn main() -> std::io::Result<()> {
 
     // --------------INIT CAB---------------
     let system_state = Arc::new(boot());
+<<<<<<< HEAD
+=======
 
+>>>>>>> 3f4fb327e52f52a0ce62479cfeceeba6b3b27f69
     
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);
     
-    let set_id = system_state.me_id; // Assign ID matching state.me_id for local IP assignment
+    let set_id = system_state.me_id;
     println!("me id is {}",system_state.me_id);
-    //Make free cab
+   
     let mut cab = Cab::init(&inn_addr, &out_addr, elev_num_floors, set_id, &system_state)?;
     cab.turn_off_lights(elevator.clone());
 
@@ -60,13 +83,11 @@ fn main() -> std::io::Result<()> {
     let udphandler = Arc::new(init_udp_handler(cab.clone()));
     //-------------INIT UDP HANDLER FINISH-----------------
 
-    //Lock free cab into captivity :(
     let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
     known_elevators_locked.push(cab);
     drop(known_elevators_locked);
 
     println!("Cab initialized:\n{:#?}", elevator);
-
     // --------------INIT CAB FINISH---------------
     
     // --------------INIT CHANNELS---------------
@@ -97,7 +118,6 @@ fn main() -> std::io::Result<()> {
         }
     });
     // -------------INIT RECIEVER FINISHED-----------------
-
     
     let dirn = DIRN_DOWN;
     if elevator.floor_sensor().is_none() {
@@ -110,7 +130,6 @@ fn main() -> std::io::Result<()> {
     let  known_elevators_locked = system_state.known_elevators.lock().unwrap();
     let cab_clone = known_elevators_locked.get(0).unwrap().clone();
     drop(known_elevators_locked);
-   
     
     let new_online_msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
@@ -350,7 +369,6 @@ fn main() -> std::io::Result<()> {
                 known_elevators_locked.get_mut(0).unwrap().current_floor = floor;
                 drop(known_elevators_locked);
 
-                //Do stuff
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
                     elevator.motor_direction(DIRN_STOP);

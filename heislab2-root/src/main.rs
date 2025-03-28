@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {

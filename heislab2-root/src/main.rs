@@ -31,7 +31,7 @@ fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
     // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
    
-    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     println!("Elevator started:\n{:#?}", elevator);
 
@@ -122,13 +122,13 @@ fn main() -> std::io::Result<()> {
     let system_state_clone = Arc::clone(&system_state);
     let elevator_clone = elevator.clone();
     let door_tx_clone = io_channels.door_tx.clone();
-    let obstruction_tx_clone = io_channels.obstruction_rx.clone();
+    let obstruction_rx_clone = io_channels.obstruction_rx.clone();
 
 
-    spawn_queue_finisher(system_state_clone,
-                elevator_clone,
-                door_tx_clone,
-                light_update_clone);
+    spawn_queue_finisher(elevator_clone.clone(),
+                system_state_clone,
+                door_tx_clone.clone(),
+                obstruction_rx_clone.clone());
 
 
 
@@ -253,8 +253,9 @@ fn main() -> std::io::Result<()> {
                     }
                     
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
-                   
-                        for elevator in known_elevators_locked.iter(){
+                    let known_elevators_clone = known_elevators_locked.clone();
+                    drop(known_elevators_locked);
+                        for elevator in known_elevators_clone.iter(){
                             
 
                                     
@@ -267,7 +268,7 @@ fn main() -> std::io::Result<()> {
                                                                      io_channels.light_update_tx.clone());
                                                 }
                         }
-                    drop(known_elevators_locked);
+                    
                 }
 
                 //cab.turn_on_queue_lights(elevator.clone());

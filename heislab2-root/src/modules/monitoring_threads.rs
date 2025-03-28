@@ -62,14 +62,14 @@ pub fn spawn_master_monitor(system_state_clone: Arc<SystemState>, udp_handler_cl
 
 }
 
-pub fn spawn_queue_finisher(elevator_clone: Elevator,system_state_clone: Arc<SystemState>,  order_update_tx: cbc::Sender<Vec<Order>>,light_update_tx: cbc::Sender<Vec<Order>> ){
+pub fn spawn_queue_finisher(elevator_clone: Elevator,system_state_clone: Arc<SystemState>,  door_tx_clone: cbc::Sender<bool>,obstruction_rx_clone: cbc::Receiver<bool>){
     spawn(move|| {
         loop{
             sleep(Duration::from_millis(300));
             
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
-                known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
+                known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(), obstruction_rx_clone.clone() ,elevator_clone.clone());
                 
             }
             drop(known_elevators_locked);

@@ -32,7 +32,7 @@ fn main() -> std::io::Result<()> {
     //--------------INIT ELEVATOR------------
     // Check boot function in system Init
     let elev_num_floors = 4;
-    let elevator = Elevator::init("localhost:15659", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
 
     //Dummy message to have an empty message in current worldview 
     let boot_worldview =  UdpMsg {
@@ -132,10 +132,21 @@ fn main() -> std::io::Result<()> {
     let system_state_clone = Arc::clone(&system_state);
     let udp_handler_clone = Arc::clone(&udphandler);
     spawn(move||{
+            {   
+                let locked_master_id = system_state_clone.master_id.lock().unwrap();
+                let worldview_system_state=Arc::clone(&system_state_clone);
+                if system_state_clone.me_id == *locked_master_id{
+                    drop(locked_master_id);
+                    print!("BROADCASTING WORLDVIEW _____________________");
+                    //MASTER WORLDVIEW BROADCAST
+                    master_worldview(&worldview_system_state, &udp_handler_clone.clone());
+                }
+            }
+            sleep(Duration::from_millis(2000));   
             loop{
                 fix_master_issues(&system_state_clone, &udp_handler_clone);
 
-                sleep(Duration::from_secs(1));
+                sleep(Duration::from_millis(200));
                 let now = SystemTime::now();
                 
                 // Iterate in reverse order so that removing elements doesn't affect things
@@ -170,7 +181,7 @@ fn main() -> std::io::Result<()> {
                         master_worldview(&worldview_system_state, &udp_handler_clone.clone());
                     }
                 }
-                sleep(Duration::from_secs(1));
+                sleep(Duration::from_millis(200));
                 check_master_failure(&system_state_clone, &udp_handler_clone);
             }
     });
@@ -249,7 +260,7 @@ fn main() -> std::io::Result<()> {
                             drop(known_elevators_locked);
 
                             elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
-                            
+
                             let mut all_orders_locked = system_state.all_orders.lock().unwrap();
                             if completed_order.order_type == CAB {
                                 if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
@@ -281,10 +292,7 @@ fn main() -> std::io::Result<()> {
                                 udphandler.send(&addr, &alive_msg); 
                             }  
                         }
-                       
-                        
-                                
-                    
+                      
                 }
             },
 

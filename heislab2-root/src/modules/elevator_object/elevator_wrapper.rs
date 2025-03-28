@@ -91,16 +91,12 @@ pub fn spawn_queue_finish_thread(
         loop{
             sleep(Duration::from_millis(100));
             
-            
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap().clone();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
                 known_elevators_locked.get_mut(0).unwrap().go_next_floor(door_tx_clone.clone(),obstruction_tx_clone.clone() ,elevator_clone.clone());
-                let all_orders = system_state_clone.all_orders.lock().unwrap().clone();
-                known_elevators_locked.get_mut(0).unwrap().lights(all_orders, elevator_clone.clone());
+                known_elevators_locked.get_mut(0).unwrap().lights(&system_state_clone.clone(), elevator_clone.clone());
             }
-
             known_elevators_locked.get_mut(0).unwrap().print_status();
-            drop(known_elevators_locked);
         }
     });
 }

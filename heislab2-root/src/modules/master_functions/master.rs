@@ -496,12 +496,9 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
     // Make lowest id alive the master id
     {
         // Lock master_id first.
-        let mut master_id_guard = state.master_id.lock().unwrap();
-        let old_master_id = master_id_guard.clone();
-        drop(master_id_guard);
+        let old_master_id = state.master_id.lock().unwrap().clone();
         // Then lock known_elevators.
         let mut known_elevators = state.known_elevators.lock().unwrap();
-
         // Gather mutable references to all elevators marked as Master.
         let mut masters: Vec<&mut Cab> = known_elevators
             .iter_mut()
@@ -546,7 +543,8 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             // Exactly one master exists.
             println!("No multiple-master conflict detected.");
         }
-        let mut master_id_guard = state.master_id.lock().unwrap();
+
+        let master_id_guard = state.master_id.lock().unwrap();
         if !(old_master_id == *master_id_guard){
             if let Some(master_elevator) = known_elevators.iter().find(|cab| cab.id == *master_id_guard)
             {
@@ -562,23 +560,4 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
         }
     }
 
-    // Ensure our own role is correct.
-    {
-        let master_id = *state.master_id.lock().unwrap();
-        let mut known_elevators = state.known_elevators.lock().unwrap();
-        if state.me_id == master_id {
-            // Make sure the elevator with the lowest id in the shared state is set as master.
-            if let Some(elevator) = known_elevators.iter_mut().min_by_key(|e| e.id) {
-                elevator.role = Role::Master;
-                let msg = make_udp_msg(
-                    state.me_id,
-                    MessageType::NewMaster,
-                    UdpData::Cab(elevator.clone()),
-                );
-                for elevator in known_elevators.iter() {
-                    udp_handler.send(&elevator.inn_address, &msg);
-                }
-            }
-        }
-    }
 }

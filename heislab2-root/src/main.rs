@@ -120,6 +120,7 @@ fn main() -> std::io::Result<()> {
    
     println!("121 I main");
     let msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
+    println!("Linje 123 i main");
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
     for port in 3701..3705{
         let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
@@ -285,10 +286,10 @@ fn main() -> std::io::Result<()> {
                             let send_successfull = udphandler.send(&elevator.inn_address, &msg);
 
                             if !send_successfull {handle_new_request(&msg,
-                                                    Arc::clone(&system_state),
-                                                    Arc::clone(&udphandler), 
-                                                    io_channels.order_update_tx.clone(), 
-                                                    io_channels.light_update_tx.clone());
+                                                                     Arc::clone(&system_state),
+                                                                     Arc::clone(&udphandler), 
+                                                                     io_channels.order_update_tx.clone(), 
+                                                                     io_channels.light_update_tx.clone());
                                                 }
                         }
                     drop(known_elevators_locked);
@@ -357,6 +358,7 @@ fn main() -> std::io::Result<()> {
                         known_elevators_locked.get_mut(0).unwrap().set_status(Status::Stop, elevator.clone());
                         drop(known_elevators_locked);
                         let system_state_clone = Arc::clone(&system_state);
+                        println!("Linje 358 i main");
                         send_new_online(&system_state_clone);
 
                     }else{

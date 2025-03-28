@@ -164,15 +164,15 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
         return false;
     }
 
-    // Compare elevators to missing orders list
-    let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
+    // Compare elevators to missing orders list, lock the known_elevators 
+    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
     for missing_elevator in discrepancy_cabs.iter() {
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
-                if !elevator.queue.contains(&order) {
-                    elevator.queue.push(order.clone());
-                    println!("Added missing order {:?} to elevator {}", order.floor, elevator.id);
-                    changes_made = true;
+                if !elevator.queue.contains(order) {
+                   elevator.queue.push(order.clone());
+                   println!("Added missing order {:?} to elevator {}", order.floor, elevator.id);
+                   changes_made = true;
                 }
             }
         } else {
@@ -251,9 +251,6 @@ pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>) -
     for elevator in known_cabs.iter(){
         udphandler.send(&elevator.inn_address, &worldview_msg);
     }
-    println!("preparing to broadcast");
-    let message = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs)); 
-    return udp_broadcast(&message);
 }
 
 // Give away master role, NOT NEEDED, KILL INSTEAD

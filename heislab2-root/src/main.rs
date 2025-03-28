@@ -11,6 +11,7 @@ use alias_lib::{DIRN_DOWN, DIRN_STOP};
 use elevator_init::Elevator;
 use heislab2_root::modules::*;
 
+// TEST IF STUFF WORKS
 
 use cab_object::*;
 use cab::Cab;

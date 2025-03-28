@@ -4,6 +4,7 @@ pub mod modules{
         pub mod poll;
         pub mod elevator_test;
         pub mod alias_lib;
+        pub mod elevator_wrapper;
     }
     
     pub mod order_object{
@@ -16,6 +17,7 @@ pub mod modules{
         pub mod elevator_queue_handling;
         pub mod elevator_light_function;
         pub mod elevator_status_functions;
+        pub mod cab_wrapper;
     }
 
     pub mod system_status;
@@ -23,6 +25,7 @@ pub mod modules{
     pub mod master_functions{
         pub mod master;
         pub mod master_test;
+        pub mod master_wrapper;
     }
 
     pub mod slave_functions{
@@ -33,12 +36,14 @@ pub mod modules{
     pub mod udp_functions{
         pub mod udp;
         pub mod udp_test;
+        pub mod udp_wrapper;
     }
     
     pub mod system_init;
 
     pub mod io {
         pub mod io_init;
+        pub mod io_handlers;
     }
 
 }

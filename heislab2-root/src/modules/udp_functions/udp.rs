@@ -483,15 +483,10 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
 }
 
 /// Creates a new UDP handler with a bound sockets based on this elevator
-pub fn init_udp_handler(me: Cab) -> UdpHandler {
+pub fn initialize_udp_handler(me_clone: Cab) -> Arc<UdpHandler> {
 
-    let sender_socket = UdpSocket::bind(me.out_address).expect("Could not bind UDP socket");
-    let receiver_socket = UdpSocket::bind(me.inn_address).expect("Could not bind UDP receiver socket");
-    /* 
-    //Linjen under er det som jeg har tullet med som burde settes tilbake
-    let receiver_addr = format!("0.0.0.0:20000");
-    let receiver_socket = UdpSocket::bind(receiver_addr).expect("Could not bind UDP receiver socket");
-    */
+    let sender_socket = UdpSocket::bind(me_clone.out_address).expect("Could not bind UDP socket");
+    let receiver_socket = UdpSocket::bind(me_clone.inn_address).expect("Could not bind UDP receiver socket");
     
     sender_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
     receiver_socket.set_nonblocking(true).expect("Failed to set non-blocking mode");
@@ -499,7 +494,8 @@ pub fn init_udp_handler(me: Cab) -> UdpHandler {
     //Turn sockets into mutexes
     let sender_socket = Arc::new(Mutex::new(sender_socket));
     let receiver_socket = Arc::new(Mutex::new(receiver_socket));
-    return UdpHandler{sender_socket,receiver_socket};
+
+    Arc::new(UdpHandler{sender_socket,receiver_socket})
 }
 
 ///make_udp_msg
@@ -936,6 +932,10 @@ pub fn handle_error_offline(
             } else {
                 println!("No alive elevators found to set as new master.");
             }
+        } 
+        else 
+        {
+            println!("Elevator ID:{} not found in known elevators.", cab.id);
         }
 
         // If this elevator is the new master, reassign orders.

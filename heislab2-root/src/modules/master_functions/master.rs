@@ -22,7 +22,7 @@
 
 //the comments are verbose so we can autogenerate documentation using 'cargo doc' https://blog.guillaume-gomez.fr/articles/2020-03-12+Guide+on+how+to+write+documentation+for+a+Rust+crate
 
-use crate::modules::master_functions::master;
+// use crate::modules::master_functions::master;
 #[warn(non_snake_case)]
 #[allow(unused_imports)]
 #[allow(unused_variables)]
@@ -31,10 +31,10 @@ use crate::modules::master_functions::master;
 use crate::modules::udp_functions::udp::{UdpMsg, UdpData,MessageType,UdpHandler,udp_broadcast,make_udp_msg};
 use crate::modules::cab_object::elevator_status_functions::Status;
 use crate::modules::cab_object::cab::Cab;
-use crate::modules::slave_functions::slave::{reboot_program, set_new_master};
+// use crate::modules::slave_functions::slave::reboot_program;
 use crate::modules::order_object::order_init::Order;
 use crate::modules::system_status::SystemState;
-use crate::modules::elevator_object::alias_lib::{CAB,DIRN_UP,DIRN_DOWN, DIRN_STOP};
+use crate::modules::elevator_object::alias_lib::{CAB, DIRN_DOWN, DIRN_UP};
 use crossbeam_channel as cbc;
 
 

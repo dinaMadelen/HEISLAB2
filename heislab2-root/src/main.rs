@@ -1,30 +1,3 @@
-<<<<<<< HEAD
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
-use crossbeam_channel as cbc;
-use std::sync::Arc;
-use std::thread::*;
-use std::time::*;
-
-
-use heislab2_root::modules::elevator_object::*;
-use alias_lib::{DIRN_DOWN, DIRN_STOP};
-use heislab2_root::modules::*;
-use elevator_init::Elevator;
-
-
-use elevator_status_functions::Status;
-use order_object::order_init::Order;
-use master_functions::master::*;
-use slave_functions::slave::*;
-use system_init::*;
-use cab_object::*;
-use cab::Cab;
-
-
-use heislab2_root::modules::udp_functions::udp::*;
-use heislab2_root::modules::io::io_init::*;
-use udp_functions::udp::UdpData;
-=======
 use crossbeam_channel as cbc;
 use std::{
     thread::*,
@@ -46,7 +19,6 @@ use heislab2_root::modules::{
     system_init::*,
     cab_object::cab::Cab,
 };
->>>>>>> 3f4fb327e52f52a0ce62479cfeceeba6b3b27f69
 
 
 fn main() -> std::io::Result<()> {
@@ -65,10 +37,6 @@ fn main() -> std::io::Result<()> {
 
     // --------------INIT CAB---------------
     let system_state = Arc::new(boot());
-<<<<<<< HEAD
-=======
-
->>>>>>> 3f4fb327e52f52a0ce62479cfeceeba6b3b27f69
     
     let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
     let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);

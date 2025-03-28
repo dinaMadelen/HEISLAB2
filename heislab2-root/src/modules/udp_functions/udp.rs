@@ -364,31 +364,28 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
         return;
     };
 
-    let completed_order = match completed_cab.queue.first(){
-        Some(order) => order.clone(),
-
-         //Remove from all_orders
-        all_orders_locked=state.all_orders.lock().unlock();
+    if let Some(completed_order) = completed_cab.queue.first() {
+        let completed_order = completed_order.clone();
+        let mut all_orders_locked = state.all_orders.lock().unwrap();
+    
         if let Some(index) = all_orders_locked.iter().position(|order| *order == completed_order) {
-            orders.remove(index);
+            all_orders_locked.remove(index);
         }
+    
         if completed_order.order_type == CAB {
-            if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+            if let Some(index) = all_orders_locked.iter().position(|order| {
+                order.floor == completed_order.floor && order.order_type == CAB
+            }) {
                 all_orders_locked.remove(index);
             }
         } else {
             all_orders_locked.retain(|order| {
-                !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type || CAB));
+                !(order.floor == completed_order.floor &&
+                  (order.order_type == completed_order.order_type || order.order_type == CAB))
             });
-            drop(all_orders_locked);
         }
-        
-
-        None => {
-            println!("Completed order message contains no order");
-            return;
-        }
-    };
+    } 
+    
             
 }
 

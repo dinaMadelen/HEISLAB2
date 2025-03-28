@@ -228,21 +228,24 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
 /// Returns -None- .
 ///
 pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
-    let master_id = state.master_id.lock().unwrap().clone();
-    let known_master_id = state.master_id.lock().unwrap().clone();
-    if  !(known_master_id == master_id){
-        println!("New master detected, ID: {}", msg.header.sender_id);
 
+    let master_id = state.master_id.lock().unwrap().clone();
+
+    if state.me_id == master_id{
+        return;
+    }
+
+    println!("New master detected, ID: {}", msg.header.sender_id);
     let cab_to_be_master = if let UdpData::Cab(cab) = &msg.data{
         cab.clone()
     }else{
-        println!("Couldnt read OrderComplete message");
+        println!("Couldnt read NewMaster message");
         return;
     };
 
     // Set current master's role to Slave
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-    if let Some(current_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
+    if let Some(current_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == master_id) {
         println!("Changing current master (ID: {}) to slave.", current_master.id);
         current_master.role = Role::Slave;
     } else {
@@ -250,17 +253,31 @@ pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     }
 
     // Set new master
-    if let Some(new_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == cab_to_be_master.id) {
-        println!("Updating elevator ID {} to Master.", cab_to_be_master.id);
-        new_master.role = Role::Master;
 
-        let mut master_id = state.master_id.lock().unwrap();
-        *master_id = cab_to_be_master.id;
-        drop(master_id);
+    if let UdpData::Cab(cab) = &msg.data {
+        let new_master_id = cab.id;
+        println!("New master id is: {}", new_master_id);
+
+        if let Some(new_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.id == new_master_id) {
+            println!("Updating elevator ID {} to Master.", new_master.id);
+            new_master.role = Role::Master;
+            drop(known_elevators_locked); 
+    
+            let mut master_id = state.master_id.lock().unwrap();
+            *master_id = new_master_id;
+            drop(master_id);
+
+            let mut last_lifesign_locked = state.lifesign_master.lock().unwrap();
+            *last_lifesign_locked = Instant::now();
+            drop(last_lifesign_locked)
+    
+        } else {
+            println!("Error: Elevator ID {} not found in active list.", msg.header.sender_id);
+        }
+
 
     } else {
-        println!("Error: Elevator ID {} not found in active list.", msg.header.sender_id);
-    }
+        println!("Not a Cab in message");
     }
     
 }

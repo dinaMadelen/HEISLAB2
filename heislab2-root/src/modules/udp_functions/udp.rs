@@ -364,23 +364,28 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
         return;
     };
 
+    /* FIND THE FIRST ORDER IN THE ELEVATORS QUEUE AND REMOVE IT FORM ALL ORDERS */
     if let Some(completed_order) = completed_cab.queue.first() {
         /* THE FIRST ELEMENT IS THE COMPLETED ORDER */
         let completed_order = completed_order.clone();
-        let mut all_orders_locked = state.all_orders.lock().unwrap();
-        
-        /* FIND INDEX OF THE COMPLETED ORDER AND REMOVE */
-        if let Some(index) = all_orders_locked.iter().position(|order| *order == completed_order) {
-            all_orders_locked.remove(index);
+
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        if let Some(cab) = known_elevators_locked.iter_mut().find(|e| e.id == completed_cab.id){
+            cab.queue.retain(|order| {
+                !(order.floor == completed_order.floor && (order.order_type == completed_order.order_type || order.order_type == CAB))});
         }
-    
+        drop(known_elevators_locked);
+
+        let mut all_orders_locked = state.all_orders.lock().unwrap();  
+        /* FIND CAB ORDERS AND REMOVE THEM FROM ALL ELEVATORS LOCKED MUTEX*/
         if completed_order.order_type == CAB {
             if let Some(index) = all_orders_locked.iter().position(|order| {
                 order.floor == completed_order.floor && order.order_type == CAB
             }) {
                 all_orders_locked.remove(index);
             }
-        } else {
+
+        } else { /* REMOVES COMPLETED HALL ORDERS ASWELL */
             all_orders_locked.retain(|order| {
                 !(order.floor == completed_order.floor &&
                   (order.order_type == completed_order.order_type || order.order_type == CAB))

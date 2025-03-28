@@ -26,7 +26,7 @@ fn main() -> std::io::Result<()> {
 
     //--------------INIT ELEVATOR------------
 
-    // Check boot function in system Init
+    // Check boot function in system_Init.rs
     let elev_num_floors = 4;
     // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
    
@@ -183,7 +183,7 @@ fn main() -> std::io::Result<()> {
     // ------------------ MAIN LOOP ---------------------
     loop {
         cbc::select! {
-            /* ------- --- -- HVIS VI FÅR EN NY LIGHT UPDATE  -- ----  ------*/
+            /* ------- --- -- NEW LIGHT UPDATE  -- ----  ------*/
             recv(io_channels.light_update_rx) -> a => {
                 //Turn onn all lights in own queue
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
@@ -191,7 +191,7 @@ fn main() -> std::io::Result<()> {
             },
 
 
-            /* ------- --- -- HVIS VI FÅR EN NY ORDER UPDATE  -- ----  ------*/
+            /* ------- --- -- NEW ORDER UPDATE  -- ----  ------*/
             recv(io_channels.order_update_rx) -> a => {
                 let mut known_elevators_locked = system_state.known_elevators.lock().unwrap();
                 if known_elevators_locked.is_empty() 
@@ -208,7 +208,7 @@ fn main() -> std::io::Result<()> {
                                                         .clone();
 
 
-                    /* IF ELEVATOR STATUS IDLE SEND AN IM ALIVE MESSAGE TO SYSTEM TO UPDATE SYSTEM OF CURRENT STATE */
+                    /* IF ELEVATOR STATUS IDLE SEND AN "IM ALIVE" MESSAGE TO SYSTEM TO UPDATE SYSTEM OF CURRENT STATE */
                     if known_elevators_locked.get_mut(0).unwrap().status == Status::Idle 
                     {
                         let imalive = make_udp_msg(system_state.me_id,
@@ -228,7 +228,7 @@ fn main() -> std::io::Result<()> {
 
             },
             
-            /* ------- --- -- HVIS VI FÅR EN NY DOOR UPDATE  -- ----  ------*/
+            /* ------- --- -- NEW DOOR UPDATE  -- ----  ------*/
             recv(io_channels.door_rx) -> a => {
                 /* Retrieve signal */
                 let door_closed = a.unwrap();
@@ -293,7 +293,7 @@ fn main() -> std::io::Result<()> {
                 //Make new order and add that order to elevators queue
                 let new_order = Order::init(call_button.floor, call_button.call);
                 {   
-                    //DETTE ER ENDRA _________________________________
+                    
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
                         for elevator in known_elevators_locked.iter(){
@@ -362,7 +362,7 @@ fn main() -> std::io::Result<()> {
                 
             },
 
-            /*Burde nok modifiseres*/
+           
             recv(io_channels.stop_rx) -> a => {
                 let stop = a.unwrap();
                 println!("Stop button: {:#?}", stop);

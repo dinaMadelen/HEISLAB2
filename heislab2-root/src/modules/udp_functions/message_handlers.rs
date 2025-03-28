@@ -92,12 +92,12 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
     let is_master = state.me_id == master_id_clone;
 
 
-    //IF New Request is CAB order
+    //If new request is CAB order
     if new_order.order_type == CAB{
         // Lock the known elevators and find the elevator that matches the sender id.
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
         if let Some(sender_elevator) = known_elevators_locked.iter_mut().find(|e| e.id == msg.header.sender_id) {
-            sender_elevator.queue.push(new_order.clone());
+            sender_elevator.queue.insert(1,new_order.clone());
             if sender_elevator.id == state.me_id{
                 light_update_tx.send(sender_elevator.queue.clone()).unwrap();
             }
@@ -319,6 +319,7 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
         println!("ERROR: Wrong UdpData type for NewOrder");
         return false;
     };
+
 
     let elevator_id = elevator.id;
 

@@ -167,6 +167,8 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
     // Compare elevators to missing orders list
     let mut known_elevators_locked = state.known_elevators.lock().unwrap().clone();
     for missing_elevator in discrepancy_cabs.iter() {
+        let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+        //Add missing orders to cabs
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == missing_elevator.id) {
             for order in &missing_elevator.queue {
                 if !elevator.queue.contains(&order) {
@@ -175,14 +177,22 @@ pub fn correct_master_worldview(discrepancy_cabs:&Vec<Cab>, state: &Arc<SystemSt
                     changes_made = true;
                 }
             }
+
         } else {
             println!(
                 "Warning: Elevator ID {} from missing_orders not found in active elevators",
                 missing_elevator.id
             );
         }
+        // Add missing orders to all orders 
+        let mut all_orders_locked = state.all_orders.lock().unwrap();
+        for order in &missing_elevator.queue {
+            if !all_orders_locked.contains(order) {
+                all_orders_locked.push(order.clone());
+            }
+                println!("Added missing orders from {} to state.all_orders", missing_elevator.id);
+        }
     }
-    drop(known_elevators_locked);
 
     return changes_made;
 }
@@ -518,6 +528,7 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
         // Lock master_id first.
         let mut master_id_guard = state.master_id.lock().unwrap();
         let old_master_id = master_id_guard.clone();
+        drop(master_id_guard);
         // Then lock known_elevators.
         let mut known_elevators = state.known_elevators.lock().unwrap();
 
@@ -538,7 +549,9 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             );
 
             // Set the shared master id.
+            let mut master_id_guard = state.master_id.lock().unwrap();
             *master_id_guard = chosen_master_id;
+            drop(master_id_guard);
 
             // Reassign all other masters to slave.
             for cab in masters.iter_mut().skip(1) {
@@ -556,13 +569,14 @@ pub fn fix_master_issues(state: &Arc<SystemState>, udp_handler: &UdpHandler) {
             alive_elevators.sort_by_key(|cab| cab.id);
             if let Some(new_master) = alive_elevators.first_mut() {
                 new_master.role = Role::Master;
+                let mut master_id_guard = state.master_id.lock().unwrap();
                 *master_id_guard = new_master.id;
             }
         } else {
             // Exactly one master exists.
             println!("No multiple-master conflict detected.");
         }
-
+        let mut master_id_guard = state.master_id.lock().unwrap();
         if !(old_master_id == *master_id_guard){
             if let Some(master_elevator) = known_elevators.iter().find(|cab| cab.id == *master_id_guard)
             {

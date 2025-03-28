@@ -305,17 +305,17 @@ fn main() -> std::io::Result<()> {
                     //DETTE ER ENDRA _________________________________
                     let new_req_msg = make_udp_msg(system_state.me_id, MessageType::NewRequest, UdpData::Order(new_order.clone()));
                     let known_elevators_locked = system_state.known_elevators.lock().unwrap().clone();
-                        for elevator in known_elevators_locked.iter(){
+                    for elevator in known_elevators_locked.iter(){
                         
-                            let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
+                        let send_successfull = udphandler.send(&elevator.inn_address, &new_req_msg);
 
-                            if !send_successfull {handle_new_request(&new_req_msg,
-                                                                     Arc::clone(&system_state),
-                                                                     Arc::clone(&udphandler), 
-                                                                     io_channels.order_update_tx.clone(), 
-                                                                     io_channels.light_update_tx.clone());
-                                                }
+                        if !send_successfull {handle_new_request(&new_req_msg,
+                             Arc::clone(&system_state),
+                             Arc::clone(&udphandler), 
+                             io_channels.order_update_tx.clone(), 
+                             io_channels.light_update_tx.clone());                    
                         }
+                    }
                     drop(known_elevators_locked);
                 }
 

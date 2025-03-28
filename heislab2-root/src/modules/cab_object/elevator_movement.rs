@@ -2,7 +2,7 @@
 #![warn(unused_variables)]
 
 use std::time::{Duration, SystemTime};
-use std::thread;
+use std::thread::{self, sleep};
 use crossbeam_channel as cbc;
 
 use crate::modules::elevator_object::*;
@@ -24,7 +24,7 @@ impl Cab{
             let mut start_time = SystemTime::now();
             loop {
                 // Wait 1 second before attempting to close
-                    
+                sleep(Duration::from_secs(1));
                 match obstruction_rx.try_recv() {
                         
                     Ok(true) => {
@@ -41,7 +41,7 @@ impl Cab{
                     Err(cbc::TryRecvError::Empty) => {
                         // No obstruction or nothing received: close door
                         let now = SystemTime::now();
-                        if (now.duration_since(start_time).unwrap() > Duration::from_secs(2)) && (cabclone.status != Status::Obstruction) {
+                        if (now.duration_since(start_time).unwrap() > Duration::from_secs(3)) && (cabclone.status != Status::Obstruction) {
                             println!("No obstruction, closing doors");
                             break;
                         }

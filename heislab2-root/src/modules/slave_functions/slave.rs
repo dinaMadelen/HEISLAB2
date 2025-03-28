@@ -166,6 +166,8 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
         let mut known_elevators_locked = state.known_elevators.lock().unwrap();
 
         if let Some(elevator) = known_elevators_locked.iter_mut().find(|e| e.id == wv_elevator.id){
+
+
             let known_queue=elevator.queue.clone();
 
             //No new orders
@@ -182,12 +184,9 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
 
             //Found missing order, add them to queue
             let missing_orders: Vec<Order> = wv_elevator.queue.iter().filter(|&order| !known_queue.contains(order)).cloned().collect();
-
             if !missing_orders.is_empty() {
                 println!("Elevator {} is missing orders {:?}. Adding...", elevator.id, missing_orders);
-                elevator.queue.extend(missing_orders.clone());
-
-                missing_orders_total.extend(missing_orders);
+                elevator.queue.extend(missing_orders);
             }
 
         } else{
@@ -196,6 +195,7 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
             known_elevators_locked.push(wv_elevator.clone());
             worldview_missing_orders = true;
         }
+
         drop(known_elevators_locked);
         
         let mut all_orders = state.all_orders.lock().unwrap();
@@ -222,10 +222,10 @@ pub fn update_from_worldview(state: &Arc<SystemState>, new_worldview: &Vec<Cab>,
     }
 
     return worldview_missing_orders;
-    
 }
 
-/// Missing order in worldview, notify master that there is a missing order/orders
+/// notify worldview error
+/// Missing order in worldview, notify master that there is a missing order/orders, so the master can correct
 /// 
 /// # Arguments:
 /// 
@@ -247,7 +247,7 @@ pub fn notify_worldview_error(sender_id: u8 ,master_adress: SocketAddr, state: &
     udp_handler.send(&master_adress, &message);
 }
 
-
+/// Check master failure
 /// Check for worldview, no update in given time 5s?, assumes dead master and starts master election
 /// 
 /// # Arguments:
@@ -284,7 +284,6 @@ pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) 
         for elevator in known_elevators.iter(){
             udp_handler.send(&elevator.inn_address, &msg);
         }
-
     }
     drop(last_lifesign_locked);
 
@@ -295,12 +294,12 @@ pub fn check_master_failure(state: &Arc<SystemState>, udp_handler: &UdpHandler) 
     }
 }
 
-
+/// set_new_master
 /// Wait ID*150ms before checking if the master role is taken, if not assume master role and broadcast worldview
 /// 
 /// # Arguments:
 /// 
-/// * `me` - &mut Cab - mutable refrence to this elevator.
+/// * `new_master` - &mut Cab - mutable refrence to this elevator.
 /// * `state` - &mut SystemState - mutable refrence to the system state.
 ///  
 /// # Returns:
@@ -334,6 +333,7 @@ pub fn set_new_master(new_master: &mut Cab, state: &Arc<SystemState>){
     
 }
 
+/// reboot_program
 /// Starts a new instance and kills the old instance of the program
 /// 
 /// # Arguments:
@@ -348,10 +348,22 @@ pub fn reboot_program(){
     Command::new(env::current_exe().expect("Failed to find path to program"))
         .spawn()
         .expect("Failed to restart program, Restart program manually");
-    exit(0); // Kill myself
+    exit(0); 
 }
 
 
+
+/// send_new_online
+/// Notify the system that the cab is ready to serve
+/// 
+/// # Arguments:
+/// 
+/// * state -&Arc<SystemState>- Systemstate 
+/// 
+/// # Returns: 
+///
+/// Returns - bool - .returns true if managed to broadcast, false if failed
+///
 pub fn send_new_online(state: &Arc<SystemState>) -> bool {
 
     // Lock 
@@ -364,13 +376,25 @@ pub fn send_new_online(state: &Arc<SystemState>) -> bool {
         // Create UdpMsg
         let data = UdpData::Cab(this_elevator.clone());
         let msg = make_udp_msg(this_elevator.id, MessageType::NewOnline, data);
-        println!("Creating NewOnline from function");
         // Broadcast the message to notify others that this elevator is online
         return udp_broadcast(&msg);
     } 
     return false;
 }
 
+
+
+/// send_error_offline
+/// Notify the system that the cab is unavalible and cant service orders
+/// 
+/// # Arguments:
+/// 
+/// * state -&Arc<SystemState>- Systemstate 
+/// 
+/// # Returns: 
+///
+/// Returns - bool - .returns true if managed to broadcast, false if failed
+///
 pub fn send_error_offline(state: &Arc<SystemState>) -> bool {
 
     // Lock 

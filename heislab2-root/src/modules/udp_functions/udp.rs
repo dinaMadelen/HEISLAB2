@@ -367,31 +367,28 @@ pub fn handle_order_completed(msg: &UdpMsg, state: Arc<SystemState>, light_updat
     let completed_order = match completed_cab.queue.first(){
         Some(order) => order.clone(),
 
+         //Remove from all_orders
+        all_orders_locked=state.all_orders.lock().unlock();
+        if let Some(index) = all_orders_locked.iter().position(|order| *order == completed_order) {
+            orders.remove(index);
+        }
+        if completed_order.order_type == CAB {
+            if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+                all_orders_locked.remove(index);
+            }
+        } else {
+            all_orders_locked.retain(|order| {
+                !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type || CAB));
+            });
+            drop(all_orders_locked);
+        }
+        
+
         None => {
             println!("Completed order message contains no order");
             return;
         }
     };
- 
-    //Remove it from all orders
-    let mut known_elevators_locked = state.known_elevators.lock().unwrap();
-    if let Some(elevator) = known_elevators_locked.iter_mut().find(|e|e.id==completed_cab.id){
-        if let Some(index) = elevator.queue.iter().position(|o|*o == completed_order){
-            elevator.queue.remove(index);
-            println!("Removed completed order {:?} from ID:{}",completed_order,elevator.id);
-        }
-    }
-
-    let mut all_orders_locked = state.all_orders.lock().unwrap();
-    if completed_order.order_type == CAB {
-        if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
-            all_orders_locked.remove(index);
-        }
-    } else {
-        all_orders_locked.retain(|order| {
-            !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
-        });
-    }
             
 }
 

@@ -7,190 +7,33 @@ Make a master-slave system where the master is chosen based on lowest id. Acs an
 Basic event of hall button press:
 - Slave recieves button press
 - Slave broadcasts button press
-- Master acs
 - Master calculates correct floor
 - Master sends out request to elevator that should take it
-- All elevators updates the queues
+- Slaves should ack, if not master takes order
+- All elevators updates the queues and active orders of known elevators
 
-Every message contains ID, which makes all elevators aware of who is supposed to be Master. 
+Every message contains ID, which makes all elevators aware of who is supposed to be Master. To ensure safety all messages are encoded with a hash that is calculated based on the message. The system will reject messages that are not corrected properly. There is also a filter that makes sure the sender is coming from the same same subnet.
+
+The system continously monitors for dead elevators, and master complications. This makes sure the system always distributes dead elevator orders, and in case of emergencies and no broadcasting from other elevators the system will set itself to master and overtake all calls exept CAB calls from other systems.
+
+
 
 Threads that will be active:
-    There will be one active thread for each elevator alive. This thread makes the single elevator function normally, send udp messages, and includes an udp_recieve_handle function, which will make the elevator update itself and broadcast according to wished behaviour. 
+    Main thread: This controls general function and how to act in accordance with the buttonpresses and inputs from the physical elevator.
 
-    UDP read thread that handles udp messages, and makes stuff work properly
+    Master monitoring thread: Makes sure there are no complications with the system masters.
 
-MODULES:
+    Queue finisher thread: Pings the elevator to go_to_next_floor to make sure the elevator always has correct light function and forces the elevator to always try to move in case the motor is disconnected and orders redistributed, so it can broadcast that it is alive in case of "reawakening". 
 
-elevator_object{
-    alias_lib: includes saved aliases and their values. 
-        {
-            HALL_UP, HALL_DOWN, CAB, DIRN_UP, DIRN_DOWN, DIRN_STOP
-        }
-    elevator_init:
-        "Objects":
-        {   
-            Elevator Struct
-            {
-                socket,
-                num_floors,
-                ID,
-                current_floor,
-                queue,
-                status,
-                direction,
+    Reciever: This thread spawns new threads when a message is recieved, it makes the system always able to recieve messages and spawns new handlers to deal with the messages. This is the "main" communications hub.
 
-            }
-        }
-    elevator_movement: go_to_next_floor, door_open_sequence, 
-    elevator_queue_handling: add_to_queue, sort_queue
-    elevator_status_funvtions: print_status, set_status
-    elevator_test: 
-    poll: utlevert kode
-}
+Mode of communication:
+    The project is mainly written with mutexes and a tiny bit of message passing. This is something we slightly regret. 
 
-udp{
-    udp_test: includes tests for the udp functions.
-    udp{
-        "Objects": message_type, UdpHeader, UdpMessage
-            message_type Enum:
-            {
-                Wordview,
-                Ack,
-                Nak,
-                New_Order,
-                New_Master,
-                New_Online,
-                Request_Queue,
-                Respond_Queue,
-                Error_Worldview,
-                Error_Offline,
-                Request_Resend,
-            }
+State of the code: 
+    The code is not finished and not that organized. But it is on its way there... sooon..... maybe....
 
-            UdpHeader Struct:
-            {
-                sender_id: u8,            // ID of the sender of the message.
-                message_id: message_type, // ID for what kind of message it is, e.g. Button press, or Update queue.
-                checksum: Vec<u8>,        // Hash of data to check message integrity.
-            }
 
-            UdpMessage Struct:
-            {
-                header: UdpHeader, // Header struct containing information about the message itself
-                data: Vec<u8>,     // Data so be sent.
-            }
 
-        }
 
-        Functions:
-        {
 
-        }
-    }
-}
-master{
-    master_test: Includes tests for master function. 
-    master{
-        "Objects"
-        {
-            Worldview Struct:
-            Role Enum: 
-        }
-
-        Functions: give_order, remove_from_queue, correct_master_worldview, master_worldview, handle_slave_failure, reassign_orders, best_to_worst_elevator, handle_multiple_masters
-        {
-            give_order:
-                Sends an order to a slave elevator and waits for acknowledgment.
-                Uses UDP broadcasting with retries to ensure delivery.
-                Returns true if the order is acknowledged, otherwise false.
-                remove_from_queue
-
-            remove_from_queue:
-                Broadcasts a request to remove one or more orders from a specific elevator.
-                Uses UDP messaging to ensure delivery.
-                Returns true if acknowledged, otherwise false.
-                correct_master_worldview
-
-            correct_master_worldview:
-                Compares received worldviews and merges them into a corrected version.
-                Sends the updated worldview to all nodes.
-                Returns true if successfully broadcasted.
-
-            master_worldview:
-                Broadcasts the current master worldview to all elevators.
-                Returns true if successfully broadcasted.
-
-            handle_slave_failure:
-                Detects when a slave elevator fails and redistributes its orders.
-                Removes the failed elevator from the active list.
-                Returns true if orders were successfully reassigned, otherwise false.
-
-            reassign_orders:
-                Reassigns orders from a failed or unavailable elevator to active elevators.
-                Uses best_to_worst_elevator to determine the best elevator for each order.
-                Sends the reassigned orders using UDP messaging.
-
-            best_to_worst_elevator: CAN BE REMADE TO COST FUNCTION
-                Determines the best elevator to handle a given order based on a scoring system.
-                Scores are based on distance, movement direction, queue length, and elevator status.
-                Returns a sorted list of elevator IDs from best to worst.
-
-            handle_multiple_masters
-                Resolves conflicts when multiple elevators assume the master role.
-                The elevator with the lowest ID becomes the master; others become slaves or reboot.
-                Returns true if the elevator keeps the master role, otherwise false.
-        }
-
-    }
-}
-
-slave{
-    slave_test: Includes tests fdor the slave functions.
-
-    slave{
-        Classes
-        {
-            Lifesign: Includes last lifesign timestamp from master.
-        }
-
-        Functions: recieve_order, notify_completed, cancel_order, update_from_worldview, notify_worldview_error, check_master_failure, set_new_master, reboot_program
-        {
-            receive_order:
-                Receives an order from the master and adds it to the elevator’s queue if not already present. Sends an acknowledgment back to the master.
-                Returns true if the order was added or already in the queue and acknowledged. false if acknowledgment failed.
-
-            notify_completed:
-                Broadcasts that an order has been completed.
-                bool → true if the broadcast was successful, false if it failed.
-
-            cancel_order:
-                Removes an active order from the queue if it exists.
-                bool → true if the order was successfully removed. false if the order was not found.
-
-            update_from_worldview:
-                Synchronizes the elevator’s queue with the master’s worldview and identifies missing orders.
-                Arguments:
-                active_elevators: &mut Vec<Elevator> → Reference to a list of active elevators.
-                new_worldview: Vec<Vec<u8>> → Nested vector representing the master’s order worldview.
-                bool → true if orders were successfully updated or already matched. false if there were missing orders.
-
-            notify_worldview_error:
-                Notifies the master that orders are missing from the worldview.
-                slave_id: u8 → The ID of the elevator detecting the issue.
-                missing_orders: Vec<u8> → A list of missing orders.
-                (No return value, just sends a UDP message.)
-
-            check_master_failure:
-                Monitors the master's broadcast signal and initiates a master election if the master is unresponsive for more than 5 seconds.
-                bool → true if the master was unresponsive and a new master election is started. false if the master is still active.
-
-            set_new_master:
-                Waits a calculated time before checking if the master role is taken. If not, assumes the master role and broadcasts the worldview.
-                me: &mut Elevator → Reference to the elevator that may assume the master role.
-                (No return value, but assigns a new master if needed.)
-
-            reboot_program:
-                Restarts the program by launching a new instance and terminating the current one.
-        }
-    }
-}

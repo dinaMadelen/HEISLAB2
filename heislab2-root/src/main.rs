@@ -30,7 +30,7 @@ fn main() -> std::io::Result<()> {
     let elev_num_floors = 4;
     // let elevator = Elevator::init("localhost:15000", elev_num_floors)?;
    
-    let elevator = Elevator::init("localhost:15657", elev_num_floors)?;
+    let elevator = Elevator::init("localhost:15658", elev_num_floors)?;
 
     println!("Elevator started:\n{:#?}", elevator);
 
@@ -163,7 +163,7 @@ fn main() -> std::io::Result<()> {
     let obstruction_tx_clone = io_channels.obstruction_rx.clone();
     spawn(move|| {
         loop{
-            sleep(Duration::from_millis(500));
+            sleep(Duration::from_millis(300));
             
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
@@ -175,6 +175,7 @@ fn main() -> std::io::Result<()> {
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap().clone();
             known_elevators_locked.get_mut(0).unwrap().lights(&system_state_clone.clone(), elevator_clone.clone());
             known_elevators_locked.get_mut(0).unwrap().print_status();
+            elevator_clone.floor_indicator(known_elevators_locked.get_mut(0).unwrap().current_floor);
             
 
         }

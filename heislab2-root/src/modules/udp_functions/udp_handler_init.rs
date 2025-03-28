@@ -195,7 +195,7 @@ impl UdpHandler {
         while retries > 0 {
             println!("Remaining retries: {}", retries);
             retries -= 1;
-            std::thread::sleep(Duration::from_millis(30));
+            std::thread::sleep(Duration::from_millis(50));
 
             // Clone the current confirmation list snapshot.
             let sent_messages_snapshot = state.sent_messages.lock().unwrap().clone();

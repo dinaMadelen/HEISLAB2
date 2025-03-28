@@ -150,7 +150,7 @@ pub fn handle_new_request(msg: &UdpMsg, state: Arc<SystemState>,udp_handler: Arc
                 }
 
                 order_update_tx.send(vec![new_order.clone()]).unwrap();
-            } 
+            }   
         }       
     }
     println!("THIS ORDER UPDATE 2 of 4");

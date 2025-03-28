@@ -230,6 +230,7 @@ pub fn handle_new_order(msg: &UdpMsg, sender_address: &SocketAddr, state: Arc<Sy
 pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
     let master_id = state.master_id.lock().unwrap().clone();
     let known_master_id = state.master_id.lock().unwrap().clone();
+    println!("ENTERED NEW MASTER");
     if  !(known_master_id == master_id){
         println!("New master detected, ID: {}", msg.header.sender_id);
 
@@ -242,6 +243,7 @@ pub fn handle_new_master(msg: &UdpMsg, state: Arc<SystemState>) {
 
     // Set current master's role to Slave
     let mut known_elevators_locked = state.known_elevators.lock().unwrap();
+    println!("Mutex lock 1");
     if let Some(current_master) = known_elevators_locked.iter_mut().find(|elevator| elevator.role == Role::Master) {
         println!("Changing current master (ID: {}) to slave.", current_master.id);
         current_master.role = Role::Slave;

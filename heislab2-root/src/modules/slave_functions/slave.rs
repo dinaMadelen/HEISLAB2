@@ -31,11 +31,10 @@ use crate::modules::udp_functions::udp::{UdpMsg, UdpData, MessageType, UdpHandle
 use crate::modules::order_object::order_init::Order;
 use crate::modules::master_functions::master::Role;
 use crate::modules::elevator_object::elevator_init::SystemState;
-use crate::modules::elevator_object::alias_lib::{CAB};
+use crate::modules::elevator_object::alias_lib::CAB;
 
 
 use std::net::SocketAddr;
-use std::thread::sleep;
 use std::time::Duration; //https://doc.rust-lang.org/std/time/struct.Instant.html
 use std::env; // Used for reboot function
 use std::process::{Command, exit}; //Used for reboot function

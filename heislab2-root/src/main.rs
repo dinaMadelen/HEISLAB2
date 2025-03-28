@@ -149,9 +149,9 @@ fn main() -> std::io::Result<()> {
                                 if elapsed >= Duration::from_secs(10) {
                                     let dead_elevator = known_elevators_locked.get(i).unwrap();
                                     println!("Elevator {} is dead (elapsed: {:?})", dead_elevator.id, elapsed);
-                                    let Error_offline_msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
+                                    let error_offline_msg = make_udp_msg(system_state_clone.me_id, MessageType::ErrorOffline, UdpData::Cab(dead_elevator.clone()));
                                     for elevator in known_elevators_locked.iter(){
-                                        udp_handler_clone.send(&elevator.inn_address, &Error_offline_msg);
+                                        udp_handler_clone.send(&elevator.inn_address, &error_offline_msg);
                                     }
                                 }
                             }
@@ -183,7 +183,7 @@ fn main() -> std::io::Result<()> {
     let obstruction_tx_clone = io_channels.obstruction_rx.clone();
     spawn(move|| {
         loop{
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(500));
             
             let mut known_elevators_locked = system_state_clone.known_elevators.lock().unwrap();
             if !known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
@@ -245,24 +245,9 @@ fn main() -> std::io::Result<()> {
 
                             known_elevators_locked.get_mut(0).unwrap().set_status(Status::Idle, elevator.clone());
                             let completed_order = known_elevators_locked.get_mut(0).unwrap().queue.remove(0);
-
                             drop(known_elevators_locked);
 
-                            elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
-                            
-                            let mut all_orders_locked = system_state.all_orders.lock().unwrap();
-                            if completed_order.order_type == CAB {
-                                if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
-                                    all_orders_locked.remove(index);
-                                }
-                            } else {
-                                all_orders_locked.retain(|order| {
-                                    !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
-                                });
-                            }
-                            drop(all_orders_locked);
-                           
-                            // LA TIL DETTE CHRIS END ------  - -- -- - --  -- -- - -    -   -       -   -              -
+
                             let known_elevators_locked = system_state.known_elevators.lock().unwrap();
                             let cab_clone = known_elevators_locked.get(0).unwrap().clone();
 
@@ -276,10 +261,24 @@ fn main() -> std::io::Result<()> {
                             };
 
                             for addr in elevator_addresses {
-                                //FJERNET NOE HER KRIS -- - -- -- - -- -- - -- - -
                                 udphandler.send(&addr, &ordercomplete);
                                 udphandler.send(&addr, &alive_msg); 
                             }  
+
+                            elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
+                            let mut all_orders_locked = system_state.all_orders.lock().unwrap();
+                            if completed_order.order_type == CAB {
+                                if let Some(index) = all_orders_locked.iter().position(|order| (order.floor == completed_order.floor)&& (order.order_type == CAB)) {
+                                    all_orders_locked.remove(index);
+                                }
+                            } else {
+                                all_orders_locked.retain(|order| {
+                                    !((order.floor == completed_order.floor )&& (order.order_type == completed_order.order_type))
+                                });
+                            }
+
+                            drop(all_orders_locked);
+                           
                         }
                        
                         
@@ -344,6 +343,7 @@ fn main() -> std::io::Result<()> {
                 if known_elevators_locked.get_mut(0).unwrap().queue.is_empty(){
                     elevator.motor_direction(DIRN_STOP);
                 }
+
                 known_elevators_locked.get_mut(0).unwrap().go_next_floor(io_channels.door_tx.clone(),io_channels.obstruction_rx.clone(),elevator.clone());
                 drop(known_elevators_locked);
 

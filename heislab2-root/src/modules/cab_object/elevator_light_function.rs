@@ -36,28 +36,30 @@ impl Cab{
     }
     pub fn lights(&mut self, state: &Arc<SystemState>, elevator:Elevator){
         // Turn off lights for orders that are no longer in the new order vector.
-        for floors in 0..(self.num_floors) {
-            for call_types in 0..3 {
-                let order = Order::init(floors, call_types);
+        for floor in 0..self.num_floors {
+            for call_type in 0..3 {
+                let order = Order::init(floor, call_type);
                 let known_elevators_clone = state.known_elevators.lock().unwrap().clone();
-                
-                for cab in known_elevators_clone.iter() {
-                    // If the order is a hall order, check if it's in the elevator's queue.
-                    if (order.order_type == HALL_UP || order.order_type == HALL_DOWN) 
-                        && cab.queue.contains(&order)
-                    {
-                        elevator.call_button_light(order.floor, order.order_type, true);
-                    }
-                    // Alternatively, if you also want to check the current elevator's queue (self.queue)
-                    // and set the light if the order exists there, you could do:
-                    if self.queue.contains(&order) {
-                        elevator.call_button_light(order.floor, order.order_type, true);
-                    }else{
-
-                    elevator.call_button_light(order.floor, order.order_type, false);
+                let mut should_light = false;
+    
+                // For hall orders, check if any known elevator has the order in its queue.
+                if order.order_type == HALL_UP || order.order_type == HALL_DOWN {
+                    for cab in known_elevators_clone.iter() {
+                        if cab.queue.contains(&order) {
+                            should_light = true;
+                            break;
+                        }
                     }
                 }
-            } 
+    
+                // Also check if the current elevator's queue contains the order.
+                if self.queue.contains(&order) {
+                    should_light = true;
+                }
+    
+                // Set the light once, based on the aggregated condition.
+                elevator.call_button_light(order.floor, order.order_type, should_light);
+            }
         }
     }
 

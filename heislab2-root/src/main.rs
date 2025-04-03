@@ -212,15 +212,10 @@ fn main() -> std::io::Result<()> {
                         let ordercomplete = make_udp_msg(system_state.me_id, MessageType::OrderComplete, UdpData::Cab(cab_clone.clone()));
                         drop(known_elevators_locked);
 
-                        let elevator_addresses: Vec<_> = {
-                            let known_elevators = system_state.known_elevators.lock().unwrap();
-                            known_elevators.iter().map(|e| e.inn_address).collect()
-                        };
 
-                        for addr in elevator_addresses {
-                            udphandler.send(&addr, &ordercomplete);
-                            udphandler.send(&addr, &alive_msg); 
-                        }
+                        udp_broadcast(&ordercomplete);
+                        udp_broadcast(&alive_msg);
+                      
 
                         elevator.call_button_light(completed_order.floor, completed_order.order_type, false);
                                 

@@ -101,7 +101,7 @@ fn main() -> std::io::Result<()> {
     drop(known_elevators_locked);
     
     let new_online_msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
-    let known_elevators_locked = system_state.known_elevators.lock().unwrap();
+    
     udp_broadcast(&new_online_msg);
 
    

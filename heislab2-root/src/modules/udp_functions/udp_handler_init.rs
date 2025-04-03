@@ -20,6 +20,7 @@ use crate::modules::system_status::WaitingConfirmation;
 pub use crate::modules::elevator_object::*;
 pub use elevator_init::Elevator;
 pub use alias_lib::{HALL_DOWN, HALL_UP,CAB, DIRN_DOWN, DIRN_UP, DIRN_STOP};
+use local_ip_address::local_ip;
 
 #[derive (Clone, Debug)]
 pub struct UdpHandler {
@@ -71,7 +72,7 @@ impl UdpHandler {
 
 
         //Find IP
-        let local_ip = sock.local_addr().expect("Failed to get local address").ip();
+        let local_ip = local_ip().unwrap();
         drop(sock); 
         
 

@@ -209,9 +209,7 @@ pub fn master_worldview(state:&Arc<SystemState>, udphandler: &Arc<UdpHandler>){
     let known_cabs = state.known_elevators.lock().unwrap().clone();
 
     let worldview_msg = make_udp_msg(state.me_id, MessageType::Worldview, UdpData::Cabs(known_cabs.clone()));
-    for elevator in known_cabs.iter(){
-        udphandler.send(&elevator.inn_address, &worldview_msg);
-    }
+    udp_broadcast(&worldview_msg);
 }
 
 // Give away master role, NOT NEEDED, KILL INSTEAD

@@ -40,8 +40,8 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CAB---------------
     let system_state = Arc::new(boot());
     
-    let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3700 + system_state.me_id as u16);
-    let out_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3800 + system_state.me_id as u16);
+    let inn_addr = SocketAddr::new(local_ip().unwrap(), 3700 + system_state.me_id as u16);
+    let out_addr = SocketAddr::new(local_ip().unwrap(), 3800 + system_state.me_id as u16);
     
     let set_id = system_state.me_id;
     println!("me id is {}",system_state.me_id);
@@ -102,11 +102,8 @@ fn main() -> std::io::Result<()> {
     
     let new_online_msg = make_udp_msg(system_state.me_id, MessageType::NewOnline, UdpData::Cab(cab_clone));
     let known_elevators_locked = system_state.known_elevators.lock().unwrap();
-    for port in 3701..3799{
-        let inn_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),port as u16);
-        udphandler.send(&inn_addr, &new_online_msg);
-    }
-    drop(known_elevators_locked);
+    udp_broadcast(&new_online_msg);
+
    
 
     /* ---- -- - ----- -----INIT ELEVATOR MONITOR - Can be found in monitoring_threads ---- - --------- */

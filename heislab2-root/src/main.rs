@@ -40,8 +40,8 @@ fn main() -> std::io::Result<()> {
     // --------------INIT CAB---------------
     let system_state = Arc::new(boot());
     
-    let inn_addr = SocketAddr::new(local_ip().unwrap(), 3700 + system_state.me_id as u16);
-    let out_addr = SocketAddr::new(local_ip().unwrap(), 3800 + system_state.me_id as u16);
+    let inn_addr = SocketAddr::new(local_ip().unwrap(), 20000);
+    let out_addr = SocketAddr::new(local_ip().unwrap(), 3800);
     
     let set_id = system_state.me_id;
     println!("me id is {}",system_state.me_id);

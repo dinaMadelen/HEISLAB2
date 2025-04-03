@@ -47,7 +47,7 @@ use bincode;                                    // https://docs.rs/bincode/lates
 use crc32fast::Hasher;                          // Add to Cargo.toml file, Check comment above  //Add to Cargo,toml Smaller but less secure hash than Sha256, this is 4Bytes while Sha256 is 32Bytes
 use std::sync::Arc;                             // https://doc.rust-lang.org/std/sync/struct.Mutex.html
 
-use std::net{SocketAddr,IpAddr,UdpSocket};
+use std::net::{SocketAddr,IpAddr,UdpSocket};
 
 
 use crate::modules::order_object::order_init::Order;
